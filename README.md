@@ -1,2 +1,2 @@
-# PlayStation_on_FPGA
+# PlayStation PSX on FPGA
 implemented PlaxStation PSX on an FPGA. 
