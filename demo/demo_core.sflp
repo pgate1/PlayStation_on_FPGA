@@ -1,0 +1,289 @@
+/*
+	É|ÉäÉSÉìDEMO
+		by pgate1
+*/
+
+%i "sin_table.h"
+%i "cos_table.h"
+//%i "mul_s10.h"
+declare mul_s10 interface
+{
+	input a<10>, b<10>;
+	output dout<20>;
+	instrin con;
+	instr_arg con(a, b);
+}
+
+circuit demo_core
+{
+	reg_ws reset;
+
+	input voice_L<21>, voice_R<21>;
+	sel vol_L<21>, vol_R<21>, disp_vol<22>;
+
+	reg_wr ax<9>, ay<9>; // âÒì]äp 0Å`359ìx
+	reg_wr count<20>, total<32>, amp_t0<10>, amp_t1<10>, amp_t2<10>;
+	sel amp<10>;
+
+	instrin vblank;
+
+	output Dout<32>;
+	instrout gpu_write_req(Dout);
+
+	input drawing;
+	output doing;
+
+	// ÇSì_Ç…ÇÊÇËê≥élñ ëÃÇç\ê¨Ç∑ÇÈ	âEâÒÇË
+	mem pid[16]<2> = {
+		0, 1, 2, 0,
+		1, 3, 2, 0,
+		0, 3, 1, 0,
+		0, 2, 3, 0
+	};
+	mem px[4]<10> = {-40,  40, -40, 40};
+	mem py[4]<10> = {-40, -40,  40, 40};
+	mem pz[4]<10> = { 40, -40, -40, 40};
+	mem vc[4]<24> = {0x5555FF, 0x55FFFF, 0x55FF55, 0xFF5555}; // BGR
+
+	// âÒì]å„ÇÃç¿ïW
+	mem gx[4]<10> = {0};
+	mem gy[4]<10> = {0};
+	mem gz[4]<10> = {0};
+
+	sin_table sin_t;
+	cos_table cos_t;
+	mul_s10 mul_sin, mul_cos;
+
+	mem zs[4]<2> = {0};
+
+	// background 103items
+	mem back_data[128]<32> = {
+		0xE4078280, // ï\é¶îÕàÕ
+		0xE1000200, // ÉfÉBÉUóLå¯
+		0x28200000, 0x00000000, 0x00000280, 0x01E00000, 0x01E00280,
+		0x30FF8080, 0x00F00140, 0x00200000, 0x015E024B, 0x00200000, 0x00F00262,
+		0x30FF8080, 0x00F00140, 0x00200000, 0x01BC020D, 0x00200000, 0x015E024B,
+		0x30FF8080, 0x00F00140, 0x00200000, 0x01FB01AE, 0x00200000, 0x01BC020D,
+		0x30FF8080, 0x00F00140, 0x00200000, 0x02120140, 0x00200000, 0x01FB01AE,
+		0x30FF8080, 0x00F00140, 0x00200000, 0x01FB00D1, 0x00200000, 0x02120140,
+		0x30FF8080, 0x00F00140, 0x00200000, 0x01BD0073, 0x00200000, 0x01FB00D1,
+		0x30FF8080, 0x00F00140, 0x00200000, 0x015E0034, 0x00200000, 0x01BD0073,
+		0x30FF8080, 0x00F00140, 0x00200000, 0x00F0001E, 0x00200000, 0x015E0034,
+		0x30FF8080, 0x00F00140, 0x00200000, 0x00810034, 0x00200000, 0x00F0001E,
+		0x30FF8080, 0x00F00140, 0x00200000, 0x00230072, 0x00200000, 0x00810034,
+		0x30FF8080, 0x00F00140, 0x00200000, 0xFFE400D1, 0x00200000, 0x00230072,
+		0x30FF8080, 0x00F00140, 0x00200000, 0xFFCE0140, 0x00200000, 0xFFE400D1,
+		0x30FF8080, 0x00F00140, 0x00200000, 0xFFE401AE, 0x00200000, 0xFFCE0140,
+		0x30FF8080, 0x00F00140, 0x00200000, 0x0022020C, 0x00200000, 0xFFE401AE,
+		0x30FF8080, 0x00F00140, 0x00200000, 0x0081024B, 0x00200000, 0x0022020C,
+		0x30FF8080, 0x00F00140, 0x00200000, 0x00F00262, 0x00200000, 0x0081024B
+	};
+
+	stage_name rotate { task do(); }
+	stage_name zsort { task do(); }
+	stage_name send_gpu_back { task do(); }
+	stage_name send_gpu_prim { task do(); }
+
+	if(reset){
+		reset := 0b0;
+		// èâä˙âÒì]äp
+		ax := 29;
+		ay := 323;
+	}
+	else{
+		count++;
+		if(/&count){
+			any{
+				ax==359 : ax := 0;
+				else : ax++;
+			}
+			any{
+				ay==359 : ay := 0;
+				else : ay++;
+			}
+		}
+	}
+
+	instruct vblank par{
+		generate rotate.do();
+	}
+
+	doing = send_gpu_back.do | send_gpu_prim.do;
+
+	if(voice_L<20>) vol_L = ^voice_L;
+	else            vol_L = voice_L;
+	if(voice_R<20>) vol_R = ^voice_R;
+	else            vol_R = voice_R;
+	disp_vol = (0b0||vol_L) + (0b0||vol_R);
+	if(/&count){
+		amp_t0 := 0b000 || total<31:25>;
+		amp_t1 := amp_t0;
+		amp_t2 := amp_t1;
+		total := 0;
+	}
+	else{
+		total += 0b0000000000 || disp_vol; // <10>+<22>
+	}
+	amp = (amp_t0 + amp_t1 + amp_t2) >> 2;
+
+	// VBlankíÜÇ…âÒì]èàóù
+	stage rotate {
+		reg_wr rot_index<2>;
+		reg_wr bx<10>, by<10>, bz<10>;
+		reg_wr rx1<10>, ry1<10>, rz1<10>;
+		reg_wr rx2<10>, ry2<10>, rz2<10>;
+		first_state stinit;
+		state stinit par{
+			// âπó Ç…çáÇÌÇπÇƒÉTÉCÉYÇïœÇ¶ÇÈ
+			if(px[rot_index]<9>) bx := px[rot_index] - amp;
+			else                 bx := px[rot_index] + amp;
+			if(py[rot_index]<9>) by := py[rot_index] - amp;
+			else                 by := py[rot_index] + amp;
+			if(pz[rot_index]<9>) bz := pz[rot_index] - amp;
+			else                 bz := pz[rot_index] + amp;
+
+			// XâÒì]
+			sin_t.read(ax);
+			cos_t.read(ax);
+			goto strx1;
+		}
+		state strx1 par{
+			rx1 := bx;
+			ry1 := mul_cos.con(by, cos_t.dout).dout<17:8> - mul_sin.con(bz, sin_t.dout).dout<17:8>;
+			goto strx2;
+		}
+		state strx2 par{
+			rz1 := mul_sin.con(by, sin_t.dout).dout<17:8> + mul_cos.con(bz, cos_t.dout).dout<17:8>;
+
+			// YâÒì]
+			sin_t.read(ay);
+			cos_t.read(ay);
+			goto stry1;
+		}
+		state stry1 par{
+			rx2 := mul_cos.con(rx1, cos_t.dout).dout<17:8> - mul_sin.con(rz1, sin_t.dout).dout<17:8>;
+			ry2 := ry1;
+			goto stry2;
+		}
+		state stry2 par{
+			rz2 := mul_sin.con(rx1, sin_t.dout).dout<17:8> + mul_cos.con(rz1, cos_t.dout).dout<17:8>;
+			goto stshift;
+		}
+		state stshift par{
+			// âÊñ íÜâõÇ…ïΩçsà⁄ìÆ
+			gx[rot_index] := rx2 + 320;
+			gy[rot_index] := ry2 + 240;
+			gz[rot_index] := rz2;
+			goto stinit;
+			rot_index++;
+			if(rot_index==3){
+				generate zsort.do();
+				finish;
+			}
+		}
+	}
+
+	// è¨Ç≥Ç¢èáÇ…É\Å[Ég
+	stage zsort {
+		mem z[4]<10> = {0};
+		reg_wr s<3>;
+		first_state st0;
+		state st0 par{
+			z[0] := gz[0] + gz[1] + gz[2];
+			z[1] := gz[1] + gz[3] + gz[2];
+			z[2] := gz[0] + gz[3] + gz[1];
+			z[3] := gz[0] + gz[2] + gz[3];
+			par(i=0;i<4;i++){
+				zs[i] := i;
+			}
+			s := 0;
+			goto st1;
+		}
+		state st1 par{
+			if((z[1]-z[0])<9>){ // 0 > 1
+				z[0] := z[1];
+				z[1] := z[0];
+				zs[0] := zs[1];
+				zs[1] := zs[0];
+			}
+			if(s==5){
+				goto st0;
+				generate send_gpu_back.do();
+				finish;
+			}
+			else goto st2;
+			s++;
+		}
+		state st2 par{
+			if((z[2]-z[1])<9>){ // 1 > 2
+				z[1] := z[2];
+				z[2] := z[1];
+				zs[1] := zs[2];
+				zs[2] := zs[1];
+			}
+			if(s==4) goto st1;
+			else goto st3;
+			s++;
+		}
+		state st3 par{
+			if((z[3]-z[2])<9>){ // 2 > 3
+				z[2] := z[3];
+				z[3] := z[2];
+				zs[2] := zs[3];
+				zs[3] := zs[2];
+			}
+			goto st1;
+			s++;
+		}
+	}
+
+	stage send_gpu_back {
+		reg_wr back_index<7>;
+		first_state st1;
+		state st1 par{
+			back_index := 0;
+			goto st2;
+		}
+		state st2 if(^drawing){
+			gpu_write_req(back_data[back_index]);
+			back_index++;
+			if(back_index==102){ // 103 items
+				goto st1;
+				generate send_gpu_prim.do();
+				finish;
+			}
+		}
+	}
+
+	// 0x30:Gouraud3PointPoly 32bit x 5
+	stage send_gpu_prim {
+		reg_wr poly_index<2>, pid_index<2>, k<2>;
+		first_state st_begin;
+
+		state st_begin par{
+			pid_index := zs[poly_index];
+			k := 0;
+			goto st_wc;
+		}
+		state st_end par{
+			if(poly_index==3){
+				poly_index := 1;
+				finish;
+			}
+			else poly_index++;
+			goto st_begin;
+		}
+
+		state st_wc if(^drawing){
+			gpu_write_req(0x30 || vc[pid[pid_index||k]]);
+			goto st_wxy;
+		}
+		state st_wxy par{
+			gpu_write_req(0b000000 || gy[pid[pid_index||k]] || 0b000000 || gx[pid[pid_index||k]]);
+			k++;
+			if(k==2) goto st_end;
+			else goto st_wc;
+		}
+	}
+
+}
