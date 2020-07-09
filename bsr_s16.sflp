@@ -1,0 +1,29 @@
+
+// Barrel Shifter Right signed 16 bit
+
+circuit bsr_s16
+{
+	input din<16>, shift<4>;
+	output dout<16>;
+	instrin con(din, shift);
+
+	sel bs0<16>, bs1<16>, bs2<16>;
+
+	any{
+		shift<0> : bs0 = 16#din<15:1>;
+		else     : bs0 = din;
+	}
+	any{
+		shift<1> : bs1 = 16#bs0<15:2>;
+		else     : bs1 = bs0;
+	}
+	any{
+		shift<2> : bs2 = 16#bs1<15:4>;
+		else     : bs2 = bs1;
+	}
+	any{
+		shift<3> : dout = 16#bs2<15:8>;
+		else     : dout = bs2;
+	}
+
+}
