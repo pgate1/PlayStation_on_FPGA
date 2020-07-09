@@ -1,0 +1,296 @@
+/*
+	SPU DSP ADSR
+		by pgate1
+*/
+
+declare RateTableAdd_rom
+{
+	input adrs<7>;
+	output dout<14>;
+	instrin read;
+	instr_arg read(adrs);
+}
+
+declare RateTableAdd_f_rom
+{
+	input adrs<7>;
+	output dout<21>;
+	instrin read;
+	instr_arg read(adrs);
+}
+
+declare RateTableSub_rom
+{
+	input adrs<7>;
+	output dout<15>;
+	instrin read;
+	instr_arg read(adrs);
+}
+
+declare RateTableSub_f_rom
+{
+	input adrs<7>;
+	output dout<22>;
+	instrin read;
+	instr_arg read(adrs);
+}
+
+declare mul_s17 interface
+{
+	input a<17>, b<17>;
+	output dout<34>;
+	instrin con;
+	instr_arg con(a, b);
+}
+
+circuit ADSR
+{
+	input AttackRate<7>, AttackModeExp;
+	input DecayRate<4>, SustainLevel<4>;
+	input SustainIncrease, SustainModeExp;
+	input SustainRate<7>;
+	input ReleaseRate<5>, ReleaseModeExp;
+
+	instrin key_on, key_off, run;
+	input iSilent;
+
+	reg_wr adsr_state<8>, state_reg<8>;
+	reg_wr EnvelopeVol<16>, EnvelopeVol_f<24>;
+
+	output Env<15>; // ïÑçÜÇ»Çµ
+	instrout env_on, env_off;
+
+	stage_name adsr_stg { task do(); }
+	stage_name set_state { task do(state_reg); }
+
+	if(iSilent) Env = 0;
+	else any{
+		EnvelopeVol<15:14>==0b10 : Env = (0x7FFF)<14:0>; // >=0x8000
+		EnvelopeVol<15:14>==0b11 : Env = (0x0000)<14:0>; // < 0x0000
+		else : Env = EnvelopeVol<14:0>;
+	}
+
+	instruct key_on par{
+		generate set_state.do(0x10); // Attack
+		EnvelopeVol := 0;
+		EnvelopeVol_f := 0;
+	}
+
+	instruct key_off par{
+		if(Env!=0) generate set_state.do(0x40); // Release
+	}
+
+	instruct run par{ // 44.1kHz
+		if(^iSilent) generate adsr_stg.do();
+	}
+
+	stage adsr_stg {
+		RateTableAdd_rom RateTableAdd;
+		RateTableAdd_f_rom RateTableAdd_f;
+		RateTableSub_rom RateTableSub;
+		RateTableSub_f_rom RateTableSub_f;
+		mul_s17 exp_mul;
+		sel RateTable_denom<24>;
+		par{
+			RateTable_denom = 0x200000;
+
+			any{
+				// Attack
+				adsr_state==0x10 : par{
+					sel AtkExp_over;
+					AtkExp_over = (0x6000 - EnvelopeVol)<15>;
+					if(AttackModeExp & AtkExp_over){
+						RateTableAdd.read(AttackRate+8);
+						RateTableAdd_f.read(AttackRate+8);
+					}
+					else{
+						RateTableAdd.read(AttackRate);
+						RateTableAdd_f.read(AttackRate);
+					}
+					adsr_state := 0x11;
+				}
+				adsr_state==0x11 : par{
+					EnvelopeVol += 0b00||RateTableAdd.dout;
+					EnvelopeVol_f += 0b000||RateTableAdd_f.dout;
+					env_on();
+					adsr_state := 0x12;
+				}
+				adsr_state==0x12 : par{
+					sel AtkDenom_over;
+					AtkDenom_over = (RateTable_denom - EnvelopeVol_f)<23>;
+					if(AtkDenom_over){
+						EnvelopeVol_f -= RateTable_denom;
+						EnvelopeVol++;
+					}
+					adsr_state := 0x13;
+				}
+				adsr_state==0x13 : par{
+					if(EnvelopeVol<15>){ // > 0x8000
+						EnvelopeVol := 0x7FFF;
+						EnvelopeVol_f := RateTable_denom;
+						adsr_state := 0x20; // Decay
+					}
+					else adsr_state := 0x10; // Attack continue
+					finish;
+				}
+
+				// Decay
+				adsr_state==0x20 : par{
+		 			RateTableSub.read(0b0||DecayRate||0b00);
+		 			RateTableSub_f.read(0b0||DecayRate||0b00);
+					adsr_state := 0x21;
+				}
+				adsr_state==0x21 : par{
+					EnvelopeVol += exp_mul.con(17#RateTableSub.dout, 0b0||EnvelopeVol).dout<30:15>;
+					EnvelopeVol_f += 24#RateTableSub_f.dout;
+					adsr_state := 0x22;
+				}
+				adsr_state==0x22 : par{
+					if(EnvelopeVol_f<23>){ // < 0
+						EnvelopeVol_f += RateTable_denom;
+						EnvelopeVol--;
+					}
+					adsr_state := 0x23;
+				}
+				adsr_state==0x23 : par{
+					if(EnvelopeVol<15>){ // < 0
+						EnvelopeVol := 0;
+						EnvelopeVol_f := 0;
+						adsr_state := 0x00;
+						env_off();
+						finish;
+					}
+					else adsr_state := 0x24;
+				}
+				adsr_state==0x24 : par{
+					if(EnvelopeVol<14:11>==SustainLevel){
+						adsr_state := 0x30; // Sustain
+					}
+					else adsr_state := 0x20; // Decay continue
+					finish;
+				}
+
+				// Sustain
+				adsr_state==0x30 : par{
+					if(SustainIncrease){
+						sel SustExp_over;
+						SustExp_over = (0x6000 - EnvelopeVol)<15>;
+						if(SustainModeExp & SustExp_over){
+							RateTableAdd.read(SustainRate+8);
+							RateTableAdd_f.read(SustainRate+8);
+						}
+						else{
+							RateTableAdd.read(SustainRate);
+							RateTableAdd_f.read(SustainRate);
+						}
+					}
+					else{
+						RateTableSub.read(SustainRate);
+						RateTableSub_f.read(SustainRate);
+					}
+					adsr_state := 0x31;
+				}
+				adsr_state==0x31 : par{
+					if(SustainIncrease){
+						EnvelopeVol += 0b00||RateTableAdd.dout;
+						EnvelopeVol_f += 0b000||RateTableAdd_f.dout;
+					}
+					else{
+						if(SustainModeExp){
+							EnvelopeVol += exp_mul.con(17#RateTableSub.dout, 0b0||EnvelopeVol).dout<30:15>;
+						}
+						else{
+							EnvelopeVol += 16#RateTableSub.dout;
+						}
+						EnvelopeVol_f += 24#RateTableSub_f.dout;
+					}
+					adsr_state := 0x32;
+				}
+				adsr_state==0x32 : par{
+					if(SustainIncrease){
+						sel SustDenom_over;
+						SustDenom_over = (RateTable_denom - EnvelopeVol_f)<23>;
+						if(SustDenom_over){
+							EnvelopeVol_f -= RateTable_denom;
+							EnvelopeVol++;
+						}
+					}
+					else{
+						if(EnvelopeVol_f<23>){ // < 0
+							EnvelopeVol_f += RateTable_denom;
+							EnvelopeVol--;
+						}
+					}
+					adsr_state := 0x33;
+				}
+				adsr_state==0x33 : par{
+					if(SustainIncrease){
+						if(EnvelopeVol<15>){ // > 0x8000
+							EnvelopeVol := 0x7FFF;
+							EnvelopeVol_f := RateTable_denom;
+							adsr_state := 0x00;
+						}
+						else adsr_state := 0x30; // Sustain continue
+					}
+					else{
+						if(EnvelopeVol<15>){ // < 0
+							EnvelopeVol := 0;
+							EnvelopeVol_f := 0;
+							env_off();
+							adsr_state := 0x00;
+						}
+						else adsr_state := 0x30; // Sustain continue
+					}
+					finish;
+				}
+
+				// Release
+				adsr_state==0x40 : par{
+					RateTableSub.read(ReleaseRate||0b00);
+					RateTableSub_f.read(ReleaseRate||0b00);
+					adsr_state := 0x41;
+				}
+				adsr_state==0x41 : par{
+					if(ReleaseModeExp){
+						EnvelopeVol += exp_mul.con(17#RateTableSub.dout, 0b0||EnvelopeVol).dout<30:15>;
+					}
+					else{
+						EnvelopeVol += 16#RateTableSub.dout;
+					}
+					EnvelopeVol_f += 24#RateTableSub_f.dout;
+					adsr_state := 0x42;
+				}
+				adsr_state==0x42 : par{
+					if(EnvelopeVol_f<23>){ // < 0
+						EnvelopeVol_f += RateTable_denom;
+						EnvelopeVol--;
+					}
+					adsr_state := 0x43;
+				}
+				adsr_state==0x43 : par{
+					if(EnvelopeVol<15>){ // < 0
+						EnvelopeVol := 0;
+						EnvelopeVol_f := 0;
+
+			// don't stop if this chan can still cause irqs
+			//if(!(spuCtrl&0x40) || (s_chan[ch].pCurr > pSpuIrq && s_chan[ch].pLoop > pSpuIrq))
+			//	s_chan[ch].bOn=0;
+						env_off();
+						adsr_state := 0x00;
+					}
+					else adsr_state := 0x40; // Release continue
+					finish;
+				}
+
+				else : finish;
+			}
+		}
+	}
+
+	stage set_state {
+		if(^adsr_stg.do){
+			adsr_state := state_reg;
+			finish;
+		}
+	}
+}
