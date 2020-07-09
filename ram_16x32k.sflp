@@ -1,0 +1,19 @@
+
+// test RAM
+// 16bit 32k depth
+
+circuit ram_16x32k
+{
+	input adrs<15>, din<16>;
+	output dout<16>;
+	instrin read(adrs), write(adrs, din);
+
+	mem cells[32768]<16>;
+	reg_wr dout_reg<16>;
+
+	instruct read dout_reg := cells[adrs];
+	dout = dout_reg;
+
+	instruct write cells[adrs] := din;
+
+}

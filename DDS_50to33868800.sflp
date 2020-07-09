@@ -1,0 +1,27 @@
+/*
+	DDS for PSX
+		by pgate1
+
+	50MHz‚©‚ç–ñ33.8688MHz‚ğ¶¬‚·‚é
+	‰ÁZ’l 10584  ‚µ‚«‚¢’l 15625  Œë· 0.000000Hz
+*/
+
+circuit DDS_50to33868800
+{
+	sel max<14>, add<14>;
+	reg_wr count<15>;
+	instrout run;
+	sel sa<15>;
+
+	add = 10584;
+	max = 15625;
+
+	sa = count - (0b0 || max);
+	if(sa<14>){ // count < max
+		count += (0b0 || add);
+	}
+	else{
+		count := sa + (0b0 || add);
+		run();
+	}
+}

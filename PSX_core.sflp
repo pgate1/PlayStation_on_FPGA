@@ -1,0 +1,662 @@
+/*
+	PSX PlayStation on FPGA feat. DE2-115
+	Copyright (c)2017 pgate1
+*/
+
+%i "R3000A.h"
+%i "Cache_IR.h"
+%i "rootcounter.h"
+%i "SPU_core.h"
+%i "DDS_50to33868800.h"
+%i "GPU_core.h"
+%i "DMA_GPU.h"
+%i "DMA_SPU.h"
+%i "DMA_OTC.h"
+%i "CDR_core.h"
+%i "SIO_core.h"
+%i "demo/demo_core.h"
+
+circuit PSX_core
+{
+	instrin run, init;
+	R3000A cpu;
+	Cache_IR ir_cache;
+
+	output A<21>;
+	input Din<32>;
+
+	instrout WRAM_READ(A);
+	instrin wram_ack;
+
+	instrout BIOS_READ(A);
+	instrin bios_ack;
+
+	instrout WRAM_WRITE(A, Dout, Word);
+	output Dout<32>, Word<3>;
+
+	instrin exe_set(header_adrs, header_data);
+	input header_adrs<12>, header_data<8>;
+
+	input key_in<16>;
+
+	instrself map_ram, map_pio, map_io, map_bios, map_cctrl;
+	sel mapped_Din<32>;
+
+	reg_ws reset;
+
+	reg_wr cpu_A<32>, cpu_Dout<32>, cpu_Word<3>;
+	reg_wr pio_reg<32>, io_reg<32>;
+
+	reg_wr spuDmaWait<32>;
+	reg_wr ramSize<16>;
+
+	reg_wr IREG<16>, IMASK<16>, DmaDPCR<32>, DmaDICR<32>;
+	reg_wr DmaMADR_2<32>, DmaBCR_2<32>, DmaCHCR_2<32>;
+	reg_wr DmaMADR_4<32>, DmaBCR_4<32>, DmaCHCR_4<32>;
+	reg_wr DmaMADR_6<32>, DmaBCR_6<32>, DmaCHCR_6<32>;
+
+	DDS_50to33868800 dds;
+
+	rootcounter rcnt_0, rcnt_1, rcnt_2, rcnt_3;
+
+	SPU_core spu;
+	instrout spu_mem_write_req, spu_mem_read_req;
+	output spu_mem_A<18>, spu_mem_Din<16>;
+	instrin spu_mem_ack;
+	input spu_mem_Dout<16>;
+	instrin sw_intpl_off, sw_reverb_off;
+	output voice_L<21>, voice_R<21>;
+	output disp_env<24>;
+
+	DMA_GPU dma_GPU;
+	DMA_SPU dma_SPU;
+	DMA_OTC dma_OTC;
+
+	GPU_core gpu;
+	instrout view_on;
+	output view_x<10>, view_y<9>;
+	output view_R<8>, view_G<8>, view_B<8>;
+
+	output vram_adrs<19>, vram_write_data<16>;
+	instrout vram_write_req(vram_adrs, vram_write_data);
+	instrout vram_read_req(vram_adrs);
+	instrin vram_ack;
+	input vram_read_data<16>;
+
+	instrin sw_kernel_run;
+	instrin vblank_in;
+	instrin sw_cache_off;
+	instrin sw_spu_off;
+
+	CDR_core cdr;
+	SIO_core sio;
+
+	demo_core demo;
+
+	instrself halt(h_code);
+	sel h_code<8>;
+	reg_wr halt_code_reg<8>;
+	output halt_code<8>;
+
+	instrself sim_wram_read, sim_bios_read;
+
+	output pc_out<32>, opcode_out<32>;
+
+input dbg_in<16>;
+output dbg<32>, dbg2<32>;
+reg_wr dbg_reg<32>, dbg2_reg<32>;
+output dbg_cpu<8>;
+reg_wr opcount<32>;
+output drawing;
+output vraming;
+
+	stage_name ir_cache_check { task do(cpu_A); }
+	stage_name cpu_read { task do(cpu_A, cpu_Word); }
+	stage_name cpu_write { task do(cpu_A, cpu_Dout, cpu_Word); }
+	stage_name read_wram_wait { task do(); }
+	stage_name read_bios_wait { task do(); }
+	stage_name read_gpu_wait { task do(); }
+	stage_name read_io_wait { task do(); }
+	stage_name write_wram_wait { task do(); }
+
+	if(reset){
+		reset := 0b0;
+		ir_cache.clear();
+	}
+
+//dbg = dbg_reg;
+
+	instruct exe_set cpu.exe_set(header_adrs, header_data);
+
+	sel peripheral_running;
+	peripheral_running =
+		dma_GPU.running | dma_SPU.running | dma_OTC.running |
+		(sw_kernel_run & gpu.busy) | cdr.running | sio.running |
+		ir_cache_check.do | cpu_read.do | cpu_write.do |
+		read_wram_wait.do | read_bios_wait.do | read_gpu_wait.do | read_io_wait.do |
+		write_wram_wait.do;
+
+if(dma_GPU.running & dma_SPU.running) halt(0x40);
+if(dma_GPU.running & dma_OTC.running) halt(0x41);
+//if(dma_GPU.running & (cpu_read.do | cpu_write.do)) halt(0x42);
+if(dma_GPU.running & cdr.running) halt(0x43);
+if(dma_GPU.running & sio.running) halt(0x44);
+if(cpu_read.do & cpu_write.do) halt(0x45);
+
+	instruct run par{
+		alt{
+			(halt_code!=0x00) | peripheral_running : ; // wait
+			else : par{
+				cpu.run();
+			}
+		}
+	}
+
+	any{
+		(cpu_A<31:24>==0x00) | (cpu_A<31:24>==0x80) | (cpu_A<31:24>==0xA0) : map_ram();
+		cpu_A<31:20>==0x1F0 : map_pio();
+		cpu_A<31:20>==0x1F8 : map_io();
+		(cpu_A<31:20>==0x1FC) | (cpu_A<31:20>==0xBFC) : map_bios();
+		cpu_A<31:16>==0xFFFE : map_cctrl();
+		else : par{
+//dbg_reg := cpu_A; halt(0x1E);
+		}
+	}
+
+	any{
+		map_ram : any{
+			ir_cache_check.do & ir_cache.hit : mapped_Din = ir_cache.Dout;
+			else : mapped_Din = Din;
+		}
+		map_bios : mapped_Din = Din;
+		map_pio : mapped_Din = pio_reg;
+		map_io : mapped_Din = io_reg;
+		else : mapped_Din = 0x00000000;
+	}
+	cpu.Din = mapped_Din;
+
+	cpu.IRQ_in = IREG & IMASK;
+
+	par(i=0; i<4; i++){
+		rcnt[i].index = i;
+	}
+
+	spu_mem_A = spu.mem_A;
+	spu_mem_Din = spu.mem_Din;
+	instruct spu.mem_write_req spu_mem_write_req();
+	instruct spu.mem_read_req spu_mem_read_req();
+	instruct spu_mem_ack spu.mem_ack();
+	spu.mem_Dout = spu_mem_Dout;
+//dbg = spu.dbg;
+	instruct sw_intpl_off spu.sw_intpl_off();
+	instruct sw_reverb_off spu.sw_reverb_off();
+
+	if(sw_spu_off){
+		voice_L = 0;
+		voice_R = 0;
+	}
+	else{
+		voice_L = spu.voice_out_L;
+		voice_R = spu.voice_out_R;
+	}
+	disp_env = spu.disp_env;
+
+	demo.voice_L = voice_L;
+	demo.voice_R = voice_R;
+
+	dma_GPU.DmaMADR_2 = DmaMADR_2;
+	dma_GPU.DmaBCR_2 = DmaBCR_2;
+	instruct dma_GPU.wram_read WRAM_READ(dma_GPU.A);
+	if(wram_ack) dma_GPU.wram_ack();
+	if(gpu.read_ack){
+		dma_GPU.vram_ack();
+		dma_GPU.Din = gpu.dout;
+	}
+	else{
+		dma_GPU.Din = Din;
+	}
+	instruct dma_GPU.gpu_dma_write_req gpu.WriteData(dma_GPU.Dout);
+	dma_GPU.gpu_busy = gpu.busy;
+	dma_GPU.gpu_drawing = gpu.drawing;
+//	instruct dma_GPU.gpu_status_idle gpu.StatusIdle(dma_GPU.gpu_idle);
+	instruct dma_GPU.gpu_dma_read_req gpu.ReadData();
+	instruct dma_GPU.wram_write par{
+		WRAM_WRITE(dma_GPU.A, dma_GPU.Dout, 4);
+	//	ir_cache.flag_clear(dma_GPU.A);
+	}
+	instruct dma_GPU.interrupt par{
+		// gpuInterrupt()
+		DmaCHCR_2 &= ^0x01000000;
+		if(DmaDICR<18>){
+			DmaDICR |= 0x04000000;
+			IREG |= 0x0008;
+		}
+	}
+dma_GPU.dbg_in = dbg_in;
+//dbg = dma_GPU.dbg;
+
+	dma_SPU.DmaMADR_4 = DmaMADR_4;
+	dma_SPU.DmaBCR_4 = DmaBCR_4;
+	instruct dma_SPU.wram_read WRAM_READ(dma_SPU.A);
+	instruct wram_ack dma_SPU.wram_ack();
+	dma_SPU.Din = Din;
+	instruct dma_SPU.spu_dma_write_req spu.dma_write_req(dma_SPU.Dout);
+	instruct spu.dma_ack dma_SPU.spu_dma_ack();
+	spu.dma_doing = dma_SPU.running;
+	instruct dma_SPU.interrupt par{
+		DmaCHCR_4 &= ^0x01000000;
+		if(DmaDICR<20>){
+			DmaDICR |= 0x10000000;
+			IREG |= 0x0008;
+		}
+	}
+
+	dma_OTC.DmaMADR_6 = DmaMADR_6;
+	dma_OTC.DmaBCR_6 = DmaBCR_6;
+	instruct dma_OTC.wram_write par{
+		WRAM_WRITE(dma_OTC.A, dma_OTC.D, 4);
+	//	ir_cache.flag_clear(dma_OTC.A);
+	}
+	instruct wram_ack dma_OTC.wram_ack();
+	instruct dma_OTC.interrupt par{
+		DmaCHCR_6 &= ^0x01000000;
+		if(DmaDICR<22>){
+			DmaDICR |= 0x40000000;
+			IREG |= 0x0008;
+		}
+	}
+dma_OTC.dbg_in = dbg_in;
+//dbg = dma_OTC.dbg;
+
+	instruct cdr.interrupt_out par{
+		IREG |= 0x0004;
+	}
+cdr.dbg_in = dbg_in;
+//dbg2 = 0x0000 || cdr.dbg;
+
+	sio.key_in = key_in;
+	instruct sio.interrupt_out par{
+		IREG |= 0x0080;
+	}
+sio.dbg_in = dbg_in;
+
+	instruct demo.gpu_write_req if(^sw_kernel_run) gpu.WriteData(demo.Dout);
+	demo.drawing = gpu.drawing;
+
+	if(/|rcnt_0.halt_code | /|rcnt_1.halt_code |
+	   /|rcnt_2.halt_code | /|rcnt_3.halt_code) halt(0x40);
+
+	pc_out = cpu.pc_out;
+	opcode_out = cpu.opcode_out;
+	halt_code = halt_code_reg | cpu.halt_code | spu.halt_code | gpu.halt_code
+				| dma_GPU.halt_code | dma_OTC.halt_code | cdr.halt_code | sio.halt_code;
+
+	instruct halt halt_code_reg := h_code;
+dbg_cpu = cpu.dbg;
+drawing = gpu.drawing;
+vraming = gpu.vraming;
+
+	instruct cpu.read_req par{
+		if((^sw_cache_off) & ((cpu.A<31:24>==0x00) | (cpu.A<31:24>==0x80)) & cpu.ir_read){ // キャッシュは0x80だけ?
+			ir_cache.read(cpu.A<20:0>);
+			generate ir_cache_check.do(cpu.A);
+		}
+		else{
+			generate cpu_read.do(cpu.A, cpu.Word);
+		}
+
+//if(cpu.ir_read) opcount++;
+// sim
+		any{
+			cpu.A<27:24>==0x0 : sim_wram_read();
+			cpu.A<31:20>==0x1F0 : ;//map_pio();
+			cpu.A<31:20>==0x1F8 : ;//map_io();
+			cpu.A<28:20>==(0b1||0xFC) : sim_bios_read();
+			cpu.A<31:16>==0xFFFE : ;//map_cctrl();
+		}
+	}
+
+	instruct cpu.write_req par{
+		generate cpu_write.do(cpu.A, cpu.Dout, cpu.Word);
+	}
+
+	alt{
+		halt_code!=0x00 : ;
+		sw_kernel_run : par{
+
+			instruct dds.run par{ // 33.8688MHz
+				spu.run33();
+			}
+
+			if(dds.run & (^dma_GPU.running) & (^dma_OTC.running)){
+				par(i=0;i<4;i++){
+					rcnt[i].run33();
+				}
+			}
+
+// 0 1 0 3
+
+			if(dds.run & (^dma_OTC.running)){
+				dma_GPU.run33();
+			}
+		//	dma_SPU.run33();
+			if(dds.run & (^dma_GPU.running)){
+				dma_OTC.run33();
+			}
+			if(dds.run & (^dma_GPU.running) & (^dma_OTC.running)){
+				cdr.run33();
+				sio.run33();
+			}
+
+		}
+		else : par{ // サウンド再生
+			instruct dds.run par{ // 33.8688MHz
+				par(i=0;i<4;i++){
+					rcnt[i].run33();
+				}
+			//	dma_GPU.run33();
+				dma_SPU.run33();
+			//	dma_OTC.run33();
+				spu.run33();
+			//	cdr.run33();
+			//	sio.run33();
+			}
+		}
+	}
+
+	instruct rcnt_0.irq_out par{
+//if(sw_kernel_run) halt(0x51);
+		IREG |= 0x00 || rcnt_0.irq_code;
+	}
+	instruct rcnt_1.irq_out par{
+//if(sw_kernel_run) halt(0x52);
+		IREG |= 0x00 || rcnt_1.irq_code;
+	}
+	instruct rcnt_2.irq_out par{
+//if(sw_kernel_run) halt(0x53);
+		IREG |= 0x00 || rcnt_2.irq_code;
+	}
+//	instruct rcnt_3.irq_out par{
+//		if(^sw_kernel_run) IREG |= 0x00 || rcnt_3.irq_code;
+//	}
+	instruct vblank_in par{
+		if(sw_kernel_run) IREG |= 0x0001;
+		if(^sw_kernel_run) demo.vblank();
+	}
+//	instruct rcnt_3.hsync par{
+//		gpu.hsync();
+//	}
+
+gpu.dbg_in = dbg_in;
+	instruct gpu.view_on view_on();
+	view_x = gpu.view_x;
+	view_y = gpu.view_y;
+	view_R = gpu.view_R;
+	view_G = gpu.view_G;
+	view_B = gpu.view_B;
+//dbg = 0x00||dma_GPU.dbg<7:0>||0x00 || gpu.dbg<7:0>;
+dbg = gpu.dbg;
+
+//dbg2 = dbg2_reg;
+
+	instruct gpu.vram_write_req par{
+		vram_write_req(gpu.vram_adrs, gpu.vram_write_data);
+	}
+	instruct gpu.vram_read_req par{
+		vram_read_req(gpu.vram_adrs);
+	}
+	instruct vram_ack gpu.vram_ack();
+	gpu.vram_read_data = vram_read_data;
+
+	// ir_readの時に起動
+	stage ir_cache_check {
+		first_state st1;
+		state st1 par{
+			if(ir_cache.hit){
+				cpu.read_ack();
+				finish;
+			}
+			else{
+				generate cpu_read.do(cpu_A, 4);
+				goto st2;
+			}
+		}
+		state st2 if(read_wram_wait.do & wram_ack){
+			ir_cache.write(cpu_A<20:0>, Din);
+			goto st1;
+			finish;
+		}
+	}
+
+	stage cpu_read {
+		par{
+			any{
+				map_ram : par{
+					WRAM_READ(cpu_A<20:0>);
+					generate read_wram_wait.do();
+				}
+				map_pio : par{
+					pio_reg := 0x00000000;
+					generate read_io_wait.do();
+				}
+				map_io : par{ // 0x1F80
+					any{
+						cpu_A<15:0>==0x1014 : io_reg := spuDmaWait;
+						cpu_A<15:0>==0x1040 : io_reg := 0x0000 || sio.ReadData().io_dout; // パッドデータ
+						cpu_A<15:0>==0x1044 : io_reg := 0x0000 || sio.ReadStat().io_dout; // パッドステータス
+						cpu_A<15:0>==0x104A : io_reg := sio.ReadCtrl().io_dout || 0x0000; // パッドコントロール
+						cpu_A<15:0>==0x1060 : io_reg := 0x0000 || ramSize; // test
+						cpu_A<15:0>==0x1070 : io_reg := 0x0000 || IREG;
+						cpu_A<15:0>==0x1074 : io_reg := 0x0000 || IMASK;
+
+						cpu_A<15:0>==0x10A0 : io_reg := DmaMADR_2; // DMACチャネル2(GPU)メモリアドレス
+						cpu_A<15:0>==0x10A8 : io_reg := DmaCHCR_2; // DMACチャネル2(GPU)チャネルコントロール
+						cpu_A<15:0>==0x10E8 : io_reg := DmaCHCR_6; // DMACチャネル6(OTC)チャネルコントロール
+
+						cpu_A<15:0>==0x10F0 : io_reg := DmaDPCR;
+						cpu_A<15:0>==0x10F4 : io_reg := DmaDICR;
+						cpu_A<15:8>==0x11 : any{ // 0x11--
+							cpu_A<7:4>==0x0 : io_reg := 0x0000 || rcnt_0.io_get(cpu_A<3:0>).io_Dout;
+							cpu_A<7:4>==0x1 : io_reg := 0x0000 || rcnt_1.io_get(cpu_A<3:0>).io_Dout;
+							cpu_A<7:4>==0x2 : io_reg := 0x0000 || rcnt_2.io_get(cpu_A<3:0>).io_Dout;
+						//	cpu_A<7:4>==0x3 : ;//io_reg := rcnt_3.io_get(cpu_A<3:0>).io_Dout;
+							else : halt(0x54);
+						}
+						cpu_A<15:4>==0x180 : par{ // CDROMコントローラレジスタ
+							cdr.Read(cpu_A<1:0>);
+							io_reg := cdr.io_dout || cdr.io_dout || cdr.io_dout || cdr.io_dout;
+						}
+						cpu_A<15:0>==0x1810 : par{ // GPUデータ／コマンド
+							gpu.ReadData();
+							generate read_gpu_wait.do();
+						}
+						cpu_A<15:0>==0x1814 : par{ // GPUステータス／コントロール
+							io_reg := gpu.read_status().dout;
+						}
+
+						cpu_A<15:10>==0b000111 : par{ // 0x1C00-1E00
+							if(sw_spu_off) io_reg := 0x00000000;
+							else any{
+								cpu_A<1>==0b0 : io_reg := 0x0000 || spu.io_get(cpu_A<15:0>).io_Dout;
+								cpu_A<1>==0b1 : io_reg := spu.io_get(cpu_A<15:0>).io_Dout || 0x0000;
+							}
+						}
+
+						else : par{
+							dbg2_reg := cpu_A;
+							halt(0x57);//io_reg := 0x0000;
+						}
+					}
+					generate read_io_wait.do();
+				}
+				map_bios : par{
+					BIOS_READ(0b00||cpu_A<18:0>);
+					generate read_bios_wait.do();
+				}
+				else : read_io_wait.do();
+			}
+			finish;
+		}
+	}
+
+	stage read_wram_wait {
+		if(wram_ack){
+			cpu.read_ack();
+			finish;
+		}
+	}
+
+	stage read_bios_wait {
+		if(bios_ack){
+			cpu.read_ack();
+			finish;
+		}
+	}
+
+	stage read_gpu_wait {
+		first_state st1;
+		state st1 if(gpu.read_ack){
+			io_reg := gpu.dout;
+			goto st2;
+		}
+		state st2 par{
+			cpu.read_ack();
+			goto st1;
+			finish;
+		}
+	}
+
+	stage read_io_wait {
+		par{
+			if(read_gpu_wait.do) finish;
+			else{
+				cpu.read_ack();
+				finish;
+			}
+		}
+	}
+
+	stage cpu_write {
+		par{
+			any{
+				map_ram : par{
+					WRAM_WRITE(cpu_A<20:0>, cpu_Dout, cpu_Word);
+					generate write_wram_wait.do();
+					ir_cache.flag_clear(cpu_A<20:0>); // ここでもいい
+				}
+				map_pio : par{
+					halt(0x53);
+				}
+				map_io : any{
+					cpu_A<15:0>==0x1000 : ;
+					cpu_A<15:0>==0x1004 : ;
+					cpu_A<15:0>==0x1008 : ;
+					cpu_A<15:0>==0x100C : ;
+					cpu_A<15:0>==0x1010 : ;
+					cpu_A<15:0>==0x1014 : spuDmaWait := cpu_Dout;
+					cpu_A<15:0>==0x1018 : ;
+					cpu_A<15:0>==0x101C : ;
+					cpu_A<15:0>==0x1020 : ;
+					cpu_A<15:0>==0x1040 : sio.WriteData(cpu_Dout<15:0>); // パッド
+					cpu_A<15:0>==0x1048 : sio.WriteMode(cpu_Dout<15:0>); // パッドモード
+					cpu_A<15:0>==0x104A : sio.WriteCtrl(cpu_Dout<15:0>); // パッドコントロール
+					cpu_A<15:0>==0x104E : sio.WriteBaud(cpu_Dout<15:0>); // パッドレート
+					cpu_A<15:0>==0x1060 : ramSize := cpu_Dout<15:0>;
+					cpu_A<15:0>==0x1070 : par{ // 割り込みステータス
+						IREG &= cpu_Dout<15:0>;
+					}
+					cpu_A<15:0>==0x1074 : IMASK := cpu_Dout<15:0>; // 割り込みマスク
+
+					cpu_A<15:0>==0x10A0 : DmaMADR_2 := cpu_Dout; // DMACチャネル2(GPU)メモリアドレス
+					cpu_A<15:0>==0x10A4 : DmaBCR_2 := cpu_Dout; // DMACチャネル2(GPU)ブロックカウント
+					cpu_A<15:0>==0x10A8 : par{ // DMACチャネル2(GPU)チャネルコントロール
+						DmaCHCR_2 := cpu_Dout;
+						// 1000_0000_0000
+						// (n==2 && DmaCHCR[2]==0x0401 && DmaBCR[2]==0x0)
+						if(DmaDPCR<11>) any{
+							(cpu_Dout==0x01000200) : par{
+								dma_GPU.Execute_vram2mem();
+							}
+							(cpu_Dout==0x01000201) : par{ // ok
+								dma_GPU.Execute_mem2vram();
+							}
+						//	((cpu_Dout==0x00000401) | (cpu_Dout==0x01000401)) & (DmaBCR_2==0x00000000) : par{ // ok
+							(cpu_Dout==0x01000401) | ((cpu_Dout==0x00000401) & (DmaBCR_2==0x00000000)) : par{
+								dma_GPU.Execute_chain();
+							}
+						}
+//if(dma_GPU.Execute_mem2vram & dma_GPU.Execute_chain) halt(0x2F);
+					}
+
+					cpu_A<15:0>==0x10C0 : DmaMADR_4 := cpu_Dout;
+					cpu_A<15:0>==0x10C4 : DmaBCR_4 := cpu_Dout;
+					cpu_A<15:0>==0x10C8 : par{
+						DmaCHCR_4 := cpu_Dout;
+						if(DmaDPCR<19> & (cpu_Dout==0x01000201)){
+							dma_SPU.Execute();
+						}
+					}
+					cpu_A<15:0>==0x10E0 : DmaMADR_6 := cpu_Dout; // DMACチャネル6(OTC)メモリアドレス
+					cpu_A<15:0>==0x10E4 : DmaBCR_6 := cpu_Dout; // DMACチャネル6(OTC)ブロックカウント
+					cpu_A<15:0>==0x10E8 : par{ // DMACチャネル6(OTC)チャネルコントロール
+						DmaCHCR_6 := cpu_Dout;
+						// 1000_0000_0000_0000_0000_0000_0000
+						if(DmaDPCR<27> & (cpu_Dout==0x11000002)){ // ok
+							dma_OTC.Execute();
+						}
+					}
+
+					cpu_A<15:0>==0x10F0 : DmaDPCR |= cpu_Dout; // DMAC優先度コントロール
+					cpu_A<15:0>==0x10F4 : par{ // DMAC割り込みコントロール
+/*
+						if(DmaDICR<31> & ((DmaDICR<30:24> & ^cpu_Dout<30:24>)==0b0000000)){
+							DmaDICR := 0b0 || (DmaDICR<30:24> & ^cpu_Dout<30:24>) || cpu_Dout<23:0>;
+						}
+						else{
+							DmaDICR := DmaDICR<31> || (DmaDICR<30:24> & ^cpu_Dout<30:24>) || cpu_Dout<23:0>;
+						}
+*/
+						sel tmp<32>;
+						tmp = (^cpu_Dout) & DmaDICR;
+						DmaDICR := ((tmp @ cpu_Dout) & 0x00FFFFFF) @ tmp;
+					}
+					cpu_A<15:8>==0x11 : any{ // 0x11--
+						cpu_A<7:4>==0x0 : rcnt_0.io_set(cpu_A<3:0>, cpu_Dout<15:0>);
+						cpu_A<7:4>==0x1 : rcnt_1.io_set(cpu_A<3:0>, cpu_Dout<15:0>);
+						cpu_A<7:4>==0x2 : rcnt_2.io_set(cpu_A<3:0>, cpu_Dout<15:0>);
+					//	cpu_A<7:4>==0x3 : ;//rcnt_3.io_set(cpu_A<3:0>, cpu_Dout<15:0>);
+						else : halt(0x54);
+					}
+					cpu_A<15:4>==0x180 : par{ // CDROMコントローラレジスタ
+//dbg_reg := opcount; halt(0x73);
+						cdr.Write(cpu_A<1:0>, cpu_Dout<7:0>);
+					}
+					cpu_A<15:0>==0x1810 : par{ // GPUデータ／コマンド
+						gpu.WriteData(cpu_Dout);
+//if(dma_GPU.gpu_dma_write_req) halt(0x94);
+					}
+					cpu_A<15:0>==0x1814 : par{ // GPUステータス／コントロール
+						gpu.write_status(cpu_Dout);
+					}
+					cpu_A<15:10>==0b000111 : par{ // 0x1F80_1C00-1E00
+						spu.io_set(cpu_A<15:0>, cpu_Dout<15:0>);
+					}
+					cpu_A<15:0>==0x2041 : ; // ディップスイッチ?
+					else : par{
+//dbg_reg := cpu_A; halt(0x55);
+					}
+				}
+				map_cctrl : ;
+				//else : halt(0xDE);
+			}
+			finish;
+		}
+	}
+
+	stage write_wram_wait {
+		if(wram_ack){
+			finish;
+		}
+	}
+
+}

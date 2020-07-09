@@ -1,0 +1,234 @@
+/*
+	DMA for GPU
+		by pgate1
+*/
+
+declare mul_u16 interface
+{
+	input a<16>, b<16>;
+	output dout<32>;
+	instrin con;
+	instr_arg con(a, b);
+}
+
+circuit DMA_GPU
+{
+	input DmaMADR_2<32>, DmaBCR_2<32>;
+
+	output A<21>;
+	instrout wram_read(A);
+	input Din<32>;
+
+	output Dout<32>;
+	instrout gpu_dma_write_req(Dout);
+	instrout gpu_dma_read_req();
+	instrout wram_write(A, Dout);
+
+	reg_wr bcr<32>;
+	mul_u16 size_mul;
+	sel dma_size<32>;
+	reg_wr dma_count<32>;
+
+	instrin Execute_mem2vram;
+	instrin wram_ack;
+	output running;
+
+	instrin Execute_chain;
+	reg_wr block_addr<21>, block_size<8>, next_addr<24>;
+
+	instrin Execute_vram2mem;
+
+	input gpu_busy, gpu_drawing, cpu_busy;
+	instrin vram_ack;
+
+	instrin run33;
+	reg_wr int_wait_max<32>, count_rst;
+	instrout interrupt;
+	output int_waiting;
+
+instrself halt(h_code);
+sel h_code<8>;
+reg_wr halt_code_reg<8>;
+output halt_code<8>;
+output dbg<32>;
+reg_wr dbg_reg<32>;
+input dbg_in<16>;
+mul_u16 dbg_mul_m, dbg_mul_c;
+
+	stage_name run_mem2vram { task do(); }
+	stage_name run_chain { task do(); }
+	stage_name run_vram2mem { task do(); }
+	stage_name int_wait { task do(int_wait_max, count_rst); }
+
+	instruct halt halt_code_reg := h_code;
+	halt_code = halt_code_reg;
+//dbg = 0x000000 || count_m;
+//dbg = sum;
+dbg = dbg_reg;
+
+	instruct Execute_mem2vram par{
+//if(run_mem2vram.do | run_chain.do | run_vram2mem.do) halt(0xA7);
+		generate run_mem2vram.do();
+	}
+
+	instruct Execute_chain par{
+//if(int_wait.do) halt(0xA1);
+//if(otc_intwait) halt(0xA2);
+//if(run_mem2vram.do | run_chain.do | run_vram2mem.do) halt(0xA8);
+		generate run_chain.do();
+	}
+
+	instruct Execute_vram2mem par{
+//if(run_mem2vram.do | run_chain.do | run_vram2mem.do) halt(0xA9);
+		generate run_vram2mem.do();
+	}
+
+	// uint32 size = (bcr >> 16) * (bcr & 0xFFFF);
+	// 16 * 16 = 32;
+	dma_size = size_mul.con(bcr<31:16>, bcr<15:0>).dout;
+
+	running = run_mem2vram.do | run_chain.do | run_vram2mem.do;
+//	running = (run_mem2vram.do & ^gpu_drawing) | (run_chain.do & ^gpu_drawing) | run_vram2mem.do;
+
+	int_waiting = int_wait.do;
+
+	stage run_mem2vram {
+		reg_wr madr<21>;
+		reg_wr dma_data<32>;
+		first_state st1;
+		state st1 if(^gpu_busy){
+			if(run_chain.do){
+				madr := block_addr;
+				bcr := 0x0001_00 || block_size;
+			}
+			else{
+				// uint32 *ptr = (uint32*)(ram + (madr>>2));
+				madr := DmaMADR_2<20:0>;
+				// uint32 bcr = DmaBCR[n];
+				bcr := DmaBCR_2;
+			}
+			dma_count := 0;
+			goto st2;
+		}
+		state st2 if(wram_ack & (^gpu_busy)){
+			wram_read(madr);
+			madr += 4;
+			dma_count++;
+			goto st2w;
+		}
+		state st2w if(wram_ack & (^gpu_busy)){
+			dma_data := Din;
+			goto st3;
+		}
+		state st3 if(^gpu_busy){
+			gpu_dma_write_req(dma_data);
+			if(dma_count==dma_size) goto st4;
+			else goto st2;
+		}
+		state st4 if(^gpu_busy){
+
+			goto st5; // ‚È‚º‚©•K—v
+		}
+		state st5 if(^gpu_busy){
+
+			if(^run_chain.do){
+//if(dma_size<31>) halt(0x45);
+				generate int_wait.do((dma_size>>1)<<(0b000+(0b0||dbg_in<1:0>))/*dbg_mul_m.con(dma_size<15:0>, 0x000||dbg_in<3:0>).dout*/, 0b1); // 320:<<2
+			}
+			goto st1;
+			finish;
+		}
+	}
+
+	stage run_chain {
+		reg_wr trans_size<32>;
+		first_state st1;
+		state st1 if(^gpu_busy){
+			next_addr := DmaMADR_2<23:0>;
+			trans_size := 0;
+			goto st2;
+		}
+		state st2 if(wram_ack & (^gpu_busy)){
+			wram_read(next_addr<20:0>);
+			block_addr := next_addr<20:0> + 4;
+			goto st3;
+		}
+		state st3 if(wram_ack & (^gpu_busy)){
+			block_size := Din<31:24>;
+			next_addr := Din<23:0>;
+			trans_size += 0x000000 || Din<31:24>;
+			if(Din<31:24>!=0) generate run_mem2vram.do();
+			goto st4;
+		}
+		state st4 if((^run_mem2vram.do) & (^gpu_busy)){
+			if(next_addr!=0xFFFFFF) goto st2;
+			else{
+//if(trans_size<31>) halt(0x46);
+				generate int_wait.do(trans_size<<dbg_in<3:2>/*dbg_mul.con(trans_size<15:0>, dbg_in).dout*/, 0b1); // 320:<<0
+				goto st1;
+				finish;
+			}
+		}
+	}
+
+	stage run_vram2mem {
+		first_state st1;
+		state st1 if(^gpu_busy){
+			// uint32 *ptr = (uint32*)(ram + (madr>>2));
+			madr := DmaMADR_2<20:0>;
+			// uint32 bcr = DmaBCR[n];
+			bcr := DmaBCR_2;
+			dma_count := 0;
+			goto st2;
+		}
+		state st2 if(^gpu_busy){
+			gpu_dma_read_req();
+			dma_count++;
+			goto st2w;
+		}
+		state st2w if(vram_ack /*& (^gpu_busy)*/){
+			dma_data := Din;
+			goto st3;
+		}
+		state st3 if(wram_ack & (^gpu_busy)){
+			wram_write(madr, dma_data);
+			madr += 4;
+			goto st3w;
+		}
+		state st3w if(wram_ack & (^gpu_busy)){
+			if(dma_count==dma_size) goto st4;
+			else goto st2;
+		}
+		state st4 if(^gpu_busy){
+
+			goto st5;
+		}
+		state st5 if(^gpu_busy){
+
+//if(dma_size<31>) halt(0x47);
+			generate int_wait.do(dma_size<<dbg_in<7:6>, 0b1); // 320:<<0
+			goto st1;
+			finish;
+		}
+	}
+
+	stage int_wait {
+		reg_wr int_wait_count<32>;
+		first_state st1;
+		state st1 par{
+			int_wait_count := 0;
+			count_rst := 0b0;
+			goto st2;
+		}
+		state st2 if(run33){
+			int_wait_count++;
+			if(int_wait_count==int_wait_max){
+				interrupt();
+				goto st1;
+				finish;
+			}
+			if(count_rst) goto st1;
+		}
+	}
+
+}

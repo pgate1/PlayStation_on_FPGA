@@ -1,0 +1,16 @@
+
+// Delta Sigma Converter
+
+circuit dsdac10
+{
+	input DACin<10>;
+	output DACout;
+
+	reg_wr sigma<12>; // +2
+	sel delta<12>; // +2
+
+	delta = sigma<11> || sigma<11> || DACin;
+	sigma += delta;
+	DACout = sigma<11>;
+}
+

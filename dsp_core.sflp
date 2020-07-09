@@ -1,0 +1,286 @@
+/*
+	SPU DSP
+		by pgate1
+*/
+
+%i "dsp_ch.h"
+%i "reverb.h"
+
+circuit dsp_core
+{
+	instrin io_set(io_A, io_Din);
+	input io_A<16>, io_Din<16>;
+	instrin io_get(io_A);
+	output io_Dout<16>;
+
+	input CtrlRvb, CtrlIRQ;
+
+	instrin run33; // 33.8688MHz
+	reg dcount<8> = 1;
+
+	instrout read_req, write_req;
+	output vA<18>, vDout<16>;
+	input vDin<16>;
+	instrin ack;
+	input dma_doing;
+
+	dsp_ch ch_00, ch_01, ch_02, ch_03, ch_04, ch_05, ch_06, ch_07,
+	       ch_08, ch_09, ch_0A, ch_0B, ch_0C, ch_0D, ch_0E, ch_0F,
+	       ch_10, ch_11, ch_12, ch_13, ch_14, ch_15, ch_16, ch_17;
+
+	instrself ch_io_set(ch);
+	sel ch<5>;
+
+	reg_wr doing<8>;
+
+	instrin sw_intpl_off, sw_reverb_off;
+
+	reg_wr main_add_L<21>, main_add_R<21>;
+
+	reverb rvb;
+	reg_wr rcount<3>;
+	reg_wr rvb_on<24>;
+
+	reg_wr rvb_add_L<21>, rvb_add_R<21>;
+	sel rvb_clip_L<16>, rvb_clip_R<16>;
+
+	output voice_out_L<21>, voice_out_R<21>;
+
+	output disp_env<24>;
+
+	instrself halt(h_code);
+	sel h_code<8>;
+	reg_wr halt_code_reg<8>;
+	output halt_code<8>;
+
+output dbg<32>;
+
+	par(i=0;i<24;i++){
+		ch[i].CtrlIRQ = CtrlIRQ;
+	}
+
+	// read_reqが出ているときは一旦read_ackで落とす
+	alt{
+		ack : ;
+		((doing==0x00) & ch_00.read_req) | ((doing==0x01) & ch_01.read_req) |
+		((doing==0x02) & ch_02.read_req) | ((doing==0x03) & ch_03.read_req) |
+		((doing==0x04) & ch_04.read_req) | ((doing==0x05) & ch_05.read_req) |
+		((doing==0x06) & ch_06.read_req) | ((doing==0x07) & ch_07.read_req) |
+		((doing==0x08) & ch_08.read_req) | ((doing==0x09) & ch_09.read_req) |
+		((doing==0x0A) & ch_0A.read_req) | ((doing==0x0B) & ch_0B.read_req) |
+		((doing==0x0C) & ch_0C.read_req) | ((doing==0x0D) & ch_0D.read_req) |
+		((doing==0x0E) & ch_0E.read_req) | ((doing==0x0F) & ch_0F.read_req) |
+		((doing==0x10) & ch_10.read_req) | ((doing==0x11) & ch_11.read_req) |
+		((doing==0x12) & ch_12.read_req) | ((doing==0x13) & ch_13.read_req) |
+		((doing==0x14) & ch_14.read_req) | ((doing==0x15) & ch_15.read_req) |
+		((doing==0x16) & ch_16.read_req) | ((doing==0x17) & ch_17.read_req)
+		: par{
+			read_req();
+		}
+		doing==24 : any{
+			rvb.read_req : read_req();
+			rvb.write_req : write_req();
+		}
+	}
+
+	if(ack | ((^read_req) & (^write_req))){
+		if(doing==24) doing := 0;
+		else doing++;
+	}
+
+	any(i=0;i<24;i++){
+		doing<4:0>==i : vA = ch[i].vA;
+		doing==24 : vA = rvb.A;
+	}
+
+	vDout = rvb.Dout;
+
+	par(i=0;i<24;i++){
+		ch[i].vDin = vDin;
+	}
+	rvb.Din = vDin;
+
+	// SPC DMA中はリバーブバッファへアクセスしないように
+	rvb.dma_doing = dma_doing;
+
+	// 16bit x 24(32(5)) = 21bit
+	join(i=0;i<24;i++){
+		main_add_L := main_add_L + (21#ch[i].voice_out_L);
+	}
+	join(i=0;i<24;i++){
+		main_add_R := main_add_R + (21#ch[i].voice_out_R);
+	}
+
+	instruct sw_intpl_off par(i=0;i<24;i++){
+		 ch[i].sw_intpl_off();
+	}
+
+	join(i=0;i<24;i++){
+		rvb_add_L := rvb_add_L + ((21#rvb_on<i>) & (21#ch[i].voice_out_L));
+	}
+	join(i=0;i<24;i++){
+		rvb_add_R := rvb_add_R + ((21#rvb_on<i>) & (21#ch[i].voice_out_R));
+	}
+
+	any{
+		rvb_add_L<20:15>==0b111110 : rvb_clip_L = 0x8000;
+		rvb_add_L<20:15>==0b000001 : rvb_clip_L = 0x7FFF;
+		else : rvb_clip_L = rvb_add_L<15:0>;
+	}
+	any{
+		rvb_add_R<20:15>==0b111110 : rvb_clip_R = 0x8000;
+		rvb_add_R<20:15>==0b000001 : rvb_clip_R = 0x7FFF;
+		else : rvb_clip_R = rvb_add_R<15:0>;
+	}
+
+	rvb.SAMPLE_L = rvb_clip_L;
+	rvb.SAMPLE_R = rvb_clip_R;
+
+	if(sw_reverb_off){
+		voice_out_L = main_add_L;
+		voice_out_R = main_add_R;
+	}
+	else{
+		voice_out_L = main_add_L + ((21#CtrlRvb)&(21#rvb.out_L));
+		voice_out_R = main_add_R + ((21#CtrlRvb)&(21#rvb.out_R));
+	}
+
+	join(i=0;i<24;i++){
+		disp_env = (ch[i].disp_env) || disp_env;
+	}
+
+	par(i=0;i<24;i++){
+		if(ch[i].halt_out) halt(0b100||i);
+	}
+
+	halt_code = halt_code_reg;
+
+//dbg = ch_0E.dbg;
+
+	instruct halt par{
+		halt_code_reg := h_code;
+	}
+
+	instruct io_set any{
+		io_A==0x1D84 : par{ // Reverb Output Volume Left
+			rvb.io_set(io_A, io_Din);
+		}
+		io_A==0x1D86 : par{ // Reverb Output Volume Right
+			rvb.io_set(io_A, io_Din);
+		}
+		io_A==0x1D88 : par{ // Voice ON  (0-15)
+			if(io_Din<0>) ch_00.key_on();
+			if(io_Din<1>) ch_01.key_on();
+			if(io_Din<2>) ch_02.key_on();
+			if(io_Din<3>) ch_03.key_on();
+			if(io_Din<4>) ch_04.key_on();
+			if(io_Din<5>) ch_05.key_on();
+			if(io_Din<6>) ch_06.key_on();
+			if(io_Din<7>) ch_07.key_on();
+			if(io_Din<8>) ch_08.key_on();
+			if(io_Din<9>) ch_09.key_on();
+			if(io_Din<10>) ch_0A.key_on();
+			if(io_Din<11>) ch_0B.key_on();
+			if(io_Din<12>) ch_0C.key_on();
+			if(io_Din<13>) ch_0D.key_on();
+			if(io_Din<14>) ch_0E.key_on();
+			if(io_Din<15>) ch_0F.key_on();
+		}
+		io_A==0x1D8A : par{ // Voice ON  (16-23)
+			if(io_Din<0>) ch_10.key_on();
+			if(io_Din<1>) ch_11.key_on();
+			if(io_Din<2>) ch_12.key_on();
+			if(io_Din<3>) ch_13.key_on();
+			if(io_Din<4>) ch_14.key_on();
+			if(io_Din<5>) ch_15.key_on();
+			if(io_Din<6>) ch_16.key_on();
+			if(io_Din<7>) ch_17.key_on();
+		}
+		io_A==0x1D8C : par{ // Voice OFF (0-15)
+			if(io_Din<0>) ch_00.key_off();
+			if(io_Din<1>) ch_01.key_off();
+			if(io_Din<2>) ch_02.key_off();
+			if(io_Din<3>) ch_03.key_off();
+			if(io_Din<4>) ch_04.key_off();
+			if(io_Din<5>) ch_05.key_off();
+			if(io_Din<6>) ch_06.key_off();
+			if(io_Din<7>) ch_07.key_off();
+			if(io_Din<8>) ch_08.key_off();
+			if(io_Din<9>) ch_09.key_off();
+			if(io_Din<10>) ch_0A.key_off();
+			if(io_Din<11>) ch_0B.key_off();
+			if(io_Din<12>) ch_0C.key_off();
+			if(io_Din<13>) ch_0D.key_off();
+			if(io_Din<14>) ch_0E.key_off();
+			if(io_Din<15>) ch_0F.key_off();
+		}
+		io_A==0x1D8E : par{ // Voice OFF (16-23)
+			if(io_Din<0>) ch_10.key_off();
+			if(io_Din<1>) ch_11.key_off();
+			if(io_Din<2>) ch_12.key_off();
+			if(io_Din<3>) ch_13.key_off();
+			if(io_Din<4>) ch_14.key_off();
+			if(io_Din<5>) ch_15.key_off();
+			if(io_Din<6>) ch_16.key_off();
+			if(io_Din<7>) ch_17.key_off();
+		}
+		io_A==0x1D98 : par{ // Voice  0..15 Channel Reverb mode
+			rvb_on := rvb_on<23:16> || io_Din;
+		}
+		io_A==0x1D9A : par{ // Voice 16..23 Channel Reverb mode
+			rvb_on := io_Din<7:0> || rvb_on<15:0>;
+		}
+		io_A==0x1D9C : ; //  Voice 0..23 ON/OFF (status) (ENDX) (R)
+		io_A==0x1D9E : ; //  Voice 0..23 ON/OFF (status) (ENDX) (R)
+		io_A==0x1DA2 : par{ // Sound RAM Reverb Work Area Start Address
+			rvb.io_set(io_A, io_Din);
+		}
+		io_A<15:6>==0b0001_1101_11 : par{ // Reverb
+			rvb.io_set(io_A, io_Din);
+		}
+		else : par{
+			any(i=0;i<24;i++){
+				io_A<15:4>==(0x1C0+(0b0000000||i)) : par{ ch[i].io_set(io_A<3:0>, io_Din); ch_io_set(i); }
+				else : halt(0x23);
+			}
+		}
+	}
+
+	instruct io_get any{
+		io_A==0x1D98 : par{ // Voice 0..15 Channel Reverb mode
+			io_Dout = rvb_on<15:0>;
+		}
+		io_A==0x1D9A : par{ // Voice 16..23 Channel Reverb mode
+			io_Dout = 0x00 || rvb_on<23:16>;
+		}
+		else : par{
+			any(i=0;i<24;i++){
+				io_A<15:4>==(0x1C0+(0b0000000||i)) : par{ io_Dout=ch[i].io_get(io_A<3:0>).io_Dout; }
+				else : halt(0x24);
+			}
+		}
+	}
+
+	instruct run33 par{
+		if(dcount==192){ // 44.1k×4 = 176400Hz 33868800Hz/192
+			par(i=0;i<24;i++){
+				ch[i].run();
+			}
+			dcount := 1;
+
+			rcount++;
+			if(/&rcount){ // 176400Hz / 8 = 22050Hz
+				if(^sw_reverb_off) rvb.run();
+			}
+		}
+		else dcount++;
+	}
+
+	instruct ack par{
+		any(i=0;i<24;i++){
+			doing<4:0>==i : ch[i].read_ack();
+			doing==24 : rvb.ack();
+		}
+	}
+
+}

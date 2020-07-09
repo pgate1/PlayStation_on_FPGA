@@ -1,0 +1,608 @@
+/*
+	GPU top
+		by pgate1
+*/
+
+%i "drawGouraudShading.h"
+%i "drawRect.h"
+%i "drawTextureRect.h"
+
+circuit GPU_core
+{
+	input din<32>;
+	output dout<32>;
+	reg_wr dout_reg<32>;
+	instrout read_ack;
+
+	instrin read_status;
+	instrin write_status(din);
+
+	instrin WriteData(din), ReadData;
+	instrin hsync;
+
+	reg status<32> = 0x14802000;
+//	reg GpuInfo<32> = 0x00000000;
+
+	reg_wr DispStartX<10>, DispStartY<10>;
+	reg_wr HorDispRangeStart<12>, HorDispRangeEnd<12>;
+	reg_wr VertDispRangeStart<10>, VertDispRangeEnd<11>;
+
+	reg_wr VramPosX<16>, VramPosY<16>;
+	reg_wr drawW<10>, drawH<10>;
+	mem CommandBuffer[16]<32>;
+	reg_wr BufferOffset<4>;
+	reg_wr cmd_reg<8>;
+
+	output busy, drawing;
+
+	reg_wr px1<11>, py1<11>, pc1<24>; // A点
+	reg_wr px2<11>, py2<11>, pc2<24>; // B点
+	reg_wr px3<11>, py3<11>, pc3<24>; // C点
+	reg_wr px4<11>, py4<11>; // D点
+
+	drawGouraudShading gs;
+	drawRect rect;
+
+	drawTextureRect texrect;
+	reg_wr pu1<8>, pv1<8>;
+	reg_wr pu4<8>, pv4<8>;
+	reg_wr clut<16>, tpage<16>;
+
+	instrout view_on;
+	output view_x<10>, view_y<9>;
+	output view_R<8>, view_G<8>, view_B<8>;
+
+	// for VRAM
+	output vram_adrs<19>, vram_write_data<16>;
+	instrout vram_write_req(vram_adrs, vram_write_data);
+	instrout vram_read_req(vram_adrs);
+	instrin vram_ack;
+	input vram_read_data<16>;
+	reg_wr vram_read_data_reg<16>;
+
+	// WriteData用
+	reg_wr io_write_data<32>;
+
+	// WriteData,ReadData用
+	sel io_vram_adrs<19>, io_vram_din<16>;
+	reg_wr io_vram_adrs_reg<19>, io_vram_din_reg<16>;
+	instrself vram_write(io_vram_adrs, io_vram_din);
+	instrself vram_read(io_vram_adrs);
+	reg_wr vram_wait;
+
+	instrself halt(halt_sel);
+	sel halt_sel<8>;
+	reg_wr halt_reg<8>;
+	output halt_code<8>;
+
+input dbg_in<16>;
+output dbg<32>;
+reg_wr dbg_reg<32>;
+reg_wr sum<32>;
+output vraming;
+
+	stage_name VramData_image { task read_vram(); task write_vram(io_write_data); }
+	stage_name draw_stg { task do(); }
+
+	instruct halt halt_reg := halt_sel;
+	halt_code = halt_reg;
+
+dbg = dbg_reg;
+//dbg = sum;
+
+	instruct read_status par{
+		dout = status;
+	//	if(status<22>) 
+			status := status @ 0x80000000; // test
+	}
+
+	instruct write_status par{
+	any{
+		din<31:24>==0x00 : par{
+			status := 0x14802000;
+			BufferOffset := 0;
+			VramPosX := 0;
+			VramPosY := 0;
+		}
+		din<31:24>==0x01 : par{
+			BufferOffset := 0;
+		}
+		din<31:24>==0x02 : ; // reset irq
+		din<31:24>==0x03 : par{
+			status := status<31:24> || din<0> || status<22:0>;
+		}
+		din<31:24>==0x04 : par{
+			status := status<31> || din<1:0> || status<28:0>;
+		}
+		din<31:24>==0x05 : par{
+			DispStartX := din<9:0>;
+			DispStartY := din<19:10>;
+		}
+		din<31:24>==0x06 : par{
+			HorDispRangeStart := din<11:0>;
+			HorDispRangeEnd := din<23:12>;
+		}
+		din<31:24>==0x07 : par{
+			VertDispRangeStart := din<9:0>;
+			VertDispRangeEnd := din<20:10>;
+		}
+		din<31:24>==0x08 : par{
+		//	status := status<31:19> || din<1:0> || din<6> || status<15:0>; // ok
+			status := status<31:23> || din<5> || status<21:20> || din<2:0> || din<6> || status<15:0>;
+		}
+		else : halt(0xE2);
+	}
+	}
+
+//	instruct StatusIdle par{
+//		status := status<31:27> || idle || status<25:0>;
+//	}
+//	draw_idle = status<26>;
+
+	instruct hsync par{
+		// mode interlace
+	//	if(status<22>) status := status @ 0x80000000;
+	}
+
+	reg_wr ReadData_ack;
+	instruct ReadData par{
+		if(status<27>){
+		//	dout = 0x00000000;
+//if(VramData_image.write_vram) halt(0xA4); // no
+			generate VramData_image.read_vram();
+		}
+		else{
+		//	dout = 0;//GpuInfo;
+			dout_reg := 0;
+			ReadData_ack := 0b1;
+		}
+	}
+	if(ReadData_ack){
+		read_ack();
+		ReadData_ack := 0b0;
+	}
+
+	if(read_status);
+	else dout = dout_reg; // DMA_Read_Data
+
+	instruct WriteData par{
+		sel cmd<8>;
+//if(ReadData_imagesent.do | WriteData_imagesent.do) halt(0x93);
+		CommandBuffer[BufferOffset] := din;
+		if(BufferOffset==0){
+			cmd = din<31:24>;
+			cmd_reg := cmd;
+		}
+		else cmd = cmd_reg;
+		any{
+			cmd==0x00 : ;
+			cmd==0x01 : ;
+
+			cmd==0x02 : any{
+				BufferOffset==2 : par{ // FillFramebufferRect
+					generate draw_stg.do();
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+			cmd==0x22 : any{
+				BufferOffset==3 : par{ // Mono3PointPoly
+				//	generate draw_stg.do();
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+
+			cmd==0x28 : any{ // ok
+				BufferOffset==4 : par{ // Mono4PointPoly
+					generate draw_stg.do();
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+
+			(cmd==0x2C) | (cmd==0x2D) | (cmd==0x2F) : any{
+				BufferOffset==8 : par{ // Textured4PointPoly
+					generate draw_stg.do();
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+			cmd==0x30 : any{ // ok
+				BufferOffset==5 : par{ // Gouraud3PointPoly
+					generate draw_stg.do();
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+			cmd==0x38 : any{ // ok
+				BufferOffset==7 : par{ // Gouraud4PointPoly
+					generate draw_stg.do();
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+			cmd==0x65 : any{
+				BufferOffset==3 : par{ // Sprite
+					generate draw_stg.do();
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+
+			cmd==0x78 : any{ // rectangle ?
+				BufferOffset==1 : par{
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+
+			cmd==0x80 : any{ // move image in framebuffer ?
+				BufferOffset==3 : par{
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+
+			cmd==0xA0 : any{ // WriteVRAM
+				BufferOffset==3 : par{
+//if(VramData_image.read_vram) halt(0xA3); // no
+//if(ReadData) halt(0xA3); // no
+					generate VramData_image.write_vram(din);
+				}
+				else : par{
+					VramPosX := 0;
+					VramPosY := 0;
+					BufferOffset++;
+				}
+			}
+
+			cmd==0xC0 : any{ // ReadVRAM
+				BufferOffset==2 : par{
+					status |= 0x08000000;
+					BufferOffset := 0; // 20190208追加
+				}
+				else : par{
+					VramPosX := 0;
+					VramPosY := 0;
+					BufferOffset++;
+				}
+			}
+
+			cmd==0xE1 : par{
+				status := status<31:11> || din<10:0>;
+				tpage := din<15:0>;
+			}
+			cmd==0xE2 : ;
+			cmd==0xE3 : ;
+			cmd==0xE4 : par{
+//  H:480 W:640
+// 01111000001010000000:78280
+				drawW := din<9:0>;
+				drawH := din<19:10>;
+			}
+			cmd==0xE5 : ;
+			cmd==0xE6 : par{
+				status := status<31:13> || din<1:0> || status<10:0>;
+			}
+
+			else : par{
+dbg_reg := 0x0000||cmd||0x00;
+				halt(0xA5);
+			}
+		}
+
+		status |= 0x04000000;
+	}
+
+gs.dbg_in = dbg_in;
+	sel f_dither;
+	f_dither = tpage<9> & (cmd_reg<7:4>==0x3);
+	gs.con(px1, py1, pc1, px2, py2, pc2, px3, py3, pc3, drawW, drawH, f_dither);
+	rect.con(px1, py1, pc1, px2, py2);
+	texrect.con(px1, py1, px4, py4, clut, tpage, pu1, pv1, pu4, pv4);
+
+	busy = (halt_code!=0x00) | (draw_stg.do | VramData_image.write_vram | VramData_image.read_vram);
+	drawing = draw_stg.do;
+
+	instruct gs.view_on par{
+		view_on();
+		view_x = gs.view_x;
+		view_y = gs.view_y;
+		view_R = gs.out_R;
+		view_G = gs.out_G;
+		view_B = gs.out_B;
+	}
+
+	instruct rect.view_on par{
+		view_on();
+		view_x = rect.view_x;
+		view_y = rect.view_y;
+		view_R = rect.out_R;
+		view_G = rect.out_G;
+		view_B = rect.out_B;
+	}
+
+	instruct texrect.view_on par{
+		view_on();
+		view_x = texrect.view_x;
+		view_y = texrect.view_y;
+		view_R = texrect.out_R;
+		view_G = texrect.out_G;
+		view_B = texrect.out_B;
+	}
+
+	instruct gs.vram_write_req par{
+		vram_write_req(gs.vram_write_adrs, gs.vram_write_data);
+	}
+	instruct rect.vram_write_req par{
+		vram_write_req(rect.vram_write_adrs, rect.vram_write_data);
+	}
+	instruct texrect.vram_read_req par{
+		vram_read_req(texrect.vram_read_adrs);
+//if(VramData_image.write_vram) halt(0xA2); // no
+	}
+
+//if(gs.vram_write_req & texrect.vram_read_req) halt(0xA6);
+//if(rect.vram_write_req & texrect.vram_read_req) halt(0xA7);
+//if(gs.vram_write_req & vram_write) halt(0xA8);
+//if(gs.vram_write_req & vram_read_req) halt(0xA9); // no
+//if(rect.vram_write_req & vram_write) halt(0xAA);
+//if(rect.vram_write_req & vram_read_req) halt(0xAB); // no
+//if(texrect.vram_read_req & vram_write_req) halt(0xAC); // no
+//if(texrect.vram_read_req & vram_read) halt(0xAD);
+//if(vram_write & vram_read) halt(0xAE); // no
+//if(vram_write_req & vram_read_req) halt(0xAF); // これ
+//if(VramData_image.write_vram & VramData_image.read_vram) halt(0xA1); // no
+//if(VramData_image.write_vram & vram_read_req) halt(0xA2); // これ
+//if(VramData_image.read_vram & vram_write_req) halt(0xA3); // これ
+
+	instruct vram_ack par{
+		gs.vram_ack();
+		rect.vram_ack();
+		texrect.vram_ack();
+	}
+	texrect.vram_read_data = vram_read_data;
+
+	instruct vram_write par{
+//if(vram_read_req) halt(0xA1); // no
+		vram_write_req(io_vram_adrs, io_vram_din);
+		io_vram_adrs_reg := io_vram_adrs;
+		io_vram_din_reg := io_vram_din;
+		vram_wait := 0b1;
+	}
+	if(vram_wait & ^vram_ack) vram_write_req(io_vram_adrs_reg, io_vram_din_reg);
+	instruct vram_read par{
+//if(vram_write_req) halt(0xA2); // no
+		vram_read_req(io_vram_adrs);
+		io_vram_adrs_reg := io_vram_adrs;
+		vram_wait := 0b1;
+	}
+	if(vram_wait & ^vram_ack) vram_read_req(io_vram_adrs_reg);
+	if(vram_ack){
+		vram_wait := 0b0;
+		vram_read_data_reg := vram_read_data;
+	}
+
+vraming = VramData_image.write_vram | VramData_image.read_vram;
+
+	stage VramData_image {
+		sel vram_p<19>, vram_width<16>, vram_height<16>;
+		reg_wr pix, curPixel<19>;
+		first_state st_pix;
+		par{
+			vram_p = CommandBuffer[1]<24:16> || CommandBuffer[1]<9:0>;
+			vram_width = CommandBuffer[2]<15:0>;
+			vram_height = CommandBuffer[2]<31:16>;
+		}
+		state st_pix if((^vram_wait) & (^draw_stg.do)){
+
+			if(VramData_image.write_vram){
+				vram_write(vram_p + curPixel, io_write_data<15:0>);
+				io_write_data := io_write_data >> 16;
+			}
+			if(VramData_image.read_vram){
+				vram_read(vram_p + curPixel);
+			}
+			goto st_wait;
+
+			if(((VramPosX+1)-vram_width)<15>==0b0){ // VramPosX+1 >= vram_width
+				VramPosX := 0;
+				if(((VramPosY+1)-vram_height)<15>==0b0){ // VramPosY+1 >= vram_height
+					BufferOffset := 0;
+					VramPosY := 0;
+					curPixel := 0;
+					if(VramData_image.read_vram) status &= ^0x08000000; // image send end
+				}
+				else{
+					curPixel += 0b0000000010000000001 - (0b000||vram_width); // +1024+1
+					VramPosY++;
+				}
+			}
+			else{
+				curPixel++;
+				VramPosX++;
+			}
+		}
+		state st_wait if(^vram_wait){
+
+			if(VramData_image.write_vram){
+				goto st_pix;
+				if(pix==0b1) finish;
+			}
+
+			if(VramData_image.read_vram) any{
+				pix==0b0 : par{
+					dout_reg := dout_reg<31:16> || vram_read_data_reg;
+					goto st_pix;
+				}
+				pix==0b1 : par{
+					dout_reg := vram_read_data_reg || dout_reg<15:0>;
+					goto st_rack;
+				}
+			}
+
+			pix := ^pix;
+		}
+		state st_rack par{
+			read_ack(); // for ReadData vram2wmem
+			goto st_pix;
+			finish;
+		}
+	}
+
+	stage draw_stg {
+		first_state st1;
+		state st1 par{
+			any{
+				cmd_reg==0x02 : par{ // FillFramebufferRect
+					px1 := CommandBuffer[1]<10:0>;
+					py1 := CommandBuffer[1]<26:16>;
+					pc1 := CommandBuffer[0]<23:0>;
+					px2 := CommandBuffer[2]<10:0>;
+					py2 := CommandBuffer[2]<26:16>;
+					rect.draw();
+					goto stend;
+				}
+				cmd_reg==0x22 : par{ // Mono3PointPoly
+					px1 := CommandBuffer[1]<10:0>;
+					py1 := CommandBuffer[1]<26:16>;
+					pc1 := CommandBuffer[0]<23:0>;
+					px2 := CommandBuffer[2]<10:0>;
+					py2 := CommandBuffer[2]<26:16>;
+					pc2 := CommandBuffer[0]<23:0>;
+					px3 := CommandBuffer[3]<10:0>;
+					py3 := CommandBuffer[3]<26:16>;
+					pc3 := CommandBuffer[0]<23:0>;
+					gs.draw();
+					goto stend;
+				}
+				cmd_reg==0x28 : par{ // Mono4PointPoly
+					px1 := CommandBuffer[1]<10:0>;
+					py1 := CommandBuffer[1]<26:16>;
+					pc1 := CommandBuffer[0]<23:0>;
+					px2 := CommandBuffer[2]<10:0>;
+					py2 := CommandBuffer[2]<26:16>;
+					pc2 := CommandBuffer[0]<23:0>;
+					px3 := CommandBuffer[3]<10:0>;
+					py3 := CommandBuffer[3]<26:16>;
+					pc3 := CommandBuffer[0]<23:0>;
+					gs.draw();
+					goto st2;
+				}
+				(cmd_reg==0x2C) | (cmd_reg==0x2D) | (cmd_reg==0x2F) : par{ // Textured4PointPoly
+					px1 := CommandBuffer[1]<10:0>;
+					py1 := CommandBuffer[1]<26:16>;
+					px4 := CommandBuffer[7]<10:0>;
+					py4 := CommandBuffer[7]<26:16>;
+					pu1 := CommandBuffer[2]<7:0>;
+					pv1 := CommandBuffer[2]<15:8>;
+					pu4 := CommandBuffer[8]<7:0>;
+					pv4 := CommandBuffer[8]<15:8>;
+					clut := CommandBuffer[2]<31:16>;
+					tpage := CommandBuffer[4]<31:16>;
+					status := status<31:9> || CommandBuffer[4]<24:16>;
+					texrect.draw();
+					goto stend;
+				}
+				cmd_reg==0x30 : par{ // Gouraud3PointPoly
+					px1 := CommandBuffer[1]<10:0>;
+					py1 := CommandBuffer[1]<26:16>;
+					pc1 := CommandBuffer[0]<23:0>;
+					px2 := CommandBuffer[3]<10:0>;
+					py2 := CommandBuffer[3]<26:16>;
+					pc2 := CommandBuffer[2]<23:0>;
+					px3 := CommandBuffer[5]<10:0>;
+					py3 := CommandBuffer[5]<26:16>;
+					pc3 := CommandBuffer[4]<23:0>;
+					gs.draw();
+					goto stend;
+				}
+				cmd_reg==0x38 : par{ // Gouraud4PointPoly
+					px1 := CommandBuffer[1]<10:0>;
+					py1 := CommandBuffer[1]<26:16>;
+					pc1 := CommandBuffer[0]<23:0>;
+					px2 := CommandBuffer[3]<10:0>;
+					py2 := CommandBuffer[3]<26:16>;
+					pc2 := CommandBuffer[2]<23:0>;
+					px3 := CommandBuffer[5]<10:0>;
+					py3 := CommandBuffer[5]<26:16>;
+					pc3 := CommandBuffer[4]<23:0>;
+					gs.draw();
+					goto st2;
+				}
+				cmd_reg==0x65 : par{ // Sprite
+					px1 := CommandBuffer[1]<10:0>;
+					py1 := CommandBuffer[1]<26:16>;
+					px4 := CommandBuffer[1]<10:0> + CommandBuffer[3]<10:0>;
+					py4 := CommandBuffer[1]<26:16> + CommandBuffer[3]<26:16>;
+					pu1 := CommandBuffer[2]<7:0>;
+					pv1 := CommandBuffer[2]<15:8>;
+					pu4 := CommandBuffer[2]<7:0> + CommandBuffer[3]<7:0>;
+					pv4 := CommandBuffer[2]<15:8> + CommandBuffer[3]<23:16>;
+					clut := CommandBuffer[2]<31:16>;
+				//	tpage := CommandBuffer[4]<31:16>;
+					texrect.draw();
+					goto stend;
+				}
+			}
+		}
+		state st2 if(^gs.drawing){
+			any{
+				cmd_reg==0x28 : par{ // Mono4PointPoly
+					px1 := CommandBuffer[2]<10:0>;
+					py1 := CommandBuffer[2]<26:16>;
+					pc1 := CommandBuffer[0]<23:0>;
+					px2 := CommandBuffer[3]<10:0>;
+					py2 := CommandBuffer[3]<26:16>;
+					pc2 := CommandBuffer[0]<23:0>;
+					px3 := CommandBuffer[4]<10:0>;
+					py3 := CommandBuffer[4]<26:16>;
+					pc3 := CommandBuffer[0]<23:0>;
+					gs.draw();
+					goto stend;
+				}
+/*
+				(cmd_reg==0x2C) | (cmd_reg==0x2D) | (cmd_reg==0x2F) : par{ // Textured4PointPoly
+					px1 := CommandBuffer[3]<10:0>;
+					py1 := CommandBuffer[3]<26:16>;
+					pc1 := CommandBuffer[0]<23:0>;
+					px2 := CommandBuffer[5]<10:0>;
+					py2 := CommandBuffer[5]<26:16>;
+					pc2 := CommandBuffer[0]<23:0>;
+					px3 := CommandBuffer[7]<10:0>;
+					py3 := CommandBuffer[7]<26:16>;
+					pc3 := CommandBuffer[0]<23:0>;
+					gs.draw();
+					goto stend;
+				}
+*/
+				cmd_reg==0x38 : par{ // Gouraud4PointPoly
+					px1 := CommandBuffer[3]<10:0>;
+					py1 := CommandBuffer[3]<26:16>;
+					pc1 := CommandBuffer[2]<23:0>;
+					px2 := CommandBuffer[5]<10:0>;
+					py2 := CommandBuffer[5]<26:16>;
+					pc2 := CommandBuffer[4]<23:0>;
+					px3 := CommandBuffer[7]<10:0>;
+					py3 := CommandBuffer[7]<26:16>;
+					pc3 := CommandBuffer[6]<23:0>;
+					gs.draw();
+					goto stend;
+				}
+			}
+		}
+		state stend par{
+			if((^gs.drawing) & (^rect.drawing) & (^texrect.drawing)){
+				reg_wr end_wait<2>;
+				end_wait++;
+				if(/&end_wait){
+					status |= 0x04000000;
+					goto st1;
+					finish;
+				}
+			}
+		}
+	}
+
+}

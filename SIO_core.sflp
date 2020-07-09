@@ -1,0 +1,331 @@
+/*
+	Pad controller
+		by pgate1
+*/
+
+circuit SIO_core
+{
+	input io_din<16>;
+	instrin WriteData(io_din);
+	reg_wr din_reg<8>;
+	instrin WriteMode(io_din);
+	instrin WriteCtrl(io_din);
+	instrin WriteBaud(io_din);
+
+	instrin ReadData;
+	instrin ReadStat;
+	instrin ReadCtrl;
+	output io_dout<16>;
+
+	input key_in<16>;
+
+	reg_ws reset;
+
+	reg_wr CtrlReg<16>, StatReg<16>, BaudReg<16>;
+	reg_wr padst<4>, parp<4>, bufcount<4>, mcdst<3>, rdwr<3>;
+	mem sbuf[16]<8>;
+	reg_wr curByte1<2>, curByte2<2>;
+
+	output running;
+
+	instrin run33;
+	reg_wr count_rst;
+	instrself interrupt_end;
+	instrout interrupt_out;
+
+	instrself halt(halt_sel);
+	sel halt_sel<8>;
+	reg_wr halt_code_reg<8>;
+	output halt_code<8>;
+
+input dbg_in<16>;
+
+	stage_name WriteData_stg { task do(din_reg); }
+	stage_name interrupt_wait { task do(count_rst); }
+
+	if(reset){
+		reset := 0b0;
+		StatReg := 0x0005;
+	}
+
+	instruct halt halt_code_reg := halt_sel;
+	halt_code = halt_code_reg;
+
+	running = WriteData_stg.do;
+
+	instruct WriteData par{
+if(WriteData_stg.do) halt(0x44);
+		generate WriteData_stg.do(io_din<7:0>);
+	}
+
+	instruct WriteMode par{
+	//	ModeReg = io_din;
+	}
+
+	instruct WriteCtrl par{
+if(WriteData_stg.do) halt(0x44);
+		sel ctrl<16>;
+		ctrl = io_din & ^0x0010/*RESET_ERR*/;
+		CtrlReg := ctrl;
+	//	if(io_din<4>) StatReg &= ^0x0200;//IRQ;
+		if(ctrl<6>/*SIO_RESET*/ | (ctrl==0x0000)){
+			padst := 0; mcdst := 0; parp := 0;
+		//	StatReg := 1 | 4;//TX_RDY | TX_EMPTY;
+			interrupt_end();
+		}
+		StatReg := StatReg<15:10> || (StatReg<9>&(^io_din<4>)) || StatReg<8:4> ||
+			(StatReg<3:0>|((4#(ctrl<6>|(ctrl==0x0000)))&0x5));
+	}
+
+	instruct WriteBaud par{
+//if(io_din==0x0088) halt(0xD1); ok
+		BaudReg := io_din;//<7:0>;
+	}
+
+	instruct ReadData par{
+if(WriteData_stg.do) halt(0x44);
+		if(StatReg<1>/*RX_RDY*/){
+			io_dout = 0x00 || sbuf[parp];
+			if(parp==bufcount){
+				StatReg &= ^0x0002;//RX_RDY; // Receive is not Ready now
+				if(mcdst==5){
+					mcdst := 0;
+					if(rdwr==2){
+						/*
+						switch(CtrlReg & 0x2002){
+						case 0x0002:
+							memcpy(Mcd1Data + (adrL | (adrH << 8)) * 128, &buf[1], 128);
+							SaveMcd(Config.Mcd1, Mcd1Data, (adrL | (adrH << 8)) * 128, 128);
+							break;
+						case 0x2002:
+							memcpy(Mcd2Data + (adrL | (adrH << 8)) * 128, &buf[1], 128);
+							SaveMcd(Config.Mcd2, Mcd2Data, (adrL | (adrH << 8)) * 128, 128);
+							break;
+						}
+						*/
+					}
+				}
+				if(padst==2) padst := 0;
+				if(mcdst==1){
+					mcdst := 2;
+				//	StatReg |= 0x0002;//RX_RDY;
+				}
+			}
+		}
+		else io_dout = 0x0000;
+//if(^((io_dout==0x0000) | (io_dout==0x00FF) | (io_dout==0x0041) | (io_dout==0x005A))) halt(0x74);
+	}
+
+	instruct ReadStat par{
+if(WriteData_stg.do) halt(0x44);
+		io_dout = StatReg;
+	}
+
+	instruct ReadCtrl par{
+if(WriteData_stg.do) halt(0x44);
+		io_dout = CtrlReg;
+	}
+
+	stage WriteData_stg {
+		first_state st1;
+		state st1 par{
+			any{
+				padst==0 : goto st10;
+				padst==1 : par{
+					generate interrupt_wait.do(0b1);
+					if(din_reg<6>){
+						padst := 2; parp := 1;
+						any{
+							(CtrlReg<13>==0b0) & (CtrlReg<1>==0b1) : par{
+								sbuf[1] := 0x41;
+							}
+							(CtrlReg<13>==0b1) & (CtrlReg<1>==0b1) : par{
+								sbuf[1] := 0x41;
+							}
+						}
+						goto st2;
+					}
+					else{
+						padst := 0;
+						finish;
+					}
+				}
+				padst==2 : par{
+					parp++;
+					goto st3;
+				}
+			}
+		}
+		state st2 par{
+			if(^(/|sbuf[parp]<3:0>)){
+				bufcount := 2 + 32;
+			}
+			else{
+				bufcount := 0x2 + (sbuf[parp]<2:0>||0b0);
+			}
+			goto st1;
+			finish;
+		}
+		state st3 par{
+			any{
+				(CtrlReg<13>==0b0) & (CtrlReg<1>==0b1) : par{ // 0x0002:
+					// cur : ¶|‰º|‰E|ã|St| 1| 1|Sl
+					// ref :  |~|›|¢|R1|L1|R2|L2
+				//	uint8 cmd1[3] = {0x5A, 0xFF, 0xFF};
+				//	cmd1[1] = (uint8)(~key_reg);
+				//	cmd1[2] = (uint8)(~key_reg >> 8);
+					switch(curByte1){
+						case 0: sbuf[parp] := 0x5A;
+						case 1: sbuf[parp] := ^key_in<7:0>;
+						case 2: sbuf[parp] := ^key_in<15:8>;
+					}
+					if(curByte1==2) curByte1:=0; else curByte1++;
+				}
+				(CtrlReg<13>==0b1) & (CtrlReg<1>==0b1) : par{ // 0x2002:
+					//buf[parp] = cmd2[curByte2];//PAD_poll(2, data);
+					switch(curByte2){
+						case 0: sbuf[parp] := 0x5A;
+						case 1: sbuf[parp] := 0xFF;
+						case 2: sbuf[parp] := 0xFF;
+					}
+					if(curByte2==2) curByte2:=0; else curByte2++;
+				}
+			}
+			if(parp==bufcount){
+				padst := 0;
+			}
+			else{
+				generate interrupt_wait.do(0b1);
+			}
+			goto st1;
+			finish;
+		}
+
+		state st10 par{
+			any{
+				mcdst==0 : goto st30;
+				mcdst==1 : par{
+					generate interrupt_wait.do(0b1);
+					if(rdwr){
+						parp++;
+						goto st1;
+						finish;
+					}
+					parp := 1;
+					any{
+						din_reg==0x52 : rdwr := 1;
+						din_reg==0x57 : rdwr := 2;
+						else : mcdst := 0;
+					}
+					goto st1;
+					finish;
+				}
+				mcdst==2 : par{
+					generate interrupt_wait.do(0b1);
+					sbuf[0] := 0x00;
+					parp := 0;
+					bufcount := 1;
+					mcdst := 3;
+					goto st1;
+					finish;
+				}
+				mcdst==3 : par{
+					generate interrupt_wait.do(0b1);
+					parp := 0;
+					bufcount := 1;
+					mcdst := 4;
+					goto st1;
+					finish;
+				}
+				mcdst==4 : par{
+					generate interrupt_wait.do(0b1);
+					parp := 0;
+					mcdst := 5;
+					goto st1;
+					finish;
+				}
+				mcdst==5 : par{
+					parp++;
+					goto st11;
+				}
+			}
+		}
+		state st11 par{
+			if(rdwr==2){
+				/*if(parp!=128)*/ sbuf[parp+1] := din_reg;
+			}
+			generate interrupt_wait.do(0b1);
+			goto st1;
+			finish;
+		}
+
+		state st30 par{
+			any{
+				din_reg==0x01 : par{
+					StatReg |= 0x0002;
+					any{
+						(CtrlReg<13>==0b0) & (CtrlReg<1>==0b1) : par{ // 0x0002
+							curByte1 := 0;
+							sbuf[0] := 0xFF;
+						}
+						(CtrlReg<13>==0b1) & (CtrlReg<1>==0b1) : par{ // 0x2002
+							curByte2 := 0;
+							sbuf[0] := 0xFF;
+						}
+					}
+					bufcount := 2;
+					parp := 0;
+					padst := 1;
+					generate interrupt_wait.do(0b1);
+					goto st1;
+					finish;
+				}
+				din_reg==0x81 : par{
+					StatReg |= 2;//RX_RDY;
+					//memcpy(buf, cardh, 4);
+					sbuf[0] := 0x00;
+					sbuf[1] := 0x00;
+					sbuf[2] := 0x5A;
+					sbuf[3] := 0x5D;
+					parp := 0;
+					bufcount := 3;
+					mcdst := 1;
+					rdwr := 0;
+					generate interrupt_wait.do(0b1);
+					goto st1;
+					finish;
+				}
+				else : par{
+					StatReg |= 0x0002;
+					goto st1;
+					finish;
+				}
+			}
+		}
+	}
+
+	stage interrupt_wait {
+		reg_wr int_wait_count<19>;
+		first_state st1;
+		state st1 par{
+			int_wait_count := 0;
+			count_rst := 0b0;
+			goto st2;
+		}
+		state st2 if(run33){
+			int_wait_count++;
+			if(int_wait_count==((BaudReg<<(0b000+(0b0||dbg_in<11:10>)))||0b000)){ // 320:<<1
+				StatReg |= 0x0200; //IRQ;
+				interrupt_out();
+				goto st1;
+				finish;
+			}
+			if(count_rst) goto st1;
+			if(interrupt_end){
+				goto st1;
+				finish;
+			}
+		}
+	}
+
+}

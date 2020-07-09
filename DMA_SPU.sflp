@@ -1,0 +1,129 @@
+/*
+	DMA for SPU
+		by pgate1
+*/
+
+declare mul_u16 interface
+{
+	input a<16>, b<16>;
+	output dout<32>;
+	instrin con;
+	instr_arg con(a, b);
+}
+
+circuit DMA_SPU
+{
+	input DmaMADR_4<32>, DmaBCR_4<32>;
+
+	output A<21>;
+	instrout wram_read(A);
+	input Din<32>;
+
+	output Dout<16>;
+	reg_wr Dout_reg<16>;
+	instrself spu_dma_write(Dout);
+	instrout spu_dma_write_req;
+	instrin spu_dma_ack;
+
+	instrin Execute;
+	instrin wram_ack;
+	output running;
+
+	instrin run33;
+	reg_wr count_rst;
+	instrout interrupt;
+
+	mul_u16 size_mul;
+	sel dma_size<32>;
+	reg_wr bcr<32>;
+
+	stage_name run { task do(); }
+//	stage_name int_wait { task do(count_rst); }
+
+	running = run.do;
+
+	instruct Execute par{
+		generate run.do();
+	}
+
+	reg_wr spu_dma_write_keep;
+	if(spu_dma_write){
+		Dout_reg := Dout;
+		spu_dma_write_req();
+		spu_dma_write_keep := 0b1;
+	}
+	else{
+		Dout = Dout_reg;
+	}
+	if(spu_dma_write_keep & ^spu_dma_ack) spu_dma_write_req();
+	if(spu_dma_ack) spu_dma_write_keep := 0b0;
+
+	// uint32 size = (bcr >> 16) * (bcr & 0xFFFF) * 2;
+	// 16 * 16 = 32;
+	dma_size = size_mul.con(bcr<31:16>, bcr<15:0>).dout<30:0> || 0b0;
+
+//カーネル実行では使用していない
+	stage run {
+		reg_wr wait_count<5>;
+		reg_wr madr<21>;
+		reg_wr dma_count<32>, dma_data<16>;
+		first_state st1;
+		state st1 par{
+			// uint32 madr = DmaMADR[n] & 0x1FFFFF;
+			madr := DmaMADR_4<20:0>;
+			// uint32 bcr = DmaBCR[n];
+			bcr := DmaBCR_4;
+			dma_count := 0;
+			goto st2;
+		}
+		state st2 par{ // リバーブが止まるまで待つ
+			wait_count++;
+			if(/&wait_count) goto st3;
+		}
+		state st3 if(wram_ack){
+			wram_read(madr);
+			madr += 2;
+			dma_count++;
+			goto st4;
+		}
+		state st4 if(wram_ack){
+			spu_dma_write(Din<15:0>);
+			dma_data := Din<31:16>;
+			madr += 2;
+			dma_count++;
+			goto st5;
+		}
+		state st5 if(spu_dma_ack){ // ここ待ちで必要
+			spu_dma_write(dma_data);
+			if(dma_count==dma_size) goto st6;
+			else goto st3;
+		}
+		state st6 par{
+// とりあえずsound再生にはウェイトはいらないようだ
+			interrupt();
+		//	generate int_wait.do();
+			goto st1;
+			finish;
+		}
+	}
+/*
+	stage int_wait {
+		reg_wr int_wait_count<8>;
+		first_state st1;
+		state st1 par{
+			int_wait_count := 0;
+			count_rst := 0b0;
+			goto st2;
+		}
+		state st2 if(run33){
+			int_wait_count++;
+			if(int_wait_count==16){
+				interrupt();
+				goto st1;
+				finish;
+			}
+			if(count_rst) goto st1;
+		}
+	}
+*/
+}

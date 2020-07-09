@@ -1,0 +1,70 @@
+/*
+	Cache module for R3000A
+		by pgate1
+*/
+
+circuit Cache_IR
+{
+	input A<21>, Din<32>;
+	instrin read(A), write(A, Din);
+	output hit, Dout<32>;
+	instrin flag_clear(A);
+
+	instrin clear;
+	output doing;
+
+	mem ram_tag[1024]<10>;
+	sel ram_tag_adrs<10>, ram_tag_din<10>;
+	reg_wr ram_tag_dout<10>;
+	instrself ram_tag_read(ram_tag_adrs);
+	instrself ram_tag_write(ram_tag_adrs, ram_tag_din);
+
+	mem ram_data[1024]<32>;
+	sel ram_data_adrs<10>, ram_data_din<32>;
+	reg_wr ram_data_dout<32>;
+	instrself ram_data_read(ram_data_adrs);
+	instrself ram_data_write(ram_data_adrs, ram_data_din);
+
+	sel index<10>, tag<9>;
+	reg_wr tag_reg<9>;
+
+	stage_name clear_stg { task do(); }
+
+	instruct ram_tag_read ram_tag_dout := ram_tag[ram_tag_adrs];
+	instruct ram_tag_write ram_tag[ram_tag_adrs] := ram_tag_din;
+	instruct ram_data_read ram_data_dout := ram_data[ram_data_adrs];
+	instruct ram_data_write ram_data[ram_data_adrs] := ram_data_din;
+
+	index = A<11:2>;
+	tag = A<20:12>;
+
+	instruct read par{
+		tag_reg := tag;
+		ram_tag_read(index);
+		ram_data_read(index);
+	}
+
+	hit = ram_tag_dout<9> & (ram_tag_dout<8:0>==tag_reg);
+	Dout = ram_data_dout;
+
+	instruct write par{
+		ram_tag_write(index, 0b1 || tag);
+		ram_data_write(index, Din);
+	}
+
+	instruct flag_clear par{
+		ram_tag_write(index, 0b0000000000);
+	}
+
+	instruct clear generate clear_stg.do();
+	doing = clear_stg.do;
+
+	stage clear_stg {
+		reg_wr adrs<10>;
+		par{
+			adrs++;
+			ram_tag_write(adrs, 0b0000000000);
+			if(/&adrs) finish;
+		}
+	}
+}

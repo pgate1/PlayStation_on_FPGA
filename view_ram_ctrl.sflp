@@ -1,0 +1,91 @@
+
+// RGB RAM & to VGA Flip Buffer
+
+%i "ram_320x240x15.h"
+
+declare mul_u9 interface
+{
+	input a<9>, b<9>;
+	output dout<18>;
+	instrin con;
+	instr_arg con(a, b);
+}
+
+circuit view_ram_ctrl
+{
+	input in_x<9>, in_y<8>, in_R<5>, in_G<5>, in_B<5>;
+	instrin write(in_x, in_y, in_R, in_G, in_B);
+	output out_R<5>, out_G<5>, out_B<5>;
+	instrin read, bank_change, adrs_reset, flip_buffer;
+	reg_wr flip;
+
+	reg_ws reset;
+
+	ram_320x240x15 ram0, ram1;
+	reg_wr radrs_x<9>, radrs_y<9>, bank;
+	sel col<15>;
+	mul_u9 wmul, rmul;
+
+	stage_name clear_stg { task do(); }
+
+	if(reset){
+		reset := 0b0;
+		generate clear_stg.do();
+	}
+
+	if(clear_stg.do){
+		col = 0;
+	}
+	else{
+		if(^bank) col = ram0.dout;
+		else      col = ram1.dout;
+	}
+	out_R = col<14:10>;
+	out_G = col< 9: 5>;
+	out_B = col< 4: 0>;
+
+	// VBlank
+	instruct bank_change par{
+		bank := ^bank;
+	}
+
+	instruct adrs_reset par{
+		radrs_x := 0;
+		radrs_y := 0;
+	}
+
+	instruct write par{
+		sel wadrs<17>;
+		wadrs = wmul.con(0b0||in_y, 320).dout<16:0> + (0b00000000||in_x);
+		if(bank) ram0.write(wadrs, in_R||in_G||in_B);
+		else     ram1.write(wadrs, in_R||in_G||in_B);
+	}
+
+	instruct read if(^clear_stg.do){
+		sel radrs<17>;
+		radrs = rmul.con(0b0||radrs_y<8:1>, 320).dout<16:0> + (0b00000000||radrs_x);
+		if(^bank) ram0.read(radrs);
+		else      ram1.read(radrs);
+		if(radrs_x==319){
+			radrs_x := 0;
+			radrs_y++;
+		}
+		else radrs_x++;
+	}
+
+	stage clear_stg {
+		sel pa<17>;
+		par{
+			pa = rmul.con(0b0||radrs_y<7:0>, 320).dout<16:0> + (0b00000000||radrs_x);
+			ram0.write(pa, 0);
+			ram1.write(pa, 0);
+			if(radrs_x==319){
+				radrs_x := 0;
+				if(radrs_y==239) finish;
+				else radrs_y++;
+			}
+			else radrs_x++;
+		}
+	}
+
+}

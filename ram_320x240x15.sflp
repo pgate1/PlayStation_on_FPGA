@@ -1,0 +1,20 @@
+
+// test VRAM
+// 320x240 15bit
+// x<9>, y<8>
+
+circuit ram_320x240x15
+{
+	input adrs<17>, din<15>;
+	output dout<15>;
+	instrin read(adrs), write(adrs, din);
+
+// 76800 / 0x1380(4992) = 
+	mem cells[320*240]<15>;
+	reg_wr dout_reg<15>;
+
+	instruct read dout_reg := cells[adrs];
+	dout = dout_reg;
+
+	instruct write cells[adrs] := din;
+}

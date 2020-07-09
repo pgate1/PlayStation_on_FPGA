@@ -1,0 +1,49 @@
+
+circuit sram_sim
+{
+	instrin write(adrs, wdata, ul);
+	input adrs<20>, wdata<16>, ul<2>;
+	instrin read(adrs);
+	output rdata<16>, ack;
+
+	reg_wr rdata_reg<16>, wdata_reg<16>, adrs_reg<20>;
+
+	mem cells[1048576]<16>;
+
+	stage_name write_stg { task do(adrs_reg, wdata_reg); }
+	stage_name read_stg { task do(adrs_reg); }
+
+	par{
+		rdata = rdata_reg;
+		ack = ^(write_stg.do | read_stg.do);
+	}
+
+	instruct write par{
+		generate write_stg.do(adrs, wdata);
+	}
+
+	instruct read par{
+		generate read_stg.do(adrs);
+	}
+
+	stage read_stg {
+		par{
+			rdata_reg := cells[adrs_reg];
+			finish;
+		}
+	}
+
+	stage write_stg {
+		first_state st1;
+		state st1 par{
+		//	wen_reg := 0b1;
+			goto st2;
+		}
+		state st2 par{
+		//	den_reg := 0b1;
+			cells[adrs_reg] := wdata_reg;
+			goto st1;
+			finish;
+		}
+	}
+}

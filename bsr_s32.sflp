@@ -1,0 +1,33 @@
+
+// Barrel Shifter Right signed 32 bit
+
+circuit bsr_s32
+{
+	input din<32>, shift<5>;
+	output dout<32>;
+	instrin con(din, shift);
+
+	sel bs0<32>, bs1<32>, bs2<32>, bs3<32>;
+
+	any{
+		shift<0> : bs0 = 32#din<31:1>;
+		else     : bs0 = din;
+	}
+	any{
+		shift<1> : bs1 = 32#bs0<31:2>;
+		else     : bs1 = bs0;
+	}
+	any{
+		shift<2> : bs2 = 32#bs1<31:4>;
+		else     : bs2 = bs1;
+	}
+	any{
+		shift<3> : bs3 = 32#bs2<31:8>;
+		else     : bs3 = bs2;
+	}
+	any{
+		shift<4> : dout = 32#bs3<31:16>;
+		else     : dout = bs3;
+	}
+
+}

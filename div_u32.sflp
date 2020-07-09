@@ -1,0 +1,45 @@
+/*
+	符号なし32÷16＝32…32ビット除算
+*/
+
+circuit div_u32
+{
+	input n<32>, d<32>;
+	output q<32>, r<32>, ack;
+	instrin con(n, d);
+
+	instrself run;
+	reg_wr dr<32>, zr<64>, count<5>;
+	reg_ws ack_reg;
+	sel sub<33>;
+
+	if(^ack_reg){
+		run();
+		if(/&count) ack_reg := 0b1;
+	}
+	ack = ack_reg;
+
+	q = zr<31:0>;
+	r = zr<63:32>;
+
+	instruct con par{
+		dr := d;
+		zr := 0x00000000 || n;
+		count := 0;
+		ack_reg := 0b0;
+	}
+
+	instruct run par{
+		sub = zr<63:31> - (0b0||dr);
+
+		if(sub<32>==0b0){ // 引ける場合
+			zr := sub<31:0> || zr<30:0> || 0b1;
+		}
+		else{ // 引けない場合
+			zr := zr<62:0> || 0b0;
+		}
+		
+		count++;
+	}
+
+}

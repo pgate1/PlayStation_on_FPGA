@@ -1,0 +1,91 @@
+/*
+	GPU Rectangle
+		by pgate1
+*/
+
+circuit drawRect
+{
+	input vx1<11>, vy1<11>, vc1<24>; // A“_
+	input vx2<11>, vy2<11>; // B“_
+	instrin con(vx1, vy1, vc1, vx2, vy2);
+
+	instrin draw;
+	output drawing;
+
+	sel col<15>;
+
+	output view_x<10>, view_y<9>;
+	instrout view_on(view_x, view_y);
+	output out_R<8>, out_G<8>, out_B<8>;
+
+	// VRAM
+	output vram_write_adrs<19>, vram_write_data<16>;
+	reg_wr vram_write_adrs_reg<19>, vram_write_data_reg<16>;
+	instrself vram_write(vram_write_adrs, vram_write_data);
+	instrout vram_write_req;
+	instrin vram_ack;
+
+	stage_name draw_stg { task do(); }
+
+	instruct draw generate draw_stg.do();
+
+	drawing = draw_stg.do;
+
+	reg_wr vram_write_wait;
+	if(vram_write){
+		vram_write_adrs_reg := vram_write_adrs;
+		vram_write_data_reg := vram_write_data;
+		vram_write_req();
+		vram_write_wait := 0b1;
+	}
+	else{
+		vram_write_adrs = vram_write_adrs_reg;
+		vram_write_data = vram_write_data_reg;
+	}
+	if(vram_write_wait & ^vram_ack) vram_write_req();
+	if(vram_ack) vram_write_wait := 0b0;
+
+	col = vc1<23:19> || vc1<15:11> || vc1<7:3>;
+
+	out_R = col< 4: 0> || 0b000;
+	out_G = col< 9: 5> || 0b000;
+	out_B = vc1<14:10> || 0b000;
+
+	stage draw_stg {
+		reg_wr y<11>, x<11>;
+		first_state st1;
+		state st1 par{
+			y := vy1;
+			goto st2;
+		}
+		state st2 par{
+			x := vx1;
+		//	if((y!=(vy1+vy2)) & ((0b0||y)-0b00111100000)<10>){ // y < 240
+			if((y!=(vy1+vy2)) & (y!=480)){ // y < 480
+				goto st3;
+			}
+			else{
+				goto st1;
+				finish;
+			}
+		}
+		state st3 if(^vram_write_wait){
+		//	if((x!=(vx1+vx2)) & ((0b0||x)-0b01010000000)<10>){ // x < 320
+			if((x!=(vx1+vx2))){
+				if(
+				//	(x<10>==0b0) &          // x >= 0
+					((x-0b01010000000)<10>==0b0) //& // x >= 640
+				) view_on((x-640)<9:0>, y<8:0>);
+				else view_on(x<9:0>, y<8:0>);
+
+				vram_write(y<8:0>||x<9:0>, 0b0||col);
+			}
+			else{
+				y++;
+				goto st2;
+			}
+			x++;
+		}
+	}
+
+}

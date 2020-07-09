@@ -1,0 +1,530 @@
+/*
+	SPU DSP channel
+		by pgate1
+*/
+
+declare mul_s16 interface
+{
+	input a<16>, b<16>;
+	output dout<32>;
+	instrin con;
+	instr_arg con(a, b);
+}
+
+%i "bsr_s16.h"
+
+declare mul_s16s8 interface
+{
+	input a<16>, b<8>;
+	output dout<24>;
+	instrin con;
+	instr_arg con(a, b);
+}
+
+%i "ADSR.h"
+%i "bsr_s24.h"
+
+declare gauss_rom
+{
+	input adrs<10>;
+	output dout<11>;
+	instrin read;
+	instr_arg read(adrs);
+}
+
+%i "dsdac10.h"
+
+%d READ_HEAD  0b0
+%d READ_DATA  0b1
+
+circuit dsp_ch
+{
+	instrin io_set(io_A, io_Din);
+	input io_A<4>, io_Din<16>;
+	instrin io_get(io_A);
+	output io_Dout<16>;
+
+	input CtrlIRQ;
+
+	instrin key_on, key_off;
+	reg_wr voice_off;
+
+	instrin run; // 44.1k×4 = 176400Hz
+	instrself pitch_run, pitch_over;
+
+	reg_wr vol_L<15>, vol_R<15>;
+	reg_wr pitch<14>, pitch_count<15>;
+
+	reg_wr ADSL_reg<16>, SRrate<16>;
+	reg_wr brr_start_adrs<16>, brr_loop_adrs<16>;
+
+	instrout read_req;
+	output vA<18>;
+	reg_wr vA_reg<18>;
+	instrin read_ack;
+	input vDin<16>;
+
+	instrself read(rid_sel, vA_sel);
+	sel rid_sel, vA_sel<18>;
+	reg_wr rid_reg;
+
+	reg_wr filter<3>, shift<4>, f_loop, f_copy_loop, f_keep, looping;
+	reg_wr dec_rot<2>, src_ok, src_data<16>;
+	reg_wr bNew, iSilent;
+	instrself decode(nibble);
+	sel nibble<4>;
+	bsr_s16 brr_sft;
+	mul_s16s8 brr_mul0, brr_mul1;
+	reg_wr pre0_data<16>, pre1_data<16>;
+	reg_wr decode_data<16>;
+
+	ADSR env;
+	sel envelope<10>;
+	mul_s16 env_mul;
+	reg_wr decenv_reg<16>;
+
+	sel wave_data<16>;
+
+	mul_s16 vol_mul;
+	reg_wr voice_out_L_reg<16>, voice_out_R_reg<16>;
+	output voice_out_L<16>, voice_out_R<16>;
+
+	instrin sw_intpl_off;
+	reg_wr interpolate_data<23>; // 16 + 7
+
+	// gauss
+	sel sinc<14>;
+	mem gval[4]<16>;
+	reg_wr gauss_tim<2>, spos<16>, gpos<2>;
+
+	dsdac10 ddac;
+	output disp_env;
+
+	instrself halt(hlt);
+	sel hlt<8>;
+	reg_wr h_code_reg<8>;
+	output halt_out;
+
+output dbg<32>;
+
+	stage_name src_read { task do(); }
+	stage_name brr_decode { task do(); }
+	stage_name read_wait { task do(rid_reg, vA_reg); }
+	stage_name interpolate_line { task do(); }
+	stage_name interpolate_gauss { task do(); }
+
+	if(read_wait.do) read_req();
+	vA = vA_reg;
+
+	env.AttackModeExp = ADSL_reg<15>;
+	env.AttackRate    = ADSL_reg<14:8>;
+	env.DecayRate     = ADSL_reg<7:4>;
+	env.SustainLevel  = ADSL_reg<3:0>;
+	env.SustainModeExp  = SRrate<15>;
+	env.SustainIncrease = SRrate<14>==0;
+	env.SustainRate     = SRrate<12:6>;
+	env.ReleaseModeExp  = SRrate<5>;
+	env.ReleaseRate     = SRrate<4:0>;
+	env.iSilent = iSilent;
+
+	if(sw_intpl_off) wave_data = decode_data;
+	else wave_data = interpolate_data<22:7>;
+
+//wave_data = decode_data;
+
+	// エンベロープ
+	envelope = env.Env<14:5>;
+	// s16 * u10 = s26 -10 = s16
+	decenv_reg := env_mul.con(wave_data, 0b000000||envelope).dout<25:10>;
+
+	// s16 x s15 -1 = s30 >> 14 = s16
+	reg_wr vol_sw;
+	any{
+		vol_sw==0 : voice_out_L_reg := vol_mul.con(decenv_reg, 16#vol_L).dout<29:14>;
+		vol_sw==1 : voice_out_R_reg := vol_mul.con(decenv_reg, 16#vol_R).dout<29:14>;
+	}
+	vol_sw := ^vol_sw;
+
+	voice_out_L = voice_out_L_reg;
+	voice_out_R = voice_out_R_reg;
+
+	ddac.DACin = envelope;
+	disp_env = ddac.DACout;
+
+	halt_out = /|h_code_reg;
+
+//dbg = 0b0||env.Env;
+dbg = 0;//brr_loop_adrs<<3;
+//dbg = brr_start_adrs;
+
+	instruct halt h_code_reg := hlt;
+
+	instruct io_set any{
+		io_A==0x0 : vol_L := io_Din<14:0>; // Volume Left
+		io_A==0x2 : vol_R := io_Din<14:0>; // Volume Right
+		io_A==0x4 : pitch := io_Din<13:0>; // Pitch
+		io_A==0x6 : brr_start_adrs := io_Din; // Startaddress of Sound
+		io_A==0x8 : ADSL_reg := io_Din; // Attack/Decay/Sustain level
+		io_A==0xA : SRrate := io_Din; // Sustain rate, Release Rate
+		io_A==0xC : ; // Current ADSR volume
+		io_A==0xE : brr_loop_adrs := io_Din; // Loop address
+		else : halt(0x33);
+	}
+
+	instruct io_get any{
+		io_A==0x8 : io_Dout = ADSL_reg;
+		io_A==0xA : io_Dout = SRrate;
+		io_A==0xC : par{ // Current ADSR volume
+			if(bNew) io_Dout = 1;
+			else io_Dout = 0b0 || env.Env;
+		}
+		else : halt(0x34);
+	}
+
+	instruct run par{
+		pitch_run();
+		reg_wr env_tim<2>;
+		env_tim++;
+		if(/&env_tim){ // 44.1kHz
+			env.run();
+		}
+	}
+
+	instruct key_on par{
+		voice_off := 0;
+		bNew := 1;
+		f_loop := 0;
+		f_copy_loop := 0;
+		f_keep := 1;
+		looping := 0;
+		iSilent := 0;
+		src_ok := 0;
+		generate src_read.do();
+		decode_data := 0;
+		pre0_data := 0;
+		pre1_data := 0;
+		dec_rot := 0;
+		env.key_on();
+		pitch_count := 0;
+		interpolate_data := 0;
+		// gauss
+		gval[0] := 0x0000;
+		gval[1] := 0x0000;
+		gval[2] := 0x0000;
+		gval[3] := 0x0000;
+		spos := 0;
+		gpos := 0;
+	}
+
+	instruct key_off par{
+		bNew := 0;
+		env.key_off();
+	}
+
+	instruct env.env_on par{
+		bNew := 0;
+	}
+
+	instruct env.env_off par{
+		voice_off := 1;
+		bNew := 0;
+	}
+
+	instruct pitch_run par{
+		sel pitch_sa<15>;
+		pitch_sa = pitch_count - 0b100_0000_0000_0000;
+		if(pitch_sa<14>){
+			pitch_count += 0b0||pitch;
+		}
+		else{
+			/*if(^ready)*/ generate brr_decode.do();
+			pitch_over();
+			pitch_count := pitch_sa + (0b0||pitch);
+		}
+
+		if(pitch==0) sinc = 1;
+		else sinc = pitch;
+		gauss_tim++;
+		if(/&gauss_tim){ // 44.1kHz
+			spos += (0b00||sinc);
+		//	generate interpolate_gauss.do();
+		}
+	}
+
+	instruct read par{
+		generate read_wait.do(rid_sel, vA_sel);
+	}
+
+	instruct decode par{
+		sel now_data<16>;
+		now_data = brr_sft.con(nibble||0x000, shift).dout;
+
+		sel f0<8>, f1<8>;
+		switch(filter){
+			case 0:  par{ f0 =   0; f1 =   0; }
+			case 1:  par{ f0 =  60; f1 =   0; }
+			case 2:  par{ f0 = 115; f1 = -52; }
+			case 3:  par{ f0 =  98; f1 = -55; }
+			case 4:  par{ f0 = 122; f1 = -60; }
+			default: par{ f0 =   0; f1 =   0; }
+		}
+
+		sel inner_data<17>;
+		inner_data = (17#now_data)
+			+ brr_mul0.con(pre0_data, f0).dout<22:6>
+			+ brr_mul1.con(pre1_data, f1).dout<22:6>;
+
+		sel clip_data<16>;
+		any{
+			inner_data<16:15>==0b10 : clip_data = 0x8000; // <=0xF7FFF -> -32768にclip
+			inner_data<16:15>==0b01 : clip_data = 0x7FFF; // > 0x08000 ->  32767にclip
+			else                    : clip_data = inner_data<15:0>;
+		}
+
+		pre1_data   := pre0_data;
+		pre0_data   := clip_data;
+		decode_data := clip_data;
+	}
+
+	stage src_read {
+		reg_wr src_adrs<18>, bk_count<3>;
+		first_state st_init;
+		state st_init if(/*(^ready) &*/ (^src_ok) & (^read_wait.do)){
+			if(looping){
+				src_adrs := brr_loop_adrs<15:1> || 0b000; // ok
+			}
+			else{
+				src_adrs := brr_start_adrs<15:1> || 0b000; // ok
+			}
+			looping := 0;
+			goto st_head;
+		}
+		state st_head any{
+			key_on : goto st_init;
+			voice_off : par{ goto st_init; finish; }
+			else : if((^src_ok) & (^read_wait.do)){
+				// ヘッダ取得
+				read(READ_HEAD, src_adrs);
+				src_adrs++;
+				bk_count := 1;
+				goto st_data;
+			}
+		}
+		state st_data any{
+			key_on : goto st_init;
+			voice_off : par{ goto st_init; finish; }
+			else : if((^src_ok) & (^read_wait.do)){
+				// ブロックデータ取得×7
+				read(READ_DATA, src_adrs);
+				src_adrs++;
+				bk_count++;
+				if(bk_count==7){
+					if(f_copy_loop){
+					//	brr_loop_adrs := src_adrs<17:2>;
+						brr_loop_adrs := src_adrs<17:3> || 0b0; // ok
+					//	brr_loop_adrs := src_adrs<17:4> || 0b00; // NG
+					//	brr_loop_adrs := src_adrs<17:5> || 0b000; // NG
+					}
+					if(f_loop){
+						looping := 1;
+						if(f_keep==0) iSilent := 1;
+						goto st_init;
+					}
+					else{
+/*
+Check_IRQ( (s_chan[ch].pCurr)-spuMemC)
+int Check_IRQ( int addr) {
+	if(spuCtrl & CTRL_IRQ){
+		if(( pSpuIrq == spuMemC+addr ) ){
+			if(irqCallback) irqCallback();
+			spuStat |= STAT_IRQ;
+
+						if(CtrlIRQ & (src_adrs<17:3>==pSpuIrq)){
+							spuStat := spuStat | 0x0040;
+						}
+*/
+						goto st_head;
+					}
+				}
+			}
+		}
+	}
+
+	stage brr_decode { // ok
+		if(src_ok){
+			any{
+				dec_rot==0 : par{
+					decode(src_data<3:0>);
+					dec_rot := 1;
+				}
+				dec_rot==1 : par{
+					decode(src_data<7:4>);
+					dec_rot := 2;
+				}
+				dec_rot==2 : par{
+					decode(src_data<11:8>);
+					dec_rot := 3;
+				}
+				dec_rot==3 : par{
+					decode(src_data<15:12>);
+					dec_rot := 0;
+					src_ok := 0;
+				}
+			}
+			generate interpolate_line.do();
+			finish;
+		}
+		if(key_on) finish;
+	}
+
+	stage read_wait {
+		any{
+			read_ack : par{
+				switch(rid_reg){
+					case READ_HEAD: par{
+						// OK
+						f_copy_loop := vDin<10>;
+						f_keep := vDin<9>;
+						f_loop := vDin<8>;
+						filter := vDin<6:4>;
+						shift := vDin<3:0>;
+					}
+					case READ_DATA: par{
+						src_data := vDin;
+						src_ok := 1;
+						dec_rot := 0;
+					}
+				}
+				finish;
+			}
+			key_on | voice_off : finish;
+		}
+	}
+
+	// アクティブ線形補間
+	// 次の値を超えないようにすること
+	stage interpolate_line {
+		reg_wr intpl_pitch<24>, intpl_pitch_next<18>;
+		sel intpl_wins<3>;
+		bsr_s24 intpl_bsr;
+		first_state st1;
+		par{
+
+			if(pitch_over){
+				intpl_pitch := 0x000000;
+			}
+			else{
+				intpl_pitch += 0b0000000000||pitch;
+			}
+
+			// 補間ウィンドウシフト幅
+/*
+			// ちょい強
+			alt{
+				pitch<13>      : intpl_wins = 0; // P>=0x2000
+				pitch<12>      : intpl_wins = 1; // P>=0x1000
+				pitch<11>      : intpl_wins = 2; // P>=0x0800
+				pitch<10>      : intpl_wins = 3; // P>=0x0400
+				pitch<9>       : intpl_wins = 4; // P>=0x0200
+				pitch<8>       : intpl_wins = 5; // P>=0x0100
+				pitch<7>       : intpl_wins = 6; // P>=0x0080
+				else           : intpl_wins = 7; // P>=0x0040
+			}
+*/
+			// 普通 ok
+			alt{
+				/|pitch<13:12> : intpl_wins = 0; // P>=0x1000
+				pitch<11>      : intpl_wins = 1; // P>=0x0800
+				pitch<10>      : intpl_wins = 2; // P>=0x0400
+				pitch<9>       : intpl_wins = 3; // P>=0x0200
+				pitch<8>       : intpl_wins = 4; // P>=0x0100
+				pitch<7>       : intpl_wins = 5; // P>=0x0080
+				pitch<6>       : intpl_wins = 6; // P>=0x0040
+				else           : intpl_wins = 7; // P>=0x0020
+			}
+/*
+			// ちょっと弱い
+			alt{
+				/|pitch<13:11> : intpl_wins = 0; // P>=0x0800
+				pitch<10>      : intpl_wins = 1; // P>=0x0400
+				pitch<9>       : intpl_wins = 2; // P>=0x0200
+				pitch<8>       : intpl_wins = 3; // P>=0x0100
+				pitch<7>       : intpl_wins = 4; // P>=0x0080
+				pitch<6>       : intpl_wins = 5; // P>=0x0040
+				pitch<5>       : intpl_wins = 6; // P>=0x0020
+				else           : intpl_wins = 7; // P>=0x0010
+			}
+*/
+		}
+
+		state st1 if(^brr_decode.do){
+			interpolate_data := pre1_data || 0b0000000;
+			// 50MHz / 44.1kHz ≒ 0x46D
+			intpl_pitch_next := (0x46D||0b000000) >> intpl_wins;
+			goto st2;
+		}
+		state st2 par{
+			alt{
+				pitch_over | brr_decode.do : goto st1;
+				voice_off | (intpl_wins==0) : par{ // 周波数が高いときは補間処理はしない
+					goto st1; finish;
+				}
+				intpl_pitch<23:12>==intpl_pitch_next<17:6> : par{
+					intpl_pitch_next += (0x46D||0b000000) >> intpl_wins;
+					// s16 - s16 = s17
+					sel pre_sa<17>;
+					pre_sa = (17#pre0_data) - (17#pre1_data);
+					// 右シフト幅はintpl_winsから余裕を持たせること
+					intpl_bsr.con(pre_sa||0b0000000, 0b0||intpl_wins);
+					interpolate_data += intpl_bsr.dout<22:0>;
+				}
+			}
+		}
+	}
+/*
+	stage interpolate_gauss {
+		gauss_rom gauss;
+		sel vl<10>;
+		reg_wr vr<16>;
+		mul_s16 gsmul;
+		first_state st1;
+		par{
+			vl = spos<15:8> || 0b00;
+		}
+		state st1 par{
+			gval[gpos] := decode_data;
+			gpos++;
+			goto st2;
+		}
+		state st2 par{
+			gauss.read(vl);
+			goto st3;
+		}
+		state st3 par{
+			// u11 * s16 = s27 - 11 = s16
+			vr := gsmul.con(0b00000||gauss.dout, gval[gpos]).dout<26:11>;
+			gauss.read(vl+1);
+			goto st4;
+		}
+		state st4 par{
+			vr += gsmul.con(0b00000||gauss.dout, gval[gpos+1]).dout<26:11>;
+			gauss.read(vl+2);
+			goto st5;
+		}
+		state st5 par{
+			vr += gsmul.con(0b00000||gauss.dout, gval[gpos+2]).dout<26:11>;
+			gauss.read(vl+3);
+			goto st6;
+		}
+		state st6 par{
+			vr += gsmul.con(0b00000||gauss.dout, gval[gpos+3]).dout<26:11>;
+			goto st7;
+		}
+		state st7 par{
+			interpolate_data := vr || 0b0000000;
+			goto st1;
+			finish;
+		}
+	}
+*/
+}

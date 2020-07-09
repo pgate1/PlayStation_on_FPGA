@@ -1,0 +1,497 @@
+/*
+	SPU Reverb
+		by pgate1
+*/
+
+#define USE_BUF_RAM
+// 内蔵RAMでも問題ないがタイミング問題なくても音がおかしい場合がある？
+
+%i "ram_16x32k.h"
+
+declare mul_s17 interface
+{
+	input a<17>, b<17>;
+	output dout<34>;
+	instrin con;
+	instr_arg con(a, b);
+}
+
+circuit reverb
+{
+	instrin io_set(io_A, io_Din);
+	input io_A<16>, io_Din<16>;
+
+	reg_ws reset;
+
+	instrin run; // 22050Hz
+	reg_wr f_run;
+
+	sel adrs<18>, dout<16>;
+	instrself read(adrs), write(adrs, dout);
+	output A<18>, Dout<16>;
+	reg_wr A_reg<18>, Dout_reg<16>;
+	instrout read_req, write_req;
+	input Din<16>;
+	reg_wr buf_data<16>;
+	instrin ack;
+	input dma_doing;
+
+	input SAMPLE_L<16>, SAMPLE_R<16>;
+	reg_wr INPUT_SAMPLE_L<16>, INPUT_SAMPLE_R<16>;
+
+	reg_wr StartAddr<18>, CurrAddr<18>;
+
+	reg_wr FB_SRC_A<16>, FB_SRC_B<16>, IIR_ALPHA<16>;
+	reg_wr ACC_COEF_A<16>, ACC_COEF_B<16>, ACC_COEF_C<16>, ACC_COEF_D<16>;
+	reg_wr IIR_COEF<16>, FB_ALPHA<16>, FB_X<16>, IIR_DEST_A0<16>, IIR_DEST_A1<16>;
+	reg_wr ACC_SRC_A0<16>, ACC_SRC_A1<16>, ACC_SRC_B0<16>, ACC_SRC_B1<16>;
+	reg_wr IIR_SRC_A0<16>, IIR_SRC_A1<16>, IIR_DEST_B0<16>, IIR_DEST_B1<16>;
+	reg_wr ACC_SRC_C0<16>, ACC_SRC_C1<16>, ACC_SRC_D0<16>, ACC_SRC_D1<16>;
+	reg_wr IIR_SRC_B1<16>, IIR_SRC_B0<16>;
+	reg_wr MIX_DEST_A0<16>, MIX_DEST_A1<16>, MIX_DEST_B0<16>, MIX_DEST_B1<16>;
+	reg_wr IN_COEF_L<16>, IN_COEF_R<16>;
+
+	reg_wr VolLeft<16>, VolRight<16>;
+
+#ifdef USE_BUF_RAM
+	ram_16x32k buffer;
+#endif
+	reg_wr buf_adrs<15>, buf_din<16>;
+
+	sel iOff<16>, iVal<17>;
+	instrself g_buffer(iOff);
+	sel iOffa<19>, ofs<18>;
+	instrself s_buffer(iOff, iVal);
+	instrself s_buffer1(iOff, iVal);
+	sel iOffa1<19>, ofs1<18>, val<16>;
+
+	mul_s17 mul0, mul1, mul2;
+
+	reg_wr iLastRVBLeft<16>, iLastRVBRight<16>;
+	reg_wr iRVBLeft<16>, iRVBRight<16>;
+	reg_wr RVBLeft<16>, RVBRight<16>;
+	output out_L<16>, out_R<16>;
+//	reg_wr out_L_reg<16>, out_R_reg<16>;
+
+	stage_name buf_stg { task buf_read(buf_adrs); task buf_write(buf_adrs, buf_din); }
+	stage_name buf_read_wait { task do(); }
+	stage_name read_wait { task do(A_reg); }
+	stage_name write_wait { task do(A_reg, Dout_reg); }
+	stage_name run_stg { task do(); }
+	stage_name ram_clean { task do(); }
+
+	if(reset){
+		generate ram_clean.do();
+		reset := 0b0;
+	}
+
+	if(f_run & (^run_stg.do) & (^dma_doing)
+		& (^(buf_stg.buf_read | buf_read_wait.do | buf_stg.buf_write))
+		& (^(read_wait.do | write_wait.do))){
+		generate run_stg.do();
+	}
+
+	if(read_wait.do) read_req();
+	if(write_wait.do) write_req();
+	A = A_reg;
+	Dout = Dout_reg;
+
+	out_L = RVBLeft;
+	out_R = RVBRight;
+
+	instruct io_set any{
+		io_A==0x1D84 : VolLeft  := io_Din;
+		io_A==0x1D86 : VolRight := io_Din;
+		io_A==0x1DA2 : par{
+			StartAddr := io_Din || 0b00;
+			CurrAddr  := io_Din || 0b00;
+		}
+		io_A==0x1DC0 : FB_SRC_A    := io_Din; // Reverb APF Offset 1
+		io_A==0x1DC2 : FB_SRC_B    := io_Din; // Reverb APF Offset 2
+		io_A==0x1DC4 : IIR_ALPHA   := io_Din; // Reverb Reflection Volume 1
+		io_A==0x1DC6 : ACC_COEF_A  := io_Din; // Reverb Comb Volume 1
+		io_A==0x1DC8 : ACC_COEF_B  := io_Din; // Reverb Comb Volume 2
+		io_A==0x1DCA : ACC_COEF_C  := io_Din; // Reverb Comb Volume 3
+		io_A==0x1DCC : ACC_COEF_D  := io_Din; // Reverb Comb Volume 4
+		io_A==0x1DCE : IIR_COEF    := io_Din; // Reverb Reflection Volume 2
+		io_A==0x1DD0 : FB_ALPHA    := io_Din; // Reverb APF Volume 1
+		io_A==0x1DD2 : FB_X        := io_Din; // Reverb APF Volume 2
+		io_A==0x1DD4 : IIR_DEST_A0 := io_Din; // Reverb Same Side Reflection Address 1 Left
+		io_A==0x1DD6 : IIR_DEST_A1 := io_Din; // Reverb Same Side Reflection Address 1 Right
+		io_A==0x1DD8 : ACC_SRC_A0  := io_Din; // Reverb Comb Address 1 Left
+		io_A==0x1DDA : ACC_SRC_A1  := io_Din; // Reverb Comb Address 1 Right
+		io_A==0x1DDC : ACC_SRC_B0  := io_Din; // Reverb Comb Address 2 Left
+		io_A==0x1DDE : ACC_SRC_B1  := io_Din; // Reverb Comb Address 2 Right
+		io_A==0x1DE0 : IIR_SRC_A0  := io_Din; // Reverb Same Side Reflection Address 2 Left
+		io_A==0x1DE2 : IIR_SRC_A1  := io_Din; // Reverb Same Side Reflection Address 2 Right
+		io_A==0x1DE4 : IIR_DEST_B0 := io_Din; // Reverb Different Side Reflect Address 1 Left
+		io_A==0x1DE6 : IIR_DEST_B1 := io_Din; // Reverb Different Side Reflect Address 1 Right
+		io_A==0x1DE8 : ACC_SRC_C0  := io_Din; // Reverb Comb Address 3 Left
+		io_A==0x1DEA : ACC_SRC_C1  := io_Din; // Reverb Comb Address 3 Right
+		io_A==0x1DEC : ACC_SRC_D0  := io_Din; // Reverb Comb Address 4 Left
+		io_A==0x1DEE : ACC_SRC_D1  := io_Din; // Reverb Comb Address 4 Right
+		io_A==0x1DF0 : IIR_SRC_B1  := io_Din; // Reverb Different Side Reflect Address 2 Left
+		io_A==0x1DF2 : IIR_SRC_B0  := io_Din; // Reverb Different Side Reflect Address 2 Right
+		io_A==0x1DF4 : MIX_DEST_A0 := io_Din; // Reverb APF Address 1 Left
+		io_A==0x1DF6 : MIX_DEST_A1 := io_Din; // Reverb APF Address 1 Right
+		io_A==0x1DF8 : MIX_DEST_B0 := io_Din; // Reverb APF Address 2 Left
+		io_A==0x1DFA : MIX_DEST_B1 := io_Din; // Reverb APF Address 2 Right
+		io_A==0x1DFC : IN_COEF_L   := io_Din; // Reverb Input Volume Left
+		io_A==0x1DFE : IN_COEF_R   := io_Din; // Reverb Input Volume Right
+	}
+
+	instruct run par{
+		f_run := 0b1;
+	}
+
+	instruct read par{
+#ifdef USE_BUF_RAM
+		generate buf_stg.buf_read(adrs<14:0>);
+#else
+		if(^dma_doing) generate read_wait.do(adrs);
+#endif
+	}
+
+	instruct write par{
+#ifdef USE_BUF_RAM
+		generate buf_stg.buf_write(adrs<14:0>, dout);
+#else
+		if(^dma_doing) generate write_wait.do(adrs, dout);
+#endif
+	}
+
+	instruct g_buffer par{
+/*
+ iOff=(iOff*4)+rvb.CurrAddr;
+ if(iOff&0x40000) iOff=rvb.StartAddr+(iOff-0x40000);
+ return (int)*(p+iOff);
+*/
+		iOffa = (0b0||iOff||0b00) + (0b0||CurrAddr);
+
+		if(iOffa<18>) ofs = StartAddr + iOffa<17:0>;
+		else ofs = iOffa<17:0>;
+
+	//	buffer.read(ofs<14:0>);
+		read(ofs);
+	}
+
+	instruct s_buffer par{
+/*
+ iOff=(iOff*4)+rvb.CurrAddr;
+ if(iOff&0x40000) iOff=rvb.StartAddr+(iOff-0x40000);
+ if(iVal<-32768L) iVal=-32768L;if(iVal>32767L) iVal=32767L;
+ *(p+iOff)=(short)iVal;
+*/
+		iOffa = (0b0||iOff||0b00) + (0b0||CurrAddr);
+
+		if(iOffa<18>) ofs = StartAddr + iOffa<17:0>;
+		else ofs = iOffa<17:0>;
+
+		any{
+			iVal<16:15>==0b10 : val = 0x8000; // < -32768
+			iVal<16:15>==0b01 : val = 0x7FFF; // > 32767
+			else : val = iVal<15:0>;
+		}
+
+	//	buffer.write(ofs<14:0>, val);
+		write(ofs, val);
+	}
+
+	instruct s_buffer1 par{
+/*
+ iOff=(iOff*4)+rvb.CurrAddr+1;
+ if(iOff&0x40000) iOff=rvb.StartAddr+(iOff-0x40000);
+ if(iVal<-32768L) iVal=-32768L;if(iVal>32767L) iVal=32767L;
+ *(p+iOff)=(short)iVal;
+*/
+		iOffa1 = (0b0||iOff||0b00) + (0b0||CurrAddr) + 1;
+
+		if(iOffa1<18>) ofs1 = StartAddr + iOffa1<17:0>;
+		else ofs1 = iOffa1<17:0>;
+
+		any{
+			iVal<16:15>==0b10 : val = 0x8000; // < -32768
+			iVal<16:15>==0b01 : val = 0x7FFF; // > 32767
+			else : val = iVal<15:0>;
+		}
+
+	//	buffer.write(ofs1<14:0>, val);
+		write(ofs1, val);
+	}
+
+#ifdef USE_BUF_RAM
+	stage buf_stg {
+		par{
+			any{
+				buf_stg.buf_read : par{
+					buffer.read(buf_adrs);
+					generate buf_read_wait.do();
+				}
+				buf_stg.buf_write : par{
+					buffer.write(buf_adrs, buf_din);
+				}
+			}
+			finish;
+		}
+	}
+
+	stage buf_read_wait {
+		par{
+			buf_data := buffer.dout;
+			finish;
+		}
+	}
+#endif
+
+	stage read_wait {
+		if(ack | dma_doing){
+			buf_data := Din;
+			finish;
+		}
+	}
+
+	stage write_wait {
+		if(ack | dma_doing) finish;
+	}
+
+	stage run_stg {
+		reg_wr IIR_INPUT_A0<17>, IIR_INPUT_A1<17>, IIR_INPUT_B0<17>, IIR_INPUT_B1<17>;
+		reg_wr IIR_A0<17>, IIR_A1<17>, IIR_B0<17>, IIR_B1<17>;
+		reg_wr ACC0<17>, ACC1<17>, FB_A0<16>, FB_A1<16>, FB_B0<16>, FB_B1<16>;
+		reg_wr mtmp<16>;
+		sel rvbL<17>, rvbR<17>;
+		first_state st1;
+		finish;
+		state st1 par{
+			INPUT_SAMPLE_L := SAMPLE_L;
+			INPUT_SAMPLE_R := SAMPLE_R;
+			g_buffer(IIR_SRC_A0);
+			goto st2;
+		}
+		state st2 par{
+// IIR_INPUT_A0 = (g_buffer(IIR_SRC_A0) * IIR_COEF)/32768 + (INPUT_SAMPLE_L * IN_COEF_L)/32768;
+			IIR_INPUT_A0 := mul0.con(17#buf_data, 17#IIR_COEF).dout<31:15> + mul1.con(17#INPUT_SAMPLE_L, 17#IN_COEF_L).dout<31:15>;
+			g_buffer(IIR_SRC_A1);
+			goto st3;
+		}
+		state st3 par{
+// IIR_INPUT_A1 = (g_buffer(IIR_SRC_A1) * IIR_COEF)/32768 + (INPUT_SAMPLE_R * IN_COEF_R)/32768;
+			IIR_INPUT_A1 := mul0.con(17#buf_data, 17#IIR_COEF).dout<31:15> + mul1.con(17#INPUT_SAMPLE_R, 17#IN_COEF_R).dout<31:15>;
+			g_buffer(IIR_SRC_B0);
+			goto st4;
+		}
+		state st4 par{
+// IIR_INPUT_B0 = (g_buffer(IIR_SRC_B0) * IIR_COEF)/32768 + (INPUT_SAMPLE_L * IN_COEF_L)/32768;
+			IIR_INPUT_B0 := mul0.con(17#buf_data, 17#IIR_COEF).dout<31:15> + mul1.con(17#INPUT_SAMPLE_L, 17#IN_COEF_L).dout<31:15>;
+			g_buffer(IIR_SRC_B1);
+			goto st5;
+		}
+		state st5 par{
+// IIR_INPUT_B1 = (g_buffer(IIR_SRC_B1) * IIR_COEF)/32768 + (INPUT_SAMPLE_R * IN_COEF_R)/32768;
+			IIR_INPUT_B1 := mul0.con(17#buf_data, 17#IIR_COEF).dout<31:15> + mul1.con(17#INPUT_SAMPLE_R, 17#IN_COEF_R).dout<31:15>;
+			g_buffer(IIR_DEST_A0);
+			goto st6;
+		}
+		state st6 par{
+// IIR_A0 = (IIR_INPUT_A0 * IIR_ALPHA)/32768 + (g_buffer(IIR_DEST_A0) * (32768 - IIR_ALPHA))/32768;
+			IIR_A0 := mul0.con(IIR_INPUT_A0, 17#IIR_ALPHA).dout<31:15> + mul1.con(17#buf_data, (0b0||0x8000)-17#IIR_ALPHA).dout<31:15>;
+			g_buffer(IIR_DEST_A1);
+			goto st7;
+		}
+		state st7 par{
+// IIR_A1 = (IIR_INPUT_A1 * IIR_ALPHA)/32768 + (g_buffer(IIR_DEST_A1) * (32768 - IIR_ALPHA))/32768;
+			IIR_A1 := mul0.con(IIR_INPUT_A1, 17#IIR_ALPHA).dout<31:15> + mul1.con(17#buf_data, (0b0||0x8000)-17#IIR_ALPHA).dout<31:15>;
+			g_buffer(IIR_DEST_B0);
+			goto st8;
+		}
+		state st8 par{
+// IIR_B0 = (IIR_INPUT_B0 * IIR_ALPHA)/32768 + (g_buffer(IIR_DEST_B0) * (32768 - IIR_ALPHA))/32768;
+			IIR_B0 := mul0.con(IIR_INPUT_B0, 17#IIR_ALPHA).dout<31:15> + mul1.con(17#buf_data, (0b0||0x8000)-17#IIR_ALPHA).dout<31:15>;
+			g_buffer(IIR_DEST_B1);
+			goto st9;
+		}
+		state st9 par{
+// IIR_B1 = (IIR_INPUT_B1 * IIR_ALPHA)/32768 + (g_buffer(IIR_DEST_B1) * (32768 - IIR_ALPHA))/32768;
+			IIR_B1 := mul0.con(IIR_INPUT_B1, 17#IIR_ALPHA).dout<31:15> + mul1.con(17#buf_data, (0b0||0x8000)-17#IIR_ALPHA).dout<31:15>;
+			s_buffer1(IIR_DEST_A0, IIR_A0);
+			goto st10;
+		}
+		state st10 par{
+			s_buffer1(IIR_DEST_A1, IIR_A1);
+			goto st11;
+		}
+		state st11 par{
+			s_buffer1(IIR_DEST_B0, IIR_B0);
+			goto st12;
+		}
+		state st12 par{
+			s_buffer1(IIR_DEST_B1, IIR_B1);
+			goto st13;
+		}
+		state st13 par{
+			g_buffer(ACC_SRC_A0);
+			goto st14;
+		}
+		state st14 par{
+// ACC0 = (g_buffer(ACC_SRC_A0) * ACC_COEF_A)/32768 +
+//        (g_buffer(ACC_SRC_B0) * ACC_COEF_B)/32768 +
+//        (g_buffer(ACC_SRC_C0) * ACC_COEF_C)/32768 +
+//        (g_buffer(ACC_SRC_D0) * ACC_COEF_D)/32768;
+			ACC0 := mul0.con(17#buf_data, 17#ACC_COEF_A).dout<31:15>;
+			g_buffer(ACC_SRC_B0);
+			goto st15;
+		}
+		state st15 par{
+			ACC0 += mul0.con(17#buf_data, 17#ACC_COEF_B).dout<31:15>;
+			g_buffer(ACC_SRC_C0);
+			goto st16;
+		}
+		state st16 par{
+			ACC0 += mul0.con(17#buf_data, 17#ACC_COEF_C).dout<31:15>;
+			g_buffer(ACC_SRC_D0);
+			goto st17;
+		}
+		state st17 par{
+			ACC0 += mul0.con(17#buf_data, 17#ACC_COEF_D).dout<31:15>;
+			g_buffer(ACC_SRC_A1);
+			goto st18;
+		}
+		state st18 par{
+// ACC1 = (g_buffer(ACC_SRC_A1) * ACC_COEF_A)/32768 +
+//        (g_buffer(ACC_SRC_B1) * ACC_COEF_B)/32768 +
+//        (g_buffer(ACC_SRC_C1) * ACC_COEF_C)/32768 +
+//        (g_buffer(ACC_SRC_D1) * ACC_COEF_D)/32768;
+			ACC1 := mul1.con(17#buf_data, 17#ACC_COEF_A).dout<31:15>;
+			g_buffer(ACC_SRC_B1);
+			goto st19;
+		}
+		state st19 par{
+			ACC1 += mul1.con(17#buf_data, 17#ACC_COEF_B).dout<31:15>;
+			g_buffer(ACC_SRC_C1);
+			goto st20;
+		}
+		state st20 par{
+			ACC1 += mul1.con(17#buf_data, 17#ACC_COEF_C).dout<31:15>;
+			g_buffer(ACC_SRC_D1);
+			goto st21;
+		}
+		state st21 par{
+			ACC1 += mul1.con(17#buf_data, 17#ACC_COEF_D).dout<31:15>;
+			g_buffer(MIX_DEST_A0 - FB_SRC_A);
+			goto st22;
+		}
+		state st22 par{
+// FB_A0 = g_buffer(MIX_DEST_A0 - FB_SRC_A);
+			FB_A0 := buf_data;
+			g_buffer(MIX_DEST_A1 - FB_SRC_A);
+			goto st23;
+		}
+		state st23 par{
+// FB_A1 = g_buffer(MIX_DEST_A1 - FB_SRC_A);
+			FB_A1 := buf_data;
+			g_buffer(MIX_DEST_B0 - FB_SRC_B);
+			goto st24;
+		}
+		state st24 par{
+// FB_B0 = g_buffer(MIX_DEST_B0 - FB_SRC_B);
+			FB_B0 := buf_data;
+			g_buffer(MIX_DEST_B1 - FB_SRC_B);
+			goto st25;
+		}
+		state st25 par{
+// FB_B1 = g_buffer(MIX_DEST_B1 - FB_SRC_B);
+			FB_B1 := buf_data;
+			goto st26;
+		}
+		state st26 par{
+// s_buffer(MIX_DEST_A0, ACC0 - (FB_A0 * FB_ALPHA)/32768);
+			s_buffer(MIX_DEST_A0, ACC0 - mul0.con(17#FB_A0, 17#FB_ALPHA).dout<31:15>);
+			goto st27;
+		}
+		state st27 par{
+// s_buffer(MIX_DEST_A1, ACC1 - (FB_A1 * FB_ALPHA)/32768);
+			s_buffer(MIX_DEST_A1, ACC1 - mul1.con(17#FB_A1, 17#FB_ALPHA).dout<31:15>);
+			goto st28;
+		}
+		state st28 par{
+// s_buffer(MIX_DEST_B0, (FB_ALPHA * ACC0)/32768 - (FB_A0 * (int)(FB_ALPHA^0xFFFF8000))/32768 - (FB_B0 * FB_X)/32768);
+			s_buffer(MIX_DEST_B0,
+				  mul0.con(17#FB_ALPHA, ACC0).dout<31:15>
+				- mul1.con(17#FB_A0, (^FB_ALPHA<15>)||(^FB_ALPHA<15>)||FB_ALPHA<14:0>).dout<31:15>
+				- mul2.con(17#FB_B0, 17#FB_X).dout<31:15>);
+			goto st29;
+		}
+		state st29 par{
+// s_buffer(MIX_DEST_B1, (FB_ALPHA * ACC1)/32768 - (FB_A1 * (int)(FB_ALPHA^0xFFFF8000))/32768 - (FB_B1 * FB_X)/32768);
+			s_buffer(MIX_DEST_B1,
+				  mul0.con(17#FB_ALPHA, ACC1).dout<31:15>
+				- mul1.con(17#FB_A1, (^FB_ALPHA<15>)||(^FB_ALPHA<15>)||FB_ALPHA<14:0>).dout<31:15>
+				- mul2.con(17#FB_B1, 17#FB_X).dout<31:15>);
+			goto st30;
+		}
+		state st30 par{
+// iLastRVBLeft  = iRVBLeft;
+// iLastRVBRight = iRVBRight;
+			iLastRVBLeft  := iRVBLeft;
+			iLastRVBRight := iRVBRight;
+
+			g_buffer(MIX_DEST_A0);
+			goto st31;
+		}
+		state st31 par{
+			mtmp := buf_data;
+			g_buffer(MIX_DEST_B0);
+			goto st32;
+		}
+		state st32 par{
+// iRVBLeft  = (g_buffer(MIX_DEST_A0)+g_buffer(MIX_DEST_B0))/3;
+			rvbL = 17#mtmp + 17#buf_data;
+			iRVBLeft := 16#rvbL<16:2>;// + (16#on & 16#rvbL<16:4>); // 16分の5
+			g_buffer(MIX_DEST_A1);
+			goto st33;
+		}
+		state st33 par{
+			mtmp := buf_data;
+			g_buffer(MIX_DEST_B1);
+			goto st34;
+		}
+		state st34 par{
+// iRVBRight = (g_buffer(MIX_DEST_A1)+g_buffer(MIX_DEST_B1))/3;
+			rvbR = 17#mtmp + 17#buf_data;
+			iRVBRight := 16#rvbR<16:2>;// + (16#on & 16#rvbR<16:4>); // 16分の5
+			goto st35;
+		}
+		state st35 par{
+// iRVBLeft  := (iRVBLeft  * VolLeft ) / 0x4000;
+// iRVBRight := (iRVBRight * VolRight) / 0x4000;
+			RVBLeft  := mul0.con(17#iRVBLeft,  17#VolLeft ).dout<29:14>;
+			RVBRight := mul1.con(17#iRVBRight, 17#VolRight).dout<29:14>;
+/*
+			goto st36;
+		}
+		state st36 par{
+// return iLastRVBLeft+(iRVBLeft-iLastRVBLeft)/2;
+// RVBLeft出力とあまり変わらない
+		//	out_L_reg := iLastRVBLeft  + 16#((RVBLeft  - iLastRVBLeft )<15:1>);
+		//	out_R_reg := iLastRVBRight + 16#((RVBRight - iLastRVBRight)<15:1>);
+*/
+			if(/&CurrAddr) CurrAddr := StartAddr;
+			else CurrAddr++;
+
+			goto st1;
+			f_run := 0b0;
+		}
+	}
+
+#ifdef USE_BUF_RAM
+	stage ram_clean {
+		reg_wr a<15>;
+		par{
+			buffer.write(a, 0x0000);
+			a++;
+			if(/&a) finish;
+		}
+	}
+#endif
+
+}

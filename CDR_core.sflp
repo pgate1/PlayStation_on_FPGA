@@ -1,0 +1,394 @@
+/*
+	CDROM controller
+		by pgate1
+*/
+
+circuit CDR_core
+{
+	input io_adrs<2>;
+	instrin Read(io_adrs);
+	output io_dout<8>;
+	reg_wr io_dout_reg<8>;
+
+	input io_din<8>;
+	instrin Write(io_adrs, io_din);
+
+	reg_ws reset;
+
+	reg_wr Ctrl<8>, OCUP, ResultReady;
+	mem Result[16]<8> = {0};
+	reg_wr ResultP<4>, ResultC<4>, Readed, Stat<8>, Reg2<8>;
+
+	reg_wr Cmd<8>, Irq<16>;
+	instrself AddIrqQueue(addq_irq, addq_ecycle);
+	sel addq_irq<16>, addq_ecycle<16>;
+	reg_wr IrqRepeated;
+
+	mem Param[8]<8> = {0};
+	reg_wr ParamC<3>, DriveState<3>;
+
+	reg_wr StatP<8>;
+	instrself SetResultSize(r_size);
+	sel r_size<4>;
+
+	output running;
+
+	instrin run33;
+	reg_wr int_wait_max<16>, count_rst;
+	instrout interrupt_out;
+
+	instrself halt(halt_sel);
+	sel halt_sel<8>;
+	reg_wr halt_code_reg<8>;
+	output halt_code<8>;
+
+output dbg<16>;
+reg_wr dbg_reg<16>;
+input dbg_in<16>;
+
+	stage_name interrupt_wait { task do(int_wait_max, count_rst); }
+	stage_name cdrInterrupt { task do(); }
+
+	if(reset){
+		reset := 0b0;
+		Reg2 := 0x1F;
+		StatP := 0x02; // STATUS_ROTATING;
+	//	CurTrack := 1;
+	}
+
+dbg = dbg_reg;
+
+	instruct halt halt_code_reg := halt_sel;
+	halt_code = halt_code_reg;
+
+	running = cdrInterrupt.do;
+
+	if(Read) io_dout_reg := io_dout;
+	else io_dout = io_dout_reg;
+
+	instruct Read any{
+		io_adrs==0 : par{
+			io_dout = Ctrl<7> || (Ctrl<6>|OCUP) || ResultReady || 0b11 || Ctrl<2:0>;
+			Ctrl := io_dout;
+		}
+		io_adrs==1 : par{
+		//	if(ResultP<3:0> < ResultC){
+				io_dout = Result[ResultP];
+		//	}
+		//	else data = 0x00;
+			ResultP++;
+			if((ResultP+1)==ResultC) ResultReady := 0b0;
+		}
+		io_adrs==2 : par{
+			if(Readed==0b0){
+				io_dout = 0x00;
+			}
+			else{
+				io_dout = 0x00;//Transfer[transferIndex];
+			//	transferIndex++; // adjustTransferIndex()“à‚Ås‚¤
+			//	adjustTransferIndex();
+			}
+		}
+		io_adrs==3 : par{
+			if(Ctrl<0>) io_dout = Stat | 0xE0;
+			else io_dout = Reg2 | 0xE0;
+		}
+	}
+
+/*
+	instruct adjustTransferIndex par{
+reg_wr transferIndex<13>;
+sel bufSize<13>;
+		alt{
+			Mode<5> : bufSize = 2340;
+			Mode<4> : bufSize = 12 + 2328;
+			else : bufSize = 12 + 2048;
+		}
+		// (transferIndex+1) >= bufSize
+		if(((transferIndex+1)-bufSize)<12>==0b0) transferIndex -= bufSize + 1;
+		else transferIndex++;
+	}
+*/
+
+	instruct Write any{
+		io_adrs==0 : par{
+			Ctrl := Ctrl<7:2> || io_din<1:0>;
+		}
+		io_adrs==1 : par{
+			switch(Ctrl<1:0>){
+				case 0: ;
+				case 3: par{
+				//	AttenuatorRightToRightT = data;
+				}
+			}
+
+			if(Ctrl<1:0>==0b00){
+				Cmd := io_din;
+				OCUP := 0b0;
+
+				ResultReady := 0b0;
+				Ctrl |= 0x80;
+
+				AddIrqQueue(0x00||io_din, 0x0800);
+			}
+		}
+		io_adrs==2 : par{
+			switch(Ctrl<1:0>){
+				case 0: par{
+					/*if(ParamC<3>==0b0)*/ Param[ParamC] := io_din;
+					ParamC++;
+				}
+				case 1: par{
+					Reg2 := io_din;
+					if(/|(Stat & io_din)) interrupt_out();
+				}
+				case 2: par{
+				//	AttenuatorLeftToLeftT = data;
+				}
+				case 3: par{
+				//	AttenuatorRightToLeftT = data;
+				}
+			}
+		}
+		io_adrs==3 : par{
+			switch(Ctrl<1:0>){
+				case 0: ; // transfer
+				case 1: par{
+					Stat &= ^io_din;
+					if(io_din<6>) ParamC := 0;
+				}
+				case 2: par{
+				//	AttenuatorLeftToRightT = data;
+				}
+				case 3: par{
+					if(io_din<5>){
+					//	memcpy(&AttenuatorLeftToLeft, &AttenuatorLeftToLeftT, 4);
+					}
+				}
+			}
+
+			if(Ctrl<1:0>==0b00){
+				if(io_din<7> & (Readed==0b0)){
+					Readed := 0b1;
+/*
+					transferIndex := 0;
+					switch(Mode & ((1<<5)|(1<<4))) {
+						case (1<<4)://MODE_SIZE_2328:
+						case 0://MODE_SIZE_2048:
+							transferIndex += 12;
+						case (1<<5)://MODE_SIZE_2340:
+							transferIndex += 0;
+			*/
+				}
+			}
+		}
+	}
+
+	instruct AddIrqQueue par{
+		if((Irq!=0) & ((addq_irq==Irq) | ((addq_irq+0x0100)==Irq))){
+			IrqRepeated := 0b1;
+		}
+		else Irq := addq_irq;
+
+		//CDR_INT(ecycle);
+		generate interrupt_wait.do(addq_ecycle, 0b1);
+	}
+
+	instruct SetResultSize par{
+		ResultP := 0;
+		ResultC := r_size;
+		ResultReady := 0b1;
+	}
+
+	stage interrupt_wait {
+		reg_wr int_wait_count<16>;
+		first_state st1;
+		state st1 par{
+			int_wait_count := 0;
+			count_rst := 0b0;
+			goto st2;
+		}
+		state st2 if(run33){
+			int_wait_count++;
+			if(int_wait_count==(int_wait_max<<(0b000+(0b0||dbg_in<9:8>)))){ // 320:<<3
+				generate cdrInterrupt.do();
+				goto st1;
+				finish;
+			}
+			if(count_rst) goto st1;
+		}
+	}
+
+#define STATUS_PLAY      0x80 // (1<<7)
+#define STATUS_SEEK      0x40 // (1<<6)
+#define STATUS_READ      0x20 // (1<<5)
+#define STATUS_SHELLOPEN 0x10 // (1<<4)
+#define STATUS_ROTATING  0x02 // (1<<1)
+#define STATUS_ERROR     0x01 // (1<<0)
+
+	stage cdrInterrupt {
+		reg_wr Irq_<16>, no_busy_error, start_rotating;
+	//	sel delay<16>;
+		sel disc_res<8>;
+		first_state st1;
+		state st1 par{
+			Irq_ := Irq;
+			no_busy_error := 0b0;
+			if(/|Stat){
+				generate interrupt_wait.do(0x0100, 0b1);
+				finish;
+			}
+			else goto st2;
+		}
+		state st2 par{
+
+			Ctrl &= ^0x80;
+			SetResultSize(1);
+			Result[0] := StatP;
+			Stat := 3;//Acknowledge;
+
+			if(IrqRepeated){
+				IrqRepeated := 0b0;
+/*
+				if(eCycle > cpu->mTotalCycles){
+					CDR_INT(eCycle);
+					goto finish;
+				}
+*/
+			}
+
+			Irq := 0x0000;
+			goto st3;
+		}
+		state st3 par{
+			any{
+				Irq_==1 : par{ // CdlNop
+					if(DriveState!=1) StatP &= ^STATUS_SHELLOPEN;
+					no_busy_error := 0b1;
+				}
+				Irq_==8 : par{ // CdlStop
+/*
+					if(Play){
+					// grab time for current track
+					//	CDR_getTD((u8)(cdr.CurTrack), cdr.ResultTD);
+						SetSectorPlay[0] = ResultTD[2];
+						SetSectorPlay[1] = ResultTD[1];
+						SetSectorPlay[2] = ResultTD[0];
+					}
+*/
+				//	StopCdda();
+				//	StopReading();
+
+				//	if(DriveState==0){ // DRIVESTATE_STANDB
+				//		delay = cdReadTime * 30 / 2;
+				//	}
+				//	else delay = 0x0800;
+
+					DriveState := 4; // DRIVESTATE_STOPPED
+				//	AddIrqQueue(CdlStop+0x100, delay);
+					AddIrqQueue(0x0108, 0x0800);
+				}
+				Irq_==0x0108 : par{ // CdlStop
+					StatP &= ^STATUS_ROTATING;
+					Result[0] := StatP;
+					Stat := 2;//Complete;
+				}
+				Irq_==14 : par{ // CdlSetmode:
+					no_busy_error := 0b1;
+				}
+				Irq_==25 : par{ // CdlTest 0x19
+
+					switch(Param[0]){
+						case 0x20: par{ // System Controller ROM Version
+							SetResultSize(4);
+							Result[0] := 0x98;
+							Result[1] := 0x06;
+							Result[2] := 0x10;
+							Result[3] := 0xC3;
+						}
+/*
+						case 0x22: par{
+							SetResultSize(8);
+							memcpy(Result, Test22, 4);
+						}
+						case 0x23: par{
+							SetResultSize(8);
+							memcpy(Result, Test23, 4);
+						}
+*/
+					}
+					no_busy_error := 0b1;
+				}
+				Irq_==26 : par{// CdlID
+					AddIrqQueue(0x011A/*CdlID*/, 20480);
+				}
+				Irq_==0x011A : par{ //CdlID
+					disc_res = 0xC0;
+
+					SetResultSize(8);
+					Result[0] := StatP | (0x0||disc_res<7>||0b000);
+				//	Result[1] = 0;
+					Result[2] := 0x00;
+					Result[3] := 0x00;
+
+					// 0x10 - audio | 0x40 - disk missing | 0x80 - unlicensed
+					/*
+					if(CDR_getStatus(&stat)==-1 || stat.Type==0 || stat.Type==0xFF){
+						Result[1] = 0xC0;
+					}
+					else{
+						if(stat.Type==2) Result[1] |= 0x10;
+						if(CdromId[0]=='\0') Result[1] |= 0x80;
+					}
+					*/
+					Result[1] := disc_res;
+
+					Result[4] := 'S';
+					Result[5] := 'C';
+					Result[6] := 'E';
+					Result[7] := 'I';
+					Stat := 2; //Complete;
+				}
+				else : par{
+//dbg_reg := Irq_;
+					halt(0x38);
+				}
+			}
+			goto st4;
+		}
+		state st4 par{
+
+			if((DriveState==4) & start_rotating){
+				DriveState := 0;
+				StatP |= STATUS_ROTATING;
+			}
+			goto st5;
+		}
+		state st5 par{
+			if(^no_busy_error){
+				any{
+					(DriveState==1) |
+					(DriveState==2) |
+					(DriveState==3) : par{
+				//	case 1://DRIVESTATE_LID_OPEN:
+				//	case 2://DRIVESTATE_RESCAN_CD:
+				//	case 3://DRIVESTATE_PREPARE_CD:
+						SetResultSize(2);
+						Result[0] := StatP | STATUS_ERROR;
+						Result[1] := 0x80;//ERROR_NOT_READY;
+						Stat := 5;//DiskError;
+					}
+				}
+			}
+			goto st6;
+		}
+		state st6 par{
+			if((Stat & Reg2)!=0){
+				interrupt_out();
+			}
+			ParamC := 0;
+			goto st1;
+			finish;
+		}
+	}
+}

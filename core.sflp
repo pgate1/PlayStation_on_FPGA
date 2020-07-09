@@ -1,0 +1,541 @@
+
+/*
+	PSX on FPGA feat. DE2-115
+	Copyright (c)2016 pgate1
+*/
+
+%i "../../DE2-115/seg7_ctrl.h"
+%i "../../DE2-115/chatmask.h"
+%i "../../DE2-115/sram_ctrl.h"
+%i "../../DE2-115/flashmem_ctrl.h"
+%i "../../DE2-115/sdcard_ctrl_sdmode.h"
+%i "../../hdl/fat16.h"
+%i "../../DE2-115/dac_ctrl.h"
+%i "../../DE2-115/ISP1362_ctrl.h"
+%i "../../DE2-115/lcd_ctrl.h"
+
+%i "PSX_core.h"
+%i "VGA_ctrl.h"
+%i "view_ram_ctrl.h"
+%i "gamma_correction.h"
+
+circuit core
+{
+	input KEY<4>, SW<18>;
+	chatmask cmask_1, cmask_2, cmask_3;
+	sel key1, key2, key3;
+	output LEDR<18>, LEDG<9>;
+	seg7_ctrl seg7_0, seg7_1, seg7_2, seg7_3, seg7_4, seg7_5, seg7_6, seg7_7;
+	output HEX0<7>, HEX1<7>, HEX2<7>, HEX3<7>, HEX4<7>, HEX5<7>, HEX6<7>, HEX7<7>;
+	sel seg<32>;
+//--------------------- SRAM Interface ---------------------
+// 参考 adrs<20> data<16>
+	sram_ctrl sram;
+	output SRAM_CEn, SRAM_OEn, SRAM_WEn;
+	output SRAM_LBn, SRAM_UBn, SRAM_DEn;
+	output SRAM_ADDR<20>;
+	input  SRAM_Din<16>;
+	output SRAM_Dout<16>;
+//--------------------- SDRAM Interface --------------------
+	instrout sdram_write(sdram_adrs, sdram_wdata, sdram_de);
+	output sdram_adrs<25>, sdram_wdata<32>, sdram_de<4>;
+	instrout sdram_read(sdram_adrs);
+	input sdram_rdata<32>;
+	input sdram_ack, sdram_err;
+//--------------------- Flash Interface --------------------
+	flashmem_ctrl flash;
+	output FLASH_RSTn, FLASH_CEn;
+	output FLASH_OEn,  FLASH_WEn;
+	output FLASH_ADDR<23>;
+	input FLASH_Din<8>;
+//--------------------- VGA --------------------------------
+	VGA_ctrl vga;
+	output VGA_BLANKn, VGA_HS, VGA_VS;
+	output VGA_R<8>, VGA_G<8>, VGA_B<8>;
+	reg_wr clock25M_div;
+//--------------------- Audio ------------------------
+	dac_ctrl dac;
+	input audio_RD;
+	output audio_DATA<32>;
+	instrout audio_SET;
+	output audio_VOL<7>;
+//--------------------- SD_Card Interface ------------------
+	sdcard_ctrl_sdmode sdcard;
+	output SD_CLK;    // SD Card Clock
+	output SD_CMD_en; // SD Card CMD Enable
+	output SD_CMD;    // SD Card Command
+	input  SD_RES;    // SD Card Response
+	input  SD_DAT<4>; // SD Card Data
+	fat16 fat;
+//--------------------- USB ISP1362 ------------------------
+	output USB_ADDR<2>, USB_Dout<16>;
+	output USB_WRn, USB_RDn;
+	input USB_Din<16>;
+	ISP1362_ctrl usb;
+//--------------------- LCD --------------------------------
+	lcd_ctrl lcd;
+	output LCD_RS, LCD_RW, LCD_EN, LCD_DATA<8>;
+
+	reg_ws reset;
+
+	PSX_core psx;
+
+	reg_wr exe_read_ok;
+	reg_wr chksum<8>;
+
+	reg_wr tA<21>; // 2MB
+	reg_wr d0<8>, d1<8>, d2<8>;
+
+	view_ram_ctrl view_ram;
+	gamma_correction gammaR, gammaG, gammaB;
+
+	instrself halt(halt_sel);
+	sel halt_sel<8>;
+	reg_wr halt_code<8>;
+
+	stage_name flash2ram_bios { task do(); }
+	stage_name wram_clear { task do(); }
+	stage_name flash2ram_kernel { task do(); }
+	stage_name soundexe_read { task do(); }
+	stage_name sram_clear { task do(); }
+
+	stage_name spu_wait_ack { task do(); }
+	stage_name gpu_wait_ack { task do(); }
+
+	if(reset){
+		reset := 0b0;
+		generate flash2ram_bios.do();
+	//	audio_SET();
+	}
+
+	instruct halt halt_code := halt_sel;
+
+	cmask_1.bin = ^KEY<1>; key1 = cmask_1.bout;
+	cmask_2.bin = ^KEY<2>; key2 = cmask_2.bout;
+	cmask_3.bin = ^KEY<3>; key3 = cmask_3.bout;
+
+	HEX7 = seg7_7.con(seg<31:28>).oSEG;
+	HEX6 = seg7_6.con(seg<27:24>).oSEG;
+	HEX5 = seg7_5.con(seg<23:20>).oSEG;
+	HEX4 = seg7_4.con(seg<19:16>).oSEG;
+	HEX3 = seg7_3.con(seg<15:12>).oSEG;
+	HEX2 = seg7_2.con(seg<11: 8>).oSEG;
+	HEX1 = seg7_1.con(seg< 7: 4>).oSEG;
+	HEX0 = seg7_0.con(seg< 3: 0>).oSEG;
+
+	SRAM_CEn = sram.CEn;
+	SRAM_OEn = sram.OEn;
+	SRAM_WEn = sram.WEn;
+	SRAM_LBn = sram.LBn;
+	SRAM_UBn = sram.UBn;
+	SRAM_DEn = sram.DEn;
+	SRAM_ADDR = sram.ADDR;
+	sram.Din = SRAM_Din;
+	SRAM_Dout = sram.Dout;
+
+	FLASH_RSTn = flash.RSTn;
+	FLASH_CEn = flash.CEn;
+	FLASH_OEn = flash.OEn;
+	FLASH_WEn = flash.WEn;
+	FLASH_ADDR = flash.ADDR;
+	flash.Din = FLASH_Din;
+
+	SD_CLK    = sdcard.CLK;
+	SD_CMD_en = sdcard.CMD_en;
+	SD_CMD    = sdcard.CMD;
+	sdcard.RES = SD_RES;
+	sdcard.DAT = SD_DAT;
+
+	fat.sack = sdcard.ack;
+	fat.sdata = sdcard.rdata;
+	instruct fat.sread sdcard.read(fat.sadrs);
+
+/*
+	sel clip_voice_L<17>, clip_voice_R<17>;
+	any{
+		psx.voice_L<20:16>==0b11110 : clip_voice_L = 0x8000||0b0;
+		psx.voice_L<20:16>==0b00001 : clip_voice_L = 0x7FFF||0b1;
+		else : clip_voice_L = psx.voice_L<16:0>;
+	}
+	any{
+		psx.voice_R<20:16>==0b11110 : clip_voice_R = 0x8000||0b0;
+		psx.voice_R<20:16>==0b00001 : clip_voice_R = 0x7FFF||0b1;
+		else : clip_voice_R = psx.voice_R<16:0>;
+	}
+*/
+	reg_wr out_L_reg<32>, out_R_reg<32>;
+//	reg_wr audio_count<2>; // 18.432MHzに合わせる(意味ないっぽい)
+//	audio_count++;
+//	if(/&audio_count){
+		out_L_reg := psx.voice_L || 0b00000000000;
+		out_R_reg := psx.voice_R || 0b00000000000;
+//	}
+	dac.data_L = out_L_reg;
+	dac.data_R = out_R_reg;
+	dac.RD = audio_RD;
+	audio_DATA = dac.Dout;
+	audio_VOL = 0b1111001; // 最上位ビットは1でないと音が出ない, 0db:0b1111001
+
+	// USB
+	USB_ADDR = usb.A;
+	USB_Dout = usb.Dout;
+	usb.Din = USB_Din;
+	USB_WRn = usb.WRn;
+	USB_RDn = usb.RDn;
+/*
+	lcd.str0 = str;
+	lcd.str1 = "                ";
+	LCD_RS = lcd.rs;
+	LCD_RW = lcd.rw;
+	LCD_EN = lcd.en;
+	LCD_DATA = lcd.data;
+*/
+
+	clock25M_div := ^clock25M_div;
+	if(clock25M_div) vga.htiming();
+	VGA_BLANKn = vga.en;
+	VGA_HS = vga.h_sync;
+	VGA_VS = vga.v_sync;
+/*
+	if((vga.h_count==0) | (vga.h_count==639) |
+	   (vga.v_count==0) | (vga.v_count==479)){
+		vga.iR = 0xFF; vga.iG = 0xFF; vga.iB = 0xFF;
+	}
+*/
+	par{
+		// サウンドエフェクト
+		sel voice_L<11>;
+		any{
+			psx.voice_L<20>==0b0 : voice_L = psx.voice_L<18:8>;
+			psx.voice_L<20>==0b1 : voice_L = (^psx.voice_L + 1)<18:8>;
+		}
+		reg_wr level_L_t<11>, level_L<11>;
+		any{
+			vga.h_count==0   : level_L_t := voice_L;
+			vga.h_count==400 : level_L_t += voice_L;
+			vga.h_count==640 : level_L := level_L_t;
+		}
+
+		sel voice_R<11>;
+		any{
+			psx.voice_R<20>==0b0 : voice_R = psx.voice_R<18:8>;
+			psx.voice_R<20>==0b1 : voice_R = (^psx.voice_R + 1)<18:8>;
+		}
+		reg_wr level_R_t<11>, level_R<11>;
+		any{
+			vga.h_count==0   : level_R_t := voice_R;
+			vga.h_count==400 : level_R_t += voice_R;
+			vga.h_count==640 : level_R := 0b01010000000 - level_R_t; // 640 - level
+		}
+
+		if(
+			(((0b0||vga.h_count)-level_L)<10> | (((0b0||vga.h_count)-level_R)<10>==0b0))
+			& ^psx.sw_kernel_run
+		){
+		//	vga.iR = 0xFF; vga.iG = 0xFF; vga.iB = 0xFF;
+			vga.iR = ((0b0||view_ram.out_R)+0b011111)<5:1> || 0b111;
+			vga.iG = ((0b0||view_ram.out_G)+0b011111)<5:1> || 0b111;
+			vga.iB = ((0b0||view_ram.out_B)+0b011111)<5:1> || 0b111;
+		}
+		else{
+			vga.iR = view_ram.out_R || 0b111;
+			vga.iG = view_ram.out_G || 0b111;
+			vga.iB = view_ram.out_B || 0b111;
+		}
+	}
+//	if(SW<14>){ // ガンマ補正(γ=2.0)
+//		VGA_R = gammaR.con(vga.oR<7:3>).dout;
+//		VGA_G = gammaG.con(vga.oG<7:3>).dout;
+//		VGA_B = gammaB.con(vga.oB<7:3>).dout;
+//	}
+//	else{
+		VGA_R = vga.oR;
+		VGA_G = vga.oG;
+		VGA_B = vga.oB;
+//	}
+
+	instruct psx.view_on par{
+		view_ram.write(psx.view_x<9:1>, psx.view_y<8:1>,
+			psx.view_R<7:3>, psx.view_G<7:3>, psx.view_B<7:3>);
+	}
+	instruct vga.view view_ram.read();
+	instruct vga.vblank_begin par{
+		view_ram.adrs_reset();
+		// 320x240で60fpsOK
+	//	reg_wr flip; flip := ^flip; if(flip){ // 640x480 30fps
+			psx.vblank_in();
+			view_ram.bank_change();
+	//	}
+	}
+
+	if(exe_read_ok & ^/|halt_code) psx.run();
+
+	// ubs.button1<12> : B,Y,Sl,St, Up,Dn,Le,Ri, A,X,L,R
+	// PS : □,×,○,△,R,L,0,0,←,↓,→,↑,St,0,0,Sl
+	psx.key_in = (0b00 || key1 || 0b00000_0 || key2 || 0b0 || key3 || 0b0000) |
+		(0b00 || usb.button1<3> || 0b00000 || usb.button1<5> || usb.button1<6> || usb.button1<4> || usb.button1<7> || 0b0000);
+
+//psx.sw_cache_off();
+//psx.sw_intpl_off();
+//	if(SW<15>) psx.sw_reverb_off();
+	if(SW<16>) psx.sw_spu_off();
+	if(SW<17>) psx.sw_kernel_run();
+psx.dbg_in = SW<15:0>;
+
+	any{
+		soundexe_read.do : seg = 0x0000||tA<20:5>;
+		key3 : seg = chksum || psx.dbg_cpu || 0x00 || psx.halt_code;
+		key2 : seg = psx.dbg;
+		key1 : seg = 0x000000 || halt_code;//psx.dbg2;
+		else : seg = psx.pc_out;
+	}
+
+	LEDR = (0b0000000000000000 || /|halt_code || /|psx.halt_code) | psx.disp_env<23:6> | (0b00||psx.key_in);
+	LEDG = soundexe_read.do || psx.disp_env<5:0> || psx.vraming || psx.drawing;
+
+	instruct psx.WRAM_READ par{
+		sdram_read(0b000000||psx.A<20:2>);
+	}
+	if(sdram_ack) psx.wram_ack();
+
+	instruct psx.WRAM_WRITE par{
+		any{
+			psx.Word==4 : sdram_write(0b000000||psx.A<20:2>, psx.Dout, 0b1111);
+			psx.Word==2 : any{
+				psx.A<1>==0b0 : sdram_write(0b000000||psx.A<20:2>, 0x0000||psx.Dout<15:0>, 0b0011);
+				psx.A<1>==0b1 : sdram_write(0b000000||psx.A<20:2>, psx.Dout<15:0>||0x0000, 0b1100);
+			}
+			psx.Word==1 : any{
+				psx.A<1:0>==0b00 : sdram_write(0b000000||psx.A<20:2>, 0x000000||psx.Dout<7:0>,     0b0001);
+				psx.A<1:0>==0b01 : sdram_write(0b000000||psx.A<20:2>, 0x0000||psx.Dout<7:0>||0x00, 0b0010);
+				psx.A<1:0>==0b10 : sdram_write(0b000000||psx.A<20:2>, 0x00||psx.Dout<7:0>||0x0000, 0b0100);
+				psx.A<1:0>==0b11 : sdram_write(0b000000||psx.A<20:2>, psx.Dout<7:0>||0x000000,     0b1000);
+			}
+		}
+	}
+
+	instruct psx.BIOS_READ par{
+		sdram_read(0b10000000||psx.A<18:2>);
+	}
+	psx.Din = sdram_rdata;
+	if(sdram_ack) psx.bios_ack();
+
+//if(psx.spu_mem_read_req & psx.spu_mem_write_req) halt(0x31);
+//if(psx.vram_read_req & psx.vram_write_req) halt(0x32);
+
+	// とりあえずGPUの方を優先する
+	alt{
+		gpu_wait_ack.do | spu_wait_ack.do : ;
+
+// vw,sr,vr,sw 動かない？
+// sr,vw,vr,sw GPUちょいノイズ
+// sr,vr,vw,sw GPUノイズだがどっちもいける 3 1 3 2 3
+// sr,vr,sw,vw GPUノイズだがどっちもいける 3 1 3 2 3
+// vr,vw,sr,sw
+
+		psx.vram_read_req : par{
+			sram.read(0b1||psx.vram_adrs);
+			generate gpu_wait_ack.do();
+		}
+		psx.vram_write_req : par{
+			sram.write(0b1||psx.vram_adrs, psx.vram_write_data, 0b11);
+			generate gpu_wait_ack.do();
+		}
+		psx.spu_mem_read_req & ^psx.sw_spu_off : par{
+			sram.read(0b00||psx.spu_mem_A);
+			generate spu_wait_ack.do();
+		}
+
+
+		psx.spu_mem_write_req & ^psx.sw_spu_off : par{
+			sram.write(0b00||psx.spu_mem_A, psx.spu_mem_Din, 0b11);
+			generate spu_wait_ack.do();
+		}
+
+
+
+	}
+	psx.spu_mem_Dout = sram.rdata;
+	psx.vram_read_data = sram.rdata;
+
+	if(psx.sw_spu_off) psx.spu_mem_ack();
+
+	stage gpu_wait_ack {
+		if(sram.ack){
+			psx.vram_ack();
+			finish;
+		}
+	}
+
+	stage spu_wait_ack {
+		if(sram.ack){
+			psx.spu_mem_ack();
+			finish;
+		}
+	}
+
+	stage flash2ram_bios {
+		reg_wr bA<19>; // 512KB
+		first_state st_open;
+		state st_open par{
+			bA := 0;
+		//	chksum := 0x00;
+			goto st_read;
+		}
+		state st_read if(flash.ack){
+			flash.read(0b0000||bA);
+			goto st_write;
+		}
+		state st_write if(flash.ack & sdram_ack){
+			switch(bA<1:0>){ // ok
+				case 0b00: d0 := flash.rdata;
+				case 0b01: d1 := flash.rdata;
+				case 0b10: d2 := flash.rdata;
+				case 0b11: sdram_write(0b10000000||bA<18:2>, flash.rdata||d2||d1||d0, 0b1111);
+			}
+			bA++;
+		//	chksum += flash.rdata;
+			if(/&bA) goto st_end;
+			else goto st_read;
+		}
+		state st_end if(sdram_ack){
+			generate wram_clear.do();
+			finish;
+		}
+	}
+
+	stage wram_clear {
+		reg_wr wA<19>;
+		first_state sst;
+		state sst par{
+			wA := 0; // kernel領域もクリアしておく
+		//	wA := 0b000||0x4000; // kernelはflashから
+			goto st1;
+		}
+		state st1 if(sdram_ack){
+			sdram_write(0b000000||wA, 0x00000000, 0b1111);
+			wA++;
+			if(/&wA) goto st2;
+		}
+		state st2 if(sdram_ack){
+			if(psx.sw_kernel_run){ // for BIOS
+				generate sram_clear.do();
+			}
+			else{ // for Sound Play
+				generate flash2ram_kernel.do();
+			}
+			finish;
+		}
+	}
+
+	stage flash2ram_kernel {
+		reg_wr kA<16>; // 64KB
+		first_state st_open;
+		state st_open par{
+			kA := 0;
+		//	chksum := 0x00;
+			goto st_read;
+		}
+		state st_read if(flash.ack){
+			flash.read(0b0001000||kA);
+			goto st_write;
+		}
+		state st_write if(flash.ack & sdram_ack){
+			switch(kA<1:0>){
+				case 0b00: d0 := flash.rdata;
+				case 0b01: d1 := flash.rdata;
+				case 0b10: d2 := flash.rdata;
+				case 0b11: sdram_write(0b00000000000||kA<15:2>, flash.rdata||d2||d1||d0, 0b1111);
+			}
+			kA++;
+		//	chksum += flash.rdata;
+			if(/&kA) goto st_end;
+			else goto st_read;
+		}
+		state st_end if(sdram_ack){
+			generate soundexe_read.do();
+			finish;
+		}
+	}
+
+	stage soundexe_read {
+		reg_wr text_end<21>; // 2MB
+		reg_wr hA<12>; // 0x800
+		reg_wr text_sec_0<8>, text_sec_1<8>, text_sec_2<8>;
+		reg_wr text_size_0<8>, text_size_1<8>, text_size_2<8>;
+		first_state st_open;
+		state st_open if(fat.ack){
+			fat.fopen(0x0||SW<3:0>);
+			chksum := 0x00;
+			goto st_hpre;
+		}
+		state st_hpre if(fat.ack){
+			fat.read();
+			hA := 0;
+			goto st_head;
+		}
+		state st_head if(fat.ack){
+			psx.exe_set(hA, fat.fdata);
+			any{
+				hA==0x018 : text_sec_0 := fat.fdata;
+				hA==0x019 : text_sec_1 := fat.fdata;
+				hA==0x01A : text_sec_2 := fat.fdata;
+				hA==0x01B : tA := text_sec_2<4:0>||text_sec_1||text_sec_0;
+				hA==0x01C : text_size_0 := fat.fdata;
+				hA==0x01D : text_size_1 := fat.fdata;
+				hA==0x01E : text_size_2 := fat.fdata;
+				hA==0x01F : text_end := tA + (text_size_2<4:0>||text_size_1||text_size_0);
+			}
+			fat.read();
+			hA++;
+			if(hA==0x7FF) goto st_text;
+		}
+		state st_text if(fat.ack & sdram_ack){
+			switch(tA<1:0>){
+				case 0b00: d0 := fat.fdata;
+				case 0b01: d1 := fat.fdata;
+				case 0b10: d2 := fat.fdata;
+				case 0b11: sdram_write(0b000000||tA<20:2>, fat.fdata||d2||d1||d0, 0b1111);
+			}
+			chksum += fat.fdata;
+			fat.read();
+			tA++;
+			if(tA==(text_end-1)) goto st_end;
+		//	if(/&tA) goto st_end; // 2MB最後まで無理やりロード(時間稼ぎのため)
+		}
+		state st_end if(sdram_ack){
+		//	lcd.view_on();
+		//	exe_read_ok := 0b1;
+			generate sram_clear.do();
+			finish;
+		}
+	}
+
+	stage sram_clear {
+		reg_wr sA<18>; // 256kW(512kB)
+		reg_wr vA<19>; // 512kW(1MB)
+		first_state sst;
+		state sst par{
+			sA := 0;
+			goto st1;
+		}
+		state st1 if(sram.ack){
+			sram.write(0b00||sA, 0x0000, 0b11);
+			sA++;
+			if(/&sA){
+				if(psx.sw_kernel_run) goto st2;
+				else goto st3;
+			}
+		}
+		state st2 if(sram.ack){
+			sram.write(0b1||vA, 0x0000, 0b11);
+			vA++;
+			if(/&vA) goto st3;
+		}
+		state st3 if(sram.ack){
+			exe_read_ok := 0b1;
+			finish;
+		}
+	}
+
+}

@@ -1,0 +1,159 @@
+/*
+	RootCounter
+		by pgate1
+*/
+
+circuit rootcounter
+{
+	input index<2>;
+
+	instrin io_set(io_A, io_Din);
+	input io_A<4>, io_Din<16>;
+	instrin io_get(io_A);
+	output io_Dout<16>;
+
+	reg_ws reset;
+
+	reg_wr count<16>, mode<16>, target<16>;
+	reg rate<12> = 1;
+	reg_wr irq_state;
+	reg hSyncCount<9> = 1;
+
+	instrin run33; // 33,868,800 Hz
+
+	instrout irq_out;
+	output irq_code<8>;
+
+	instrout hsync;
+
+	instrself halt(h_code);
+	sel h_code<8>;
+	reg_wr halt_code_reg<8>;
+	output halt_code<8>;
+
+	if(reset){
+		reset := 0b0;
+
+		any{
+			index==0 : par{
+			//	rate := 1;
+			}
+			index==1 : par{
+			//	rate := 1;
+			}
+			index==2 : par{
+			//	rate := 1;
+			}
+			index==3 : par{
+			//	rate := 1;
+				mode := 0x0008;
+				target := 2145; // (1/60/263) / (1/33868800)
+			}
+		}
+	}
+
+	any{
+		index==0 : irq_code = 0x10;
+		index==1 : irq_code = 0x20;
+		index==2 : irq_code = 0x40;
+		index==3 : irq_code = 0x01;
+	}
+
+	instruct halt halt_code_reg := h_code;
+	halt_code = halt_code_reg;
+
+	instruct io_set any{
+		io_A==0x0 : par{ // カウント
+			count := io_Din;
+		}
+		io_A==0x4 : par{ // モード
+			mode := io_Din;
+			count := 0;
+			irq_state := 0;
+		}
+		io_A==0x8 : par{ // コンペア(ターゲット)
+			target := io_Din;
+		}
+		else : halt(0x12);
+	}
+
+	instruct io_get any{
+		io_A==0x0 : par{ // カウント
+			io_Dout = count;
+		}
+	}
+
+//if((index==3) & (count==target+1)) halt(0x31);
+
+	instruct run33 if(^io_set){
+
+	//	if(count==target){
+		if(
+			((mode<3>==0b1)&(((0b0||count)-(0b0||target))<16>==0b0)) | // count >= target
+			((mode<3>==0b0)&(count==0xFFFF))
+		){
+			count := 0;
+
+			if((index==0) | (index==1) | (index==2)){
+				if(mode<4>){ // RcIrqOnTarget
+					// if( (rcnts[index].mode & RcIrqRegenerate) || (!rcnts[index].irqState) ){
+					if(mode<6> | (irq_state==0)){
+						irq_out();
+						irq_state := 1;
+					}
+				}
+			}
+			if(index==3){
+			//	if(hSyncCount==270){ // IRキャッシュオフでも通る
+				if(hSyncCount==263){ // IRキャッシュオフ時に無効命令
+					hSyncCount := 1;
+					irq_out();
+				}
+				else{
+					hSyncCount++;
+					hsync();
+				}
+			}
+		}
+		else{
+			any{
+				index==0 : par{
+					if(mode<8>){
+						if(rate==5){ // 33MHz:5
+							count++;
+							rate := 1;
+						}
+						else rate++;
+					}
+					else count++;
+				}
+				index==1 : par{
+					if(mode<8>){
+						if(rate==2146){
+							count++;
+							rate := 1;
+						}
+						else rate++;
+					}
+					else count++;
+				}
+				index==2 : par{
+					if(^mode<0>){
+						if(mode<9>){
+							if(rate==8){ // 33MHz:8
+								count++;
+								rate := 1;
+							}
+							else rate++;
+						}
+						else count++;
+					}
+				}
+				index==3 : par{
+					count++;
+				}
+			}
+		}
+	}
+
+}

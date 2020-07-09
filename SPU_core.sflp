@@ -1,0 +1,288 @@
+/*
+	SPU top
+		by pgate1
+*/
+
+%i "dsp_core.h"
+
+circuit SPU_core
+{
+	instrin io_set(io_A, io_Din);
+	input io_A<16>, io_Din<16>;
+	instrin io_get(io_A);
+	output io_Dout<16>;
+
+	reg_wr spuAddr<19>, spuCtrl<16>, mSpuStatus<16>;
+
+	input dma_din<16>;
+	instrin dma_write_req(dma_din);
+	instrout mem_write_req(mem_A, mem_Din);
+	output mem_A<18>, mem_Din<16>;
+	reg_wr mem_A_reg<18>, mem_Din_reg<16>;
+	instrin mem_ack;
+	instrout dma_ack;
+
+	input dma_doing;
+
+	dsp_core dsp;
+	instrout mem_read_req(mem_A);
+	input mem_Dout<16>;
+	instrin sw_intpl_off, sw_reverb_off;
+
+	instrin run33; // 33.8688MHz
+
+	output voice_out_L<21>, voice_out_R<21>;
+
+	output disp_env<24>;
+
+	instrself halt(h_code);
+	sel h_code<8>;
+	reg_wr halt_code_reg<8>;
+	output halt_code<8>;
+
+output dbg<32>;
+
+	stage_name dma_write_wait { task do(); }
+	stage_name io_write_wait { task do(); }
+	stage_name dsp_read_wait { task do(); }
+	stage_name dsp_write_wait { task do(); }
+
+	reg_wr io_write_req, io_write_Din<16>;
+
+	alt{
+		io_write_wait.do | dma_write_wait.do | dsp_read_wait.do | dsp_write_wait.do : ;
+		io_write_req : par{
+			mem_write_req(spuAddr<18:1>, io_write_Din);
+			generate io_write_wait.do();
+			spuAddr += 2;
+			io_write_req := 0b0;
+		}
+		dma_write_req : par{
+			mem_write_req(spuAddr<18:1>, dma_din);
+			generate dma_write_wait.do();
+			spuAddr += 2;
+		}
+		dsp.read_req : par{
+			mem_read_req(dsp.vA);
+			generate dsp_read_wait.do();
+		}
+		dsp.write_req : par{
+			mem_write_req(dsp.vA, dsp.vDout);
+			generate dsp_write_wait.do();
+		}
+	}
+
+	if(mem_read_req | mem_write_req){
+		mem_A_reg := mem_A;
+		mem_Din_reg := mem_Din;
+	}
+	else{
+		mem_A = mem_A_reg;
+		mem_Din = mem_Din_reg;
+	}
+
+	reg_wr mem_read_req_keep;
+	if(mem_read_req) mem_read_req_keep := 0b1;
+	if(mem_read_req_keep & ^mem_ack) mem_read_req();
+	if(mem_ack) mem_read_req_keep := 0b0;
+
+	reg_wr mem_write_req_keep;
+	if(mem_write_req) mem_write_req_keep := 0b1;
+	if(mem_write_req_keep & ^mem_ack) mem_write_req();
+	if(mem_ack) mem_write_req_keep := 0b0;
+
+	dsp.CtrlRvb = spuCtrl<7>;
+	dsp.CtrlIRQ = spuCtrl<6>;
+	dsp.vDin = mem_Dout;
+	dsp.dma_doing = dma_doing;
+
+	instruct sw_intpl_off dsp.sw_intpl_off();
+	instruct sw_reverb_off dsp.sw_reverb_off();
+
+	voice_out_L = dsp.voice_out_L;
+	voice_out_R = dsp.voice_out_R;
+
+	disp_env = dsp.disp_env;
+
+	halt_code = halt_code_reg | dsp.halt_code;
+
+dbg = dsp.dbg;
+
+	instruct halt par{
+		halt_code_reg := h_code;
+	}
+
+	instruct io_set any{
+		io_A==0x1D80 : ; // Main Volume Left
+		io_A==0x1D82 : ; // Main Volume Right
+		io_A==0x1D84 : par{ // Reverb Output Volume Left
+			dsp.io_set(io_A, io_Din);
+		}
+		io_A==0x1D86 : par{ // Reverb Output Volume Right
+			dsp.io_set(io_A, io_Din);
+		}
+		io_A==0x1D88 : par{ // Voice ON  (0-15)
+			dsp.io_set(io_A, io_Din);
+		}
+		io_A==0x1D8A : par{ // Voice ON  (16-23)
+			dsp.io_set(io_A, io_Din);
+		}
+		io_A==0x1D8C : par{ // Voice OFF (0-15)
+			dsp.io_set(io_A, io_Din);
+		}
+		io_A==0x1D8E : par{ // Voice OFF (16-23)
+			dsp.io_set(io_A, io_Din);
+		}
+		io_A==0x1D90 : ; // Voice  0..15 Channel FM (pitch lfo) mode (R/W)
+		io_A==0x1D92 : ; // Voice 16..23 Channel FM (pitch lfo) mode (R/W)
+		io_A==0x1D94 : ; // Voice  0..15 Channel Noise mode (R/W)
+		io_A==0x1D96 : ; // Voice 16..23 Channel Noise mode (R/W)
+		io_A==0x1D98 : par{ // Voice  0..15 Channel Reverb mode (R/W)
+			dsp.io_set(io_A, io_Din);
+		}
+		io_A==0x1D9A : par{ // Voice 16..23 Channel Reverb mode (R/W)
+			dsp.io_set(io_A, io_Din);
+		}
+		io_A==0x1DA2 : par{ // Sound RAM Reverb Work Area Start Address
+			dsp.io_set(io_A, io_Din);
+		}
+		io_A==0x1DA6 : par{ // Sound buffer address
+			spuAddr := io_Din || 0b000;
+		}
+		io_A==0x1DA8 : par{ // Sound RAM Data Transfer Fifo
+			io_write_req := 0b1;
+			io_write_Din := io_Din;
+		}
+		io_A==0x1DAA : par{ // SPU control
+			spuCtrl := io_Din;
+
+			// if( spuCtrl & 0x01)//CTRL_CD_PLAY ) mSpuStatus |= 0x01;//CTRL_CD_PLAY;
+			// else mSpuStatus &= ~0x01;
+		//	mSpuStatus<0> = io_Din<0>
+
+			// if( spuCtrl & 0x02)//CTRL_CD_REVERB ) mSpuStatus |= 0x02;//STAT_CD_REVERB;
+			// else mSpuStatus &= ~0x02;
+		//	mSpuStatus<1> = io_Din<1>
+
+			// if( spuCtrl & 0x04)//CTRL_EXT_PLAY ) mSpuStatus |= 0x04;//STAT_EXT_PLAY;
+			// else mSpuStatus &= ~0x04;//STAT_EXT_PLAY;
+		//	mSpuStatus<2> = io_Din<2>
+
+			// if( spuCtrl & 0x08)//CTRL_EXT_REVERB ) mSpuStatus |= 0x08;//STAT_EXT_REVERB;
+			// else mSpuStatus &= ~0x08;
+		//	mSpuStatus<3> = io_Din<3>
+
+			// mSpuStatus &= ~0x3D0;
+		//	mSpuStatus<9> = 0;
+		//	mSpuStatus<8:5> &= 0b0010;
+
+			// if( spuCtrl & 0x30)//CTRL_DMA_F ) mSpuStatus |= 0x10;//STAT_DMA_F;
+		//	if(io_Din<5:4>!=0) mSpuStatus<4> = 1;
+
+			// if( (spuCtrl & 0x30) == 0x30)//CTRL_DMA_R ) mSpuStatus |= 0x1B0;//STAT_DMA_R;
+		//	if(io_Din<5:4>==0b11){ mSpuStatus<8:7> = 0b11; mSpuStatus<5> = 1; }
+
+			// reset IRQ flag
+			// if( (spuCtrl & 0x40) == 0 ) mSpuStatus &= ~0x40;//STAT_IRQ;
+		//	mSpuStatus<6> = (io_Din<6>&mSpuStatus<6>)
+
+			mSpuStatus := 
+				0b000000 ||
+				0b0 || // <9>
+				(2#(io_Din<5:4>==0b11)) || // <8:7>
+				(io_Din<6>&mSpuStatus<6>) || // <6>
+				(io_Din<5:4>==0b11) || // <5>
+				(io_Din<5:4>!=0) || // <4>
+				io_Din<3:0>; // <3:0>
+		}
+		io_A==0x1DAC : ; // SPU status
+		io_A==0x1DAE : par{ // SPU status
+			mSpuStatus := io_Din & 0xF800;
+		}
+		io_A==0x1DB0 : ; // CD Volume Left/Right ?
+		io_A==0x1DB2 : ; // CD Volume Left/Right ?
+		io_A==0x1DB4 : ; // Extern Volume Left/Right
+		io_A==0x1DB6 : ; // Extern Volume Left/Right
+		else : par{
+			dsp.io_set(io_A, io_Din);
+		}
+	}
+
+	instruct io_get any{
+		io_A==0x1D88 : par{ // Voice ON  (0-15)
+			io_Dout = 0x0000;
+		}
+		io_A==0x1D8A : par{ // Voice ON  (16-23)
+			io_Dout = 0x0000;
+		}
+		io_A==0x1D8C : par{ // Voice OFF (0-15)
+			io_Dout = 0x0000;
+		}
+		io_A==0x1D8E : par{ // Voice OFF (16-23)
+			io_Dout = 0x0000;
+		}
+		io_A==0x1D90 : par{ // Voice 0..15 Channel FM (pitch lfo) mode (R/W)
+			io_Dout = 0x0000;
+		}
+		io_A==0x1D92 : par{ // Voice 16..23 Channel FM (pitch lfo) mode (R/W)
+			io_Dout = 0x0000;
+		}
+		io_A==0x1D94 : par{ // Voice 0..15 Channel Noise mode (R/W)
+			io_Dout = 0x0000;
+		}
+		io_A==0x1D96 : par{ // Voice 16..23 Channel Noise mode (R/W)
+			io_Dout = 0x0000;
+		}
+		io_A==0x1D98 : par{ // Voice 0..15 Channel Reverb mode (R/W)
+			io_Dout = dsp.io_get(io_A).io_Dout;
+		}
+		io_A==0x1D9A : par{ // Voice 16..23 Channel Reverb mode (R/W)
+			io_Dout = dsp.io_get(io_A).io_Dout;
+		}
+		io_A==0x1DA6 : par{
+			io_Dout = spuAddr<18:3>;
+		}
+		io_A==0x1DAA : par{ // SPU control
+			io_Dout = spuCtrl;
+		}
+		io_A==0x1DAC : par{ // Sound RAM Data Transfer Control (should be 0004h)
+			io_Dout = 0x0004;
+		}
+		io_A==0x1DAE : par{ // SPU status
+			io_Dout = mSpuStatus;
+		}
+		else : par{
+			io_Dout = dsp.io_get(io_A).io_Dout;
+		}
+	}
+
+	instruct run33 dsp.run33();
+
+	stage io_write_wait {
+		if(mem_ack){
+			finish;
+		}
+	}
+
+	stage dma_write_wait {
+		if(mem_ack){
+			dma_ack();
+			finish;
+		}
+	}
+
+	stage dsp_read_wait {
+		if(mem_ack){
+			dsp.ack();
+			finish;
+		}
+	}
+
+	stage dsp_write_wait {
+		if(mem_ack){
+			dsp.ack();
+			finish;
+		}
+	}
+
+}

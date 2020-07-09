@@ -1,0 +1,29 @@
+
+// Barrel Shifter Right Signed 24 bit
+
+circuit bsr_s24
+{
+	input din<24>, shift<4>;
+	output dout<24>;
+	instrin con(din, shift);
+
+	sel bs0<24>, bs1<24>, bs2<24>;
+
+	any{
+		shift<0> : bs0 = 24#din<23:1>;
+		else     : bs0 = din;
+	}
+	any{
+		shift<1> : bs1 = 24#bs0<23:2>;
+		else     : bs1 = bs0;
+	}
+	any{
+		shift<2> : bs2 = 24#bs1<23:4>;
+		else     : bs2 = bs1;
+	}
+	any{
+		shift<3> : dout = 24#bs2<23:8>;
+		else     : dout = bs2;
+	}
+
+}

@@ -1,0 +1,458 @@
+/*
+	GPU Gouraudshading
+		by pgate1
+*/
+
+// coordinate 11.15
+// color 8.9
+#define CMULS 9
+
+%i "inv_table.h"
+
+//%i "mul_s25s16.h"
+declare mul_s26s16 interface
+{
+	input a<26>, b<16>;
+	output dout<42>;
+	instrin con;
+	instr_arg con(a, b);
+}
+//%i "mul_s18s16.h"
+declare mul_s18s16 interface
+{
+	input a<18>, b<16>;
+	output dout<34>;
+	instrin con;
+	instr_arg con(a, b);
+}
+//%i "mul_s11.h"
+declare mul_s11 interface
+{
+	input a<11>, b<11>;
+	output dout<22>;
+	instrin con;
+	instr_arg con(a, b);
+}
+
+circuit drawGouraudShading
+{
+	input vx1<11>, vy1<11>, vc1<24>; // A点
+	input vx2<11>, vy2<11>, vc2<24>; // B点
+	input vx3<11>, vy3<11>, vc3<24>; // C点
+	input drawW<10>, drawH<10>;
+	input f_dither;
+	instrin con(vx1, vy1, vc1, vx2, vy2, vc2, vx3, vy3, vc3, drawW, drawH, f_dither);
+
+	instrin draw;
+	output drawing;
+
+	// Yソート後
+	reg_wr x1<11>, y1<11>, r1<8>, g1<8>, b1<8>;
+	reg_wr x2<11>, y2<11>, r2<8>, g2<8>, b2<8>;
+	reg_wr x3<11>, y3<11>, r3<8>, g3<8>, b3<8>;
+
+	inv_table inv_t;
+
+	mul_s11 mule1, mule2;
+	reg_wr eval;
+	sel upper;
+
+	reg_wr sy<11>, ey<11>;
+	reg_wr sx<11>, ex<11>;
+	reg_wr ar<8+CMULS>, ag<8+CMULS>, ab<8+CMULS>;
+	reg_wr pr<8+CMULS>, pg<8+CMULS>, pb<8+CMULS>;
+
+	reg_wr x<11>, y<11>;
+
+	mem dither_table[16]<4> = {	// Dither
+		-4,  0, -3,  1,
+		 2, -2,  3, -1,
+		-3,  1, -4,  0,
+		 3, -1,  2, -2
+	};
+
+	// VIEW 640x480(320x240)
+	output view_x<10>, view_y<9>;
+	instrout view_on(view_x, view_y);
+	output out_R<8>, out_G<8>, out_B<8>;
+
+	// VRAM
+	output vram_write_adrs<19>, vram_write_data<16>;
+	reg_wr vram_write_adrs_reg<19>, vram_write_data_reg<16>;
+	instrself vram_write(vram_write_adrs, vram_write_data);
+	instrout vram_write_req;
+	instrin vram_ack;
+
+input dbg_in<16>;
+output dbg<32>;
+reg_wr dbg_reg<32>;
+
+	stage_name draw_stg { task do(); }
+	stage_name vertex_change { task do(); }
+	stage_name bilinear_vbase { task do(); }
+	stage_name bilinear_hbase { task do(); }
+
+dbg = dbg_reg;
+
+	instruct draw generate draw_stg.do();
+	drawing = draw_stg.do;
+
+// eval 640*480=0x4B000
+//<18> NG
+//<19> OK
+	// eval マイナス:左凸, プラス:右凸
+	eval := (mule1.con(y3-y1, x2-x1).dout - mule2.con(x3-x1, y2-y1).dout)<19>;
+	// y2より上かどうか
+	upper = ((y2-y)<10>==0b0) & (y1!=y2);
+
+	reg_wr vram_write_wait;
+	if(vram_write){
+		vram_write_adrs_reg := vram_write_adrs;
+		vram_write_data_reg := vram_write_data;
+		vram_write_req();
+		vram_write_wait := 0b1;
+	}
+	else{
+		vram_write_adrs = vram_write_adrs_reg;
+		vram_write_data = vram_write_data_reg;
+	}
+	if(vram_write_wait & ^vram_ack) vram_write_req();
+	if(vram_ack) vram_write_wait := 0b0;
+
+	if(f_dither){ // Dither tpage<9>==0b1
+		sel d<4>;
+		d = dither_table[y<2:1>||x<2:1>];
+		sel dr<9>, dg<9>, db<9>;
+		dr = (0b0||pr<CMULS+7:CMULS>) + 9#d;
+		any{
+			dr<8:7>==0b10 : out_R = 0xFF;
+			dr<8:7>==0b11 : out_R = 0x00;
+			else : out_R = dr<7:0>;
+		}
+		dg = (0b0||pg<CMULS+7:CMULS>) + 9#d;
+		any{
+			dg<8:7>==0b10 : out_G = 0xFF;
+			dg<8:7>==0b11 : out_G = 0x00;
+			else : out_G = dg<7:0>;
+		}
+		db = (0b0||pb<CMULS+7:CMULS>) + 9#d;
+		any{
+			db<8:7>==0b10 : out_B = 0xFF;
+			db<8:7>==0b11 : out_B = 0x00;
+			else : out_B = db<7:0>;
+		}
+	}
+	else{
+		out_R = pr<CMULS+7:CMULS>;
+		out_G = pg<CMULS+7:CMULS>;
+		out_B = pb<CMULS+7:CMULS>;
+	}
+
+	stage draw_stg {
+		sel under640;
+		first_state st1;
+		par{
+			under640 = (vx1-0b01010000000)<10>; // x < 640
+		}
+		state st1 par{
+			generate vertex_change.do();
+			goto st2;
+		}
+		state st2 if((^vertex_change.do) & (^bilinear_vbase.do)){
+			y := sy;
+			generate bilinear_hbase.do();
+			goto st3;
+		}
+		state st3 if(^bilinear_hbase.do){
+			x := sx;
+			alt{
+				y<10> | (under640 & (y<0>==0b1)) : par{ // y < 0
+					y++;
+					generate bilinear_hbase.do();
+				}
+				(y==ey) | (y==(ey+1)) | (y==480)
+					| (((0b0||drawH)-y)<10>==0b1) // y > drawH
+				: par{ // end
+					goto st1;
+					finish;
+				}
+				else : par{ // y!=ey
+					goto st4;
+				}
+			}
+		}
+		state st4 if(^vram_write_wait){ // ライン描画
+			if((x!=ex) & (x!=(ex+1)) & (((0b0||drawW)-x)<10>==0b0)){ // x <= drawW
+				if(
+				//	(y<10>==0b0) &          // y >= 0
+				//	(y-0b00111100000)<10> & // y < 480
+					(x<10>==0b0) &          // x >= 0
+					(x-0b01010000000)<10> //& // x < 640
+				//	(y<0>==0b0) & (x<0>==0b0) // 320x240
+				) view_on(x<9:0>, y<8:0>);
+
+				// for 準備ポリゴン表示
+				if(
+					(x<10>==0b0) &          // x >= 0
+					((x-0b01010000000)<10>==0b0) //& // x >= 640
+				//	(y<0>==0b0) & (x<0>==0b0) // 320x240
+				) view_on((x-640)<9:0>, y<8:0>);
+
+				if(
+				//	(y<10>==0b0) & // y >= 0
+					(x<10>==0b0) & // x >= 0
+					((x-0b01010000000)<10>==0b0) // x >= 640 for 準備ポリゴン
+				){
+					vram_write(y<8:0>||x<9:0>, 0b0||pb<CMULS+7:CMULS+3>||pg<CMULS+7:CMULS+3>||pr<CMULS+7:CMULS+3>);
+				}
+			}
+			else{ // x==ex
+				y++;
+				generate bilinear_hbase.do();
+				goto st3;
+			}
+
+			if(under640 & (x<0>==0b0)){
+				x += 2;
+				pr += ar << 1;
+				pg += ag << 1;
+				pb += ab << 1;
+			}
+			else{
+				x++;
+				pr += ar;
+				pg += ag;
+				pb += ab;
+			}
+		}
+	}
+
+	stage vertex_change {
+		reg_wr tx1<11>, ty1<11>, tc1<24>;
+		reg_wr tx2<11>, ty2<11>, tc2<24>;
+		reg_wr tx3<11>, ty3<11>, tc3<24>;
+		first_state st1;
+		state st1 par{
+			tx1 := vx1; ty1 := vy1; tc1 := vc1;
+			tx2 := vx2; ty2 := vy2; tc2 := vc2;
+			tx3 := vx3; ty3 := vy3; tc3 := vc3;
+			goto st2;
+		}
+		state st2 par{
+			if((ty2-ty1)<10>){ // ty1 > ty2
+				tx1 := tx2; ty1 := ty2; tc1 := tc2;
+				tx2 := tx1; ty2 := ty1; tc2 := tc1;
+			}
+			goto st3;
+		}
+		state st3 par{
+			if((ty3-ty1)<10>){ // ty1 > ty3
+				tx1 := tx3; ty1 := ty3; tc1 := tc3;
+				tx3 := tx1; ty3 := ty1; tc3 := tc1;
+			}
+			goto st4;
+		}
+		state st4 par{
+			if((ty3-ty2)<10>){ // ty2 > ty3
+				tx2 := tx3; ty2 := ty3; tc2 := tc3;
+				tx3 := tx2; ty3 := ty2; tc3 := tc2;
+			}
+			goto st5;
+		}
+		state st5 par{
+			x1 := tx1; y1 := ty1; b1 := tc1<23:16>; g1 := tc1<15:8>; r1 := tc1<7:0>;
+			x2 := tx2; y2 := ty2; b2 := tc2<23:16>; g2 := tc2<15:8>; r2 := tc2<7:0>;
+			x3 := tx3; y3 := ty3; b3 := tc3<23:16>; g3 := tc3<15:8>; r3 := tc3<7:0>;
+			sy := ty1;
+			ey := ty3;
+			goto st1;
+			generate bilinear_vbase.do();
+			finish;
+		}
+	}
+
+	stage bilinear_vbase {
+		mul_s26s16 mulx;
+		reg_wr x12<26>, x13<26>, x23<26>;
+		reg_wr ax12<26>, ax13<26>, ax23<26>;
+		reg_wr r12<8+CMULS>, g12<8+CMULS>, b12<8+CMULS>;
+		reg_wr r13<8+CMULS>, g13<8+CMULS>, b13<8+CMULS>;
+		reg_wr r23<8+CMULS>, g23<8+CMULS>, b23<8+CMULS>;
+		reg_wr ar12<8+CMULS>, ag12<8+CMULS>, ab12<8+CMULS>;
+		reg_wr ar13<8+CMULS>, ag13<8+CMULS>, ab13<8+CMULS>;
+		reg_wr ar23<8+CMULS>, ag23<8+CMULS>, ab23<8+CMULS>;
+		mul_s18s16 mulcr, mulcg, mulcb;
+		first_state st1;
+		state st1 par{
+			x12 := x1 || 15#0b0;
+			x13 := x1 || 15#0b0;
+			x23 := x2 || 15#0b0;
+
+			inv_t.read((y2-y1)<9:0>);
+			goto st_ax12;
+		}
+		state st_ax12 par{
+			// (<11>||<15>)*<u16> = <42>
+			ax12 := mulx.con((x2-x1)||15#0b0, inv_t.dout).dout<40:15>;
+			inv_t.read((y3-y1)<9:0>);
+			goto st_ax13;
+		}
+		state st_ax13 par{
+			ax13 := mulx.con((x3-x1)||15#0b0, inv_t.dout).dout<40:15>;
+			inv_t.read((y3-y2)<9:0>);
+			goto st_ax23;
+		}
+		state st_ax23 par{
+			ax23 := mulx.con((x3-x2)||15#0b0, inv_t.dout).dout<40:15>;
+
+			inv_t.read((y2-y1)<9:0>);
+			goto st_ar12;
+		}
+		state st_ar12 par{
+			// 9#<8>||<CMULS> * <16> = <33>
+			ar12 := mulcr.con(((0b0||r2)-(0b0||r1))||CMULS#0b0, inv_t.dout).dout<8+CMULS+14:15>;
+			goto st_ag12;
+		}
+		state st_ag12 par{
+			ag12 := mulcg.con(((0b0||g2)-(0b0||g1))||CMULS#0b0, inv_t.dout).dout<8+CMULS+14:15>;
+			goto st_ab12;
+		}
+		state st_ab12 par{
+			ab12 := mulcb.con(((0b0||b2)-(0b0||b1))||CMULS#0b0, inv_t.dout).dout<8+CMULS+14:15>;
+
+			inv_t.read((y3-y1)<9:0>);
+			goto st_ar13;
+		}
+		state st_ar13 par{
+			ar13 := mulcr.con(((0b0||r3)-(0b0||r1))||CMULS#0b0, inv_t.dout).dout<8+CMULS+14:15>;
+			goto st_ag13;
+		}
+		state st_ag13 par{
+			ag13 := mulcg.con(((0b0||g3)-(0b0||g1))||CMULS#0b0, inv_t.dout).dout<8+CMULS+14:15>;
+			goto st_ab13;
+		}
+		state st_ab13 par{
+			ab13 := mulcb.con(((0b0||b3)-(0b0||b1))||CMULS#0b0, inv_t.dout).dout<8+CMULS+14:15>;
+
+			inv_t.read((y3-y2)<9:0>);
+			goto st_ar23;
+		}
+		state st_ar23 par{
+			ar23 := mulcr.con(((0b0||r3)-(0b0||r2))||CMULS#0b0, inv_t.dout).dout<8+CMULS+14:15>;
+			goto st_ag23;
+		}
+		state st_ag23 par{
+			ag23 := mulcg.con(((0b0||g3)-(0b0||g2))||CMULS#0b0, inv_t.dout).dout<8+CMULS+14:15>;
+			goto st_ab23;
+		}
+		state st_ab23 par{
+			ab23 := mulcb.con(((0b0||b3)-(0b0||b2))||CMULS#0b0, inv_t.dout).dout<8+CMULS+14:15>;
+
+			r12 := r1 || CMULS#0b0;
+			g12 := g1 || CMULS#0b0;
+			b12 := b1 || CMULS#0b0;
+			r13 := r1 || CMULS#0b0;
+			g13 := g1 || CMULS#0b0;
+			b13 := b1 || CMULS#0b0;
+			r23 := r2 || CMULS#0b0;
+			g23 := g2 || CMULS#0b0;
+			b23 := b2 || CMULS#0b0;
+			goto st1;
+			finish;
+		}
+	}
+
+	stage bilinear_hbase {
+		sel sr<8>, sg<8>, sb<8>;
+		sel er<8>, eg<8>, eb<8>;
+		mul_s18s16 mulca;
+		first_state st1;
+		par{
+			if(eval){ // 左に凸
+				if(upper){ // 上
+					sr = r12<CMULS+7:CMULS>; sg = g12<CMULS+7:CMULS>; sb = b12<CMULS+7:CMULS>;
+				}
+				else{ // 下
+					sr = r23<CMULS+7:CMULS>; sg = g23<CMULS+7:CMULS>; sb = b23<CMULS+7:CMULS>;
+				}
+				er = r13<CMULS+7:CMULS>; eg = g13<CMULS+7:CMULS>; eb = b13<CMULS+7:CMULS>;
+			}
+			else{ // 右に凸
+				sr = r13<CMULS+7:CMULS>; sg = g13<CMULS+7:CMULS>; sb = b13<CMULS+7:CMULS>;
+				if(upper){ // 上
+					er = r12<CMULS+7:CMULS>; eg = g12<CMULS+7:CMULS>; eb = b12<CMULS+7:CMULS>;
+				}
+				else{ // 下
+					er = r23<CMULS+7:CMULS>; eg = g23<CMULS+7:CMULS>; eb = b23<CMULS+7:CMULS>;
+				}
+			}
+		}
+
+		state st1 par{
+			if(eval){ // 左に凸
+				if(upper){ // 上
+					sx := x12<25:15>;
+				}
+				else{ // 下
+					sx := x23<25:15>;
+				}
+				ex := x13<25:15>;
+			}
+			else{ // 右に凸
+				sx := x13<25:15>;
+				if(upper){ // 上
+					ex := x12<25:15>;
+				}
+				else{ // 下
+					ex := x23<25:15>;
+				}
+			}
+			goto st2;
+		}
+		state st2 par{
+			if((ex-sx)<10>){ // sx > ex
+				sx := 640;
+				ex := 640;
+				goto st_ab;
+			}
+			else goto st_ar;
+
+			inv_t.read((ex-sx)<9:0>);
+		}
+		state st_ar par{
+			ar := mulca.con(((0b0||er)-(0b0||sr))||CMULS#0b0, inv_t.dout).dout<8+CMULS+14:15>;
+			goto st_ag;
+		}
+		state st_ag par{
+			ag := mulca.con(((0b0||eg)-(0b0||sg))||CMULS#0b0, inv_t.dout).dout<8+CMULS+14:15>;
+			goto st_ab;
+		}
+		state st_ab par{
+			ab := mulca.con(((0b0||eb)-(0b0||sb))||CMULS#0b0, inv_t.dout).dout<8+CMULS+14:15>;
+
+			pr := sr || CMULS#0b0;
+			pg := sg || CMULS#0b0;
+			pb := sb || CMULS#0b0;
+
+			if(upper){ // 上
+				x12 += ax12;
+				r12 += ar12;
+				g12 += ag12;
+				b12 += ab12;
+			}
+			else{
+				x23 += ax23;
+				r23 += ar23;
+				g23 += ag23;
+				b23 += ab23;
+			}
+			x13 += ax13;
+			r13 += ar13;
+			g13 += ag13;
+			b13 += ab13;
+			goto st1;
+			finish;
+		}
+	}
+
+}
