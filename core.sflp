@@ -278,7 +278,7 @@ circuit core
 //psx.sw_cache_off();
 //psx.sw_intpl_off();
 //	if(SW<15>) psx.sw_reverb_off();
-	if(SW<16>) psx.sw_spu_off();
+//	if(SW<16>) psx.sw_spu_off();
 	if(SW<17>) psx.sw_kernel_run();
 psx.dbg_in = SW<15:0>;
 
@@ -327,32 +327,37 @@ psx.dbg_in = SW<15:0>;
 	alt{
 		gpu_wait_ack.do | spu_wait_ack.do : ;
 
-// vw,sr,vr,sw 動かない？
-// sr,vw,vr,sw GPUちょいノイズ
-// sr,vr,vw,sw GPUノイズだがどっちもいける 3 1 3 2 3
-// sr,vr,sw,vw GPUノイズだがどっちもいける 3 1 3 2 3
-// vr,vw,sr,sw
+// vw,sr,vr,sw GPUノイズ
+//055256
+//175256
+//155253
+//042354
+// sr,vw,vr,sw 
+// sr,vr,vw,sw 
+// sr,vr,sw,vw 
+// vr,vw,sr,sw ちょいノイズ
+//076356
+//146354
 
-		psx.vram_read_req : par{
-			sram.read(0b1||psx.vram_adrs);
-			generate gpu_wait_ack.do();
-		}
 		psx.vram_write_req : par{
 			sram.write(0b1||psx.vram_adrs, psx.vram_write_data, 0b11);
 			generate gpu_wait_ack.do();
 		}
+
 		psx.spu_mem_read_req & ^psx.sw_spu_off : par{
 			sram.read(0b00||psx.spu_mem_A);
 			generate spu_wait_ack.do();
 		}
 
+		psx.vram_read_req : par{
+			sram.read(0b1||psx.vram_adrs);
+			generate gpu_wait_ack.do();
+		}
 
 		psx.spu_mem_write_req & ^psx.sw_spu_off : par{
 			sram.write(0b00||psx.spu_mem_A, psx.spu_mem_Din, 0b11);
 			generate spu_wait_ack.do();
 		}
-
-
 
 	}
 	psx.spu_mem_Dout = sram.rdata;
