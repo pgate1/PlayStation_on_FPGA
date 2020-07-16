@@ -48,15 +48,18 @@ circuit GPU_core
 	reg_wr pu4<8>, pv4<8>;
 	reg_wr clut<16>, tpage<16>;
 
+	instrin sw_outview_on;
+
 	instrout view_on;
 	output view_x<10>, view_y<9>;
 	output view_R<8>, view_G<8>, view_B<8>;
 
 	// for VRAM
-	output vram_adrs<19>, vram_write_data<16>;
-	instrout vram_write_req(vram_adrs, vram_write_data);
-	instrout vram_read_req(vram_adrs);
-	instrin vram_ack;
+	output vram_write_adrs<19>, vram_write_data<16>;
+	instrout vram_write_req(vram_write_adrs, vram_write_data);
+	output vram_read_adrs<19>;
+	instrout vram_read_req(vram_read_adrs);
+	instrin vram_write_ack, vram_read_ack;
 	input vram_read_data<16>;
 	reg_wr vram_read_data_reg<16>;
 
@@ -64,11 +67,11 @@ circuit GPU_core
 	reg_wr io_write_data<32>;
 
 	// WriteData,ReadDataóp
-	sel io_vram_adrs<19>, io_vram_din<16>;
-	reg_wr io_vram_adrs_reg<19>, io_vram_din_reg<16>;
-	instrself vram_write(io_vram_adrs, io_vram_din);
-	instrself vram_read(io_vram_adrs);
-	reg_wr vram_wait;
+	sel io_vram_write_adrs<19>, io_vram_read_adrs<19>, io_vram_din<16>;
+	reg_wr io_vram_write_adrs_reg<19>, io_vram_read_adrs_reg<19>, io_vram_din_reg<16>;
+	instrself vram_write(io_vram_write_adrs, io_vram_din);
+	instrself vram_read(io_vram_read_adrs);
+	reg_wr vram_read_wait, vram_write_wait;
 
 	instrself halt(halt_sel);
 	sel halt_sel<8>;
@@ -149,6 +152,8 @@ dbg = dbg_reg;
 		if(status<27>){
 		//	dout = 0x00000000;
 //if(VramData_image.write_vram) halt(0xA4); // no
+//if(WriteData) halt(0xA4); // no
+//if(vram_write_req) halt(0xA4); // no
 			generate VramData_image.read_vram();
 		}
 		else{
@@ -167,7 +172,6 @@ dbg = dbg_reg;
 
 	instruct WriteData par{
 		sel cmd<8>;
-//if(ReadData_imagesent.do | WriteData_imagesent.do) halt(0x93);
 		CommandBuffer[BufferOffset] := din;
 		if(BufferOffset==0){
 			cmd = din<31:24>;
@@ -248,6 +252,7 @@ dbg = dbg_reg;
 				BufferOffset==3 : par{
 //if(VramData_image.read_vram) halt(0xA3); // no
 //if(ReadData) halt(0xA3); // no
+//if(vram_read_req) halt(0xA3); // no
 					generate VramData_image.write_vram(din);
 				}
 				else : par{
@@ -295,6 +300,11 @@ dbg_reg := 0x0000||cmd||0x00;
 		status |= 0x04000000;
 	}
 
+	instruct sw_outview_on par{
+		gs.sw_outview_on();
+		rect.sw_outview_on();
+	}
+
 gs.dbg_in = dbg_in;
 	sel f_dither;
 	f_dither = tpage<9> & (cmd_reg<7:4>==0x3);
@@ -333,14 +343,18 @@ gs.dbg_in = dbg_in;
 	}
 
 	instruct gs.vram_write_req par{
+//if(VramData_image.read_vram | ReadData | vram_read_req) halt(0xA1); // no
 		vram_write_req(gs.vram_write_adrs, gs.vram_write_data);
 	}
 	instruct rect.vram_write_req par{
+//if(VramData_image.read_vram | ReadData | vram_read_req) halt(0xA2); // no
 		vram_write_req(rect.vram_write_adrs, rect.vram_write_data);
 	}
 	instruct texrect.vram_read_req par{
 		vram_read_req(texrect.vram_read_adrs);
 //if(VramData_image.write_vram) halt(0xA2); // no
+//if(WriteData) halt(0xA3); // no
+//if(vram_write_req) halt(0xA4); // no
 	}
 
 //if(gs.vram_write_req & texrect.vram_read_req) halt(0xA6);
@@ -356,52 +370,62 @@ gs.dbg_in = dbg_in;
 //if(VramData_image.write_vram & VramData_image.read_vram) halt(0xA1); // no
 //if(VramData_image.write_vram & vram_read_req) halt(0xA2); // Ç±ÇÍ
 //if(VramData_image.read_vram & vram_write_req) halt(0xA3); // Ç±ÇÍ
+// Ç∆ÇËÇ†Ç¶Ç∏read_adrsÇ∆write_adrsÇï™ÇØÇƒÉmÉCÉYÇè¡ÇµÇΩ
 
-	instruct vram_ack par{
+	instruct vram_write_ack par{
 		gs.vram_ack();
 		rect.vram_ack();
+	}
+	instruct vram_read_ack par{
 		texrect.vram_ack();
 	}
 	texrect.vram_read_data = vram_read_data;
 
 	instruct vram_write par{
 //if(vram_read_req) halt(0xA1); // no
-		vram_write_req(io_vram_adrs, io_vram_din);
-		io_vram_adrs_reg := io_vram_adrs;
+		vram_write_req(io_vram_write_adrs, io_vram_din);
+		io_vram_write_adrs_reg := io_vram_write_adrs;
 		io_vram_din_reg := io_vram_din;
-		vram_wait := 0b1;
+		vram_write_wait := 0b1;
 	}
-	if(vram_wait & ^vram_ack) vram_write_req(io_vram_adrs_reg, io_vram_din_reg);
+	if(vram_write_wait & ^vram_write_ack) vram_write_req(io_vram_write_adrs_reg, io_vram_din_reg);
+	if(vram_write_ack){
+		vram_write_wait := 0b0;
+	}
 	instruct vram_read par{
 //if(vram_write_req) halt(0xA2); // no
-		vram_read_req(io_vram_adrs);
-		io_vram_adrs_reg := io_vram_adrs;
-		vram_wait := 0b1;
+		vram_read_req(io_vram_read_adrs);
+		io_vram_read_adrs_reg := io_vram_read_adrs;
+		vram_read_wait := 0b1;
 	}
-	if(vram_wait & ^vram_ack) vram_read_req(io_vram_adrs_reg);
-	if(vram_ack){
-		vram_wait := 0b0;
+	if(vram_read_wait & ^vram_read_ack) vram_read_req(io_vram_read_adrs_reg);
+	if(vram_read_ack){
+		vram_read_wait := 0b0;
 		vram_read_data_reg := vram_read_data;
 	}
 
 vraming = VramData_image.write_vram | VramData_image.read_vram;
 
 	stage VramData_image {
-		sel vram_p<19>, vram_width<16>, vram_height<16>;
 		reg_wr pix, curPixel<19>;
 		first_state st_pix;
-		par{
+		state st_pix if((
+			(VramData_image.read_vram & (^vram_read_wait)) | 
+			(VramData_image.write_vram & (^vram_write_wait))
+			) & (^draw_stg.do)){
+
+			sel vram_p<19>, vram_width<16>, vram_height<16>;
 			vram_p = CommandBuffer[1]<24:16> || CommandBuffer[1]<9:0>;
 			vram_width = CommandBuffer[2]<15:0>;
 			vram_height = CommandBuffer[2]<31:16>;
-		}
-		state st_pix if((^vram_wait) & (^draw_stg.do)){
 
 			if(VramData_image.write_vram){
+//if(vram_read_req) halt(0xA6); // no
 				vram_write(vram_p + curPixel, io_write_data<15:0>);
 				io_write_data := io_write_data >> 16;
 			}
 			if(VramData_image.read_vram){
+//if(vram_write_req) halt(0xA7); // no
 				vram_read(vram_p + curPixel);
 			}
 			goto st_wait;
@@ -424,7 +448,10 @@ vraming = VramData_image.write_vram | VramData_image.read_vram;
 				VramPosX++;
 			}
 		}
-		state st_wait if(^vram_wait){
+		state st_wait if(
+			(VramData_image.read_vram & (^vram_read_wait)) | 
+			(VramData_image.write_vram & (^vram_write_wait))
+			){
 
 			if(VramData_image.write_vram){
 				goto st_pix;

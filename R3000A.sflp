@@ -79,7 +79,7 @@ circuit R3000A
 //sel forwarding<4>;
 	reg_wr cpr0_rd_data_reg<32>;
 	instrself rt_data_set(data), rd_data_set(data);
-	instrself delayslot_opcode_invalid;
+//	instrself delayslot_opcode_invalid;
 
 	instrself stage_MEM;
 	instrself write_mem_rt;
@@ -300,13 +300,13 @@ dbg = dbg_reg;
 	}
 
 	instruct stage_ID par{
-		if(delayslot_opcode_invalid){
-			op := 0b00000000;
-			rt := 0b00000;
-			rd := 0b00000;
-			funct := 0b00000000;
-		}
-		else{
+	//	if(delayslot_opcode_invalid){
+	//		op := 0b00000000;
+	//		rt := 0b00000;
+	//		rd := 0b00000;
+	//		funct := 0b00000000;
+	//	}
+	//	else{
 			op := 0b00 || opcode<31:26>;
 			rs := opcode<25:21>;
 			rt := opcode<20:16>;
@@ -315,7 +315,7 @@ dbg = dbg_reg;
 			rd := opcode<15:11>;
 			reg_sa := opcode<10:6>;
 			funct := 0b00 || opcode<5:0>;
-		}
+	//	}
 
 		// jmp_op := <31:26>
 		jmp_target := opcode<25:0>;

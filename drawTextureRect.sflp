@@ -95,8 +95,8 @@ circuit drawTextureRect
 					pv += av;
 				}
 				(y==vy4) | (y==(vy4+1)) : par{ // end
-					goto st1;
-					finish;
+					goto st1; finish;
+//goto st5;
 				}
 				else : par{ // y!=ey
 					goto st4;
@@ -130,6 +130,16 @@ circuit drawTextureRect
 				pu += au;
 			}
 		}
+/*
+		state st5 par{
+			reg_wr wait_count<3>;
+			wait_count++;
+			if(/&wait_count){
+				goto st1;
+				finish;
+			}
+		}
+*/
 	}
 
 	stage bilinear_vbase {

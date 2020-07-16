@@ -18,6 +18,7 @@ circuit DMA_SPU
 	output A<21>;
 	instrout wram_read(A);
 	input Din<32>;
+	reg_wr Din_reg<32>;
 
 	output Dout<16>;
 	reg_wr Dout_reg<16>;
@@ -66,7 +67,7 @@ circuit DMA_SPU
 	stage run {
 		reg_wr wait_count<5>;
 		reg_wr madr<21>;
-		reg_wr dma_count<32>, dma_data<16>;
+		reg_wr dma_count<32>;
 		first_state st1;
 		state st1 par{
 			// uint32 madr = DmaMADR[n] & 0x1FFFFF;
@@ -84,17 +85,20 @@ circuit DMA_SPU
 			wram_read(madr);
 			madr += 2;
 			dma_count++;
+			goto st3w;
+		}
+		state st3w if(wram_ack){
+			Din_reg := Din;
 			goto st4;
 		}
-		state st4 if(wram_ack){
-			spu_dma_write(Din<15:0>);
-			dma_data := Din<31:16>;
+		state st4 par{
+			spu_dma_write(Din_reg<15:0>);
 			madr += 2;
 			dma_count++;
 			goto st5;
 		}
 		state st5 if(spu_dma_ack){ // ‚±‚±‘Ò‚¿‚Å•K—v
-			spu_dma_write(dma_data);
+			spu_dma_write(Din_reg<31:16>);
 			if(dma_count==dma_size) goto st6;
 			else goto st3;
 		}

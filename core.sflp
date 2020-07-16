@@ -99,9 +99,6 @@ circuit core
 	stage_name soundexe_read { task do(); }
 	stage_name sram_clear { task do(); }
 
-	stage_name spu_wait_ack { task do(); }
-	stage_name gpu_wait_ack { task do(); }
-
 	if(reset){
 		reset := 0b0;
 		generate flash2ram_bios.do();
@@ -279,8 +276,10 @@ circuit core
 //psx.sw_intpl_off();
 //	if(SW<15>) psx.sw_reverb_off();
 //	if(SW<16>) psx.sw_spu_off();
-	if(SW<17>) psx.sw_kernel_run();
-psx.dbg_in = SW<15:0>;
+	reg_wr sw_16; sw_16 := SW<16>;
+	if(sw_16) psx.sw_outview_on();
+	reg_wr sw_17; sw_17 := SW<17>;
+	if(sw_17) psx.sw_kernel_run();
 
 	any{
 		soundexe_read.do : seg = 0x0000||tA<20:5>;
@@ -320,62 +319,58 @@ psx.dbg_in = SW<15:0>;
 	psx.Din = sdram_rdata;
 	if(sdram_ack) psx.bios_ack();
 
-//if(psx.spu_mem_read_req & psx.spu_mem_write_req) halt(0x31);
-//if(psx.vram_read_req & psx.vram_write_req) halt(0x32);
+psx.intwait_scale = 0b0_110_100_101_101_100;//SW<15:0>;
 
-	// Ç∆ÇËÇ†Ç¶Ç∏GPUÇÃï˚ÇóDêÊÇ∑ÇÈ
+//if(psx.spu_mem_read_req & psx.spu_mem_write_req) halt(0x31); // no
+//if(psx.vram_read_req & psx.vram_write_req) halt(0x32); // Ç±ÇÍ
+
+	reg_wr gpu_read_wait_ack, gpu_write_wait_ack, spu_wait_ack;
 	alt{
-		gpu_wait_ack.do | spu_wait_ack.do : ;
-
-// vw,sr,vr,sw GPUÉmÉCÉY
-//055256
-//175256
-//155253
-//042354
-// sr,vw,vr,sw 
-// sr,vr,vw,sw 
-// sr,vr,sw,vw 
-// vr,vw,sr,sw ÇøÇÂÇ¢ÉmÉCÉY
-//076356
-//146354
-
-		psx.vram_write_req : par{
-			sram.write(0b1||psx.vram_adrs, psx.vram_write_data, 0b11);
-			generate gpu_wait_ack.do();
-		}
+		gpu_read_wait_ack | gpu_write_wait_ack | spu_wait_ack : ;
 
 		psx.spu_mem_read_req & ^psx.sw_spu_off : par{
 			sram.read(0b00||psx.spu_mem_A);
-			generate spu_wait_ack.do();
+			spu_wait_ack := 0b1;
 		}
 
 		psx.vram_read_req : par{
-			sram.read(0b1||psx.vram_adrs);
-			generate gpu_wait_ack.do();
+			sram.read(0b1||psx.vram_read_adrs);
+			gpu_read_wait_ack := 0b1;
+		}
+
+		psx.vram_write_req : par{
+			sram.write(0b1||psx.vram_write_adrs, psx.vram_write_data, 0b11);
+			gpu_write_wait_ack := 0b1;
 		}
 
 		psx.spu_mem_write_req & ^psx.sw_spu_off : par{
 			sram.write(0b00||psx.spu_mem_A, psx.spu_mem_Din, 0b11);
-			generate spu_wait_ack.do();
+			spu_wait_ack := 0b1;
 		}
-
 	}
 	psx.spu_mem_Dout = sram.rdata;
 	psx.vram_read_data = sram.rdata;
 
 	if(psx.sw_spu_off) psx.spu_mem_ack();
 
-	stage gpu_wait_ack {
+	if(gpu_read_wait_ack){
 		if(sram.ack){
-			psx.vram_ack();
-			finish;
+			psx.vram_read_ack();
+			gpu_read_wait_ack := 0b0;
 		}
 	}
 
-	stage spu_wait_ack {
+	if(gpu_write_wait_ack){
+		if(sram.ack){
+			psx.vram_write_ack();
+			gpu_write_wait_ack := 0b0;
+		}
+	}
+
+	if(spu_wait_ack){
 		if(sram.ack){
 			psx.spu_mem_ack();
-			finish;
+			spu_wait_ack := 0b0;
 		}
 	}
 

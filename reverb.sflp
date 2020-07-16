@@ -3,8 +3,7 @@
 		by pgate1
 */
 
-#define USE_BUF_RAM
-// 内蔵RAMでも問題ないがタイミング問題なくても音がおかしい場合がある？
+#define USE_BUF_RAM // 内蔵RAMでも問題ない
 
 %i "ram_16x32k.h"
 

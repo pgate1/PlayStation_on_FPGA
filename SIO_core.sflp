@@ -30,7 +30,7 @@ circuit SIO_core
 
 	instrin run33;
 	reg_wr count_rst;
-	instrself interrupt_end;
+	instrout interrupt_off;
 	instrout interrupt_out;
 
 	instrself halt(halt_sel);
@@ -38,7 +38,8 @@ circuit SIO_core
 	reg_wr halt_code_reg<8>;
 	output halt_code<8>;
 
-input dbg_in<16>;
+//input dbg_in<16>;
+input intwaitm<4>;
 
 	stage_name WriteData_stg { task do(din_reg); }
 	stage_name interrupt_wait { task do(count_rst); }
@@ -63,18 +64,18 @@ if(WriteData_stg.do) halt(0x44);
 	}
 
 	instruct WriteCtrl par{
-if(WriteData_stg.do) halt(0x44);
+//if(WriteData_stg.do) halt(0x44);
 		sel ctrl<16>;
 		ctrl = io_din & ^0x0010/*RESET_ERR*/;
 		CtrlReg := ctrl;
-	//	if(io_din<4>) StatReg &= ^0x0200;//IRQ;
 		if(ctrl<6>/*SIO_RESET*/ | (ctrl==0x0000)){
 			padst := 0; mcdst := 0; parp := 0;
-		//	StatReg := 1 | 4;//TX_RDY | TX_EMPTY;
-			interrupt_end();
+			StatReg := 1 | 4;//TX_RDY | TX_EMPTY;
+			interrupt_off();
 		}
-		StatReg := StatReg<15:10> || (StatReg<9>&(^io_din<4>)) || StatReg<8:4> ||
-			(StatReg<3:0>|((4#(ctrl<6>|(ctrl==0x0000)))&0x5));
+		else{
+			if(io_din<4>) StatReg &= ^0x0200;//IRQ;
+		}
 	}
 
 	instruct WriteBaud par{
@@ -206,16 +207,16 @@ if(WriteData_stg.do) halt(0x44);
 				mcdst==0 : goto st30;
 				mcdst==1 : par{
 					generate interrupt_wait.do(0b1);
-					if(rdwr){
+					if(rdwr!=0){
 						parp++;
-						goto st1;
-						finish;
 					}
-					parp := 1;
-					any{
-						din_reg==0x52 : rdwr := 1;
-						din_reg==0x57 : rdwr := 2;
-						else : mcdst := 0;
+					else{ // 20200712
+						parp := 1;
+						any{
+							din_reg==0x52 : rdwr := 1;
+							din_reg==0x57 : rdwr := 2;
+							else : mcdst := 0;
+						}
 					}
 					goto st1;
 					finish;
@@ -314,14 +315,14 @@ if(WriteData_stg.do) halt(0x44);
 		}
 		state st2 if(run33){
 			int_wait_count++;
-			if(int_wait_count==((BaudReg<<(0b000+(0b0||dbg_in<11:10>)))||0b000)){ // 320:<<1
+			if(int_wait_count==((BaudReg<<intwaitm<0>)||0b000)){
 				StatReg |= 0x0200; //IRQ;
 				interrupt_out();
 				goto st1;
 				finish;
 			}
 			if(count_rst) goto st1;
-			if(interrupt_end){
+			if(interrupt_off){
 				goto st1;
 				finish;
 			}

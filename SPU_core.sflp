@@ -12,7 +12,7 @@ circuit SPU_core
 	instrin io_get(io_A);
 	output io_Dout<16>;
 
-	reg_wr spuAddr<19>, spuCtrl<16>, mSpuStatus<16>;
+	reg_wr spuAddr<19>, spuCtrl<16>, status<16>;
 
 	input dma_din<16>;
 	instrin dma_write_req(dma_din);
@@ -156,48 +156,48 @@ dbg = dsp.dbg;
 		io_A==0x1DAA : par{ // SPU control
 			spuCtrl := io_Din;
 
-			// if( spuCtrl & 0x01)//CTRL_CD_PLAY ) mSpuStatus |= 0x01;//CTRL_CD_PLAY;
-			// else mSpuStatus &= ~0x01;
-		//	mSpuStatus<0> = io_Din<0>
+			// if( spuCtrl & 0x01)//CTRL_CD_PLAY ) SpuStatus |= 0x01;//CTRL_CD_PLAY;
+			// else SpuStatus &= ~0x01;
+		//	status<0> = io_Din<0>
 
-			// if( spuCtrl & 0x02)//CTRL_CD_REVERB ) mSpuStatus |= 0x02;//STAT_CD_REVERB;
-			// else mSpuStatus &= ~0x02;
-		//	mSpuStatus<1> = io_Din<1>
+			// if( spuCtrl & 0x02)//CTRL_CD_REVERB ) SpuStatus |= 0x02;//STAT_CD_REVERB;
+			// else SpuStatus &= ~0x02;
+		//	status<1> = io_Din<1>
 
-			// if( spuCtrl & 0x04)//CTRL_EXT_PLAY ) mSpuStatus |= 0x04;//STAT_EXT_PLAY;
-			// else mSpuStatus &= ~0x04;//STAT_EXT_PLAY;
-		//	mSpuStatus<2> = io_Din<2>
+			// if( spuCtrl & 0x04)//CTRL_EXT_PLAY ) SpuStatus |= 0x04;//STAT_EXT_PLAY;
+			// else SpuStatus &= ~0x04;//STAT_EXT_PLAY;
+		//	status<2> = io_Din<2>
 
-			// if( spuCtrl & 0x08)//CTRL_EXT_REVERB ) mSpuStatus |= 0x08;//STAT_EXT_REVERB;
-			// else mSpuStatus &= ~0x08;
-		//	mSpuStatus<3> = io_Din<3>
+			// if( spuCtrl & 0x08)//CTRL_EXT_REVERB ) SpuStatus |= 0x08;//STAT_EXT_REVERB;
+			// else SpuStatus &= ~0x08;
+		//	status<3> = io_Din<3>
 
-			// mSpuStatus &= ~0x3D0;
-		//	mSpuStatus<9> = 0;
-		//	mSpuStatus<8:5> &= 0b0010;
+			// SpuStatus &= ~0x3D0;
+		//	status<9> = 0;
+		//	status<8:5> &= 0b0010;
 
-			// if( spuCtrl & 0x30)//CTRL_DMA_F ) mSpuStatus |= 0x10;//STAT_DMA_F;
-		//	if(io_Din<5:4>!=0) mSpuStatus<4> = 1;
+			// if( spuCtrl & 0x30)//CTRL_DMA_F ) SpuStatus |= 0x10;//STAT_DMA_F;
+		//	if(io_Din<5:4>!=0) SpuStatus<4> = 1;
 
-			// if( (spuCtrl & 0x30) == 0x30)//CTRL_DMA_R ) mSpuStatus |= 0x1B0;//STAT_DMA_R;
-		//	if(io_Din<5:4>==0b11){ mSpuStatus<8:7> = 0b11; mSpuStatus<5> = 1; }
+			// if( (spuCtrl & 0x30) == 0x30)//CTRL_DMA_R ) SpuStatus |= 0x1B0;//STAT_DMA_R;
+		//	if(io_Din<5:4>==0b11){ SpuStatus<8:7> = 0b11; SpuStatus<5> = 1; }
 
 			// reset IRQ flag
-			// if( (spuCtrl & 0x40) == 0 ) mSpuStatus &= ~0x40;//STAT_IRQ;
-		//	mSpuStatus<6> = (io_Din<6>&mSpuStatus<6>)
+			// if( (spuCtrl & 0x40) == 0 ) SpuStatus &= ~0x40;//STAT_IRQ;
+		//	status<6> = (io_Din<6>&status<6>)
 
-			mSpuStatus := 
+			status := 
 				0b000000 ||
 				0b0 || // <9>
 				(2#(io_Din<5:4>==0b11)) || // <8:7>
-				(io_Din<6>&mSpuStatus<6>) || // <6>
+				(io_Din<6>&status<6>) || // <6>
 				(io_Din<5:4>==0b11) || // <5>
 				(io_Din<5:4>!=0) || // <4>
 				io_Din<3:0>; // <3:0>
 		}
 		io_A==0x1DAC : ; // SPU status
 		io_A==0x1DAE : par{ // SPU status
-			mSpuStatus := io_Din & 0xF800;
+			status := io_Din & 0xF800;
 		}
 		io_A==0x1DB0 : ; // CD Volume Left/Right ?
 		io_A==0x1DB2 : ; // CD Volume Left/Right ?
@@ -249,7 +249,7 @@ dbg = dsp.dbg;
 			io_Dout = 0x0004;
 		}
 		io_A==0x1DAE : par{ // SPU status
-			io_Dout = mSpuStatus;
+			io_Dout = status;
 		}
 		else : par{
 			io_Dout = dsp.io_get(io_A).io_Dout;

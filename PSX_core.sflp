@@ -73,15 +73,18 @@ circuit PSX_core
 	DMA_OTC dma_OTC;
 
 	GPU_core gpu;
+	instrin sw_outview_on;
 	instrout view_on;
 	output view_x<10>, view_y<9>;
 	output view_R<8>, view_G<8>, view_B<8>;
 
-	output vram_adrs<19>, vram_write_data<16>;
-	instrout vram_write_req(vram_adrs, vram_write_data);
-	instrout vram_read_req(vram_adrs);
-	instrin vram_ack;
+	output vram_write_adrs<19>, vram_read_adrs<19>, vram_write_data<16>;
+	instrout vram_write_req(vram_write_adrs, vram_write_data);
+	instrout vram_read_req(vram_read_adrs);
+	instrin vram_read_ack, vram_write_ack;
 	input vram_read_data<16>;
+
+	input intwait_scale<16>;
 
 	instrin sw_kernel_run;
 	instrin vblank_in;
@@ -136,12 +139,12 @@ output vraming;
 		read_wram_wait.do | read_bios_wait.do | read_gpu_wait.do | read_io_wait.do |
 		write_wram_wait.do;
 
-if(dma_GPU.running & dma_SPU.running) halt(0x40);
-if(dma_GPU.running & dma_OTC.running) halt(0x41);
+//if(dma_GPU.running & dma_SPU.running) halt(0x40); // no
+//if(dma_GPU.running & dma_OTC.running) halt(0x41); // no
 //if(dma_GPU.running & (cpu_read.do | cpu_write.do)) halt(0x42);
-if(dma_GPU.running & cdr.running) halt(0x43);
-if(dma_GPU.running & sio.running) halt(0x44);
-if(cpu_read.do & cpu_write.do) halt(0x45);
+//if(dma_GPU.running & cdr.running) halt(0x43); // no
+//if(dma_GPU.running & sio.running) halt(0x44); // no
+//if(cpu_read.do & cpu_write.do) halt(0x45); // no
 
 	instruct run par{
 		alt{
@@ -209,7 +212,7 @@ if(cpu_read.do & cpu_write.do) halt(0x45);
 	instruct dma_GPU.wram_read WRAM_READ(dma_GPU.A);
 	if(wram_ack) dma_GPU.wram_ack();
 	if(gpu.read_ack){
-		dma_GPU.vram_ack();
+		dma_GPU.gpu_vram_ack();
 		dma_GPU.Din = gpu.dout;
 	}
 	else{
@@ -217,8 +220,6 @@ if(cpu_read.do & cpu_write.do) halt(0x45);
 	}
 	instruct dma_GPU.gpu_dma_write_req gpu.WriteData(dma_GPU.Dout);
 	dma_GPU.gpu_busy = gpu.busy;
-	dma_GPU.gpu_drawing = gpu.drawing;
-//	instruct dma_GPU.gpu_status_idle gpu.StatusIdle(dma_GPU.gpu_idle);
 	instruct dma_GPU.gpu_dma_read_req gpu.ReadData();
 	instruct dma_GPU.wram_write par{
 		WRAM_WRITE(dma_GPU.A, dma_GPU.Dout, 4);
@@ -232,7 +233,10 @@ if(cpu_read.do & cpu_write.do) halt(0x45);
 			IREG |= 0x0008;
 		}
 	}
-dma_GPU.dbg_in = dbg_in;
+	dma_GPU.intwaitm_m2v = 0b0 || intwait_scale<2:0>;
+	dma_GPU.intwaitm_chain = 0b0 || intwait_scale<5:3>;
+	dma_GPU.intwaitm_v2m = 0b0 || intwait_scale<8:6>;
+//dma_GPU.dbg_in = dbg_in;
 //dbg = dma_GPU.dbg;
 
 	dma_SPU.DmaMADR_4 = DmaMADR_4;
@@ -265,20 +269,26 @@ dma_GPU.dbg_in = dbg_in;
 			IREG |= 0x0008;
 		}
 	}
-dma_OTC.dbg_in = dbg_in;
+	dma_OTC.intwaitm = 0b0 || intwait_scale<11:9>;
+//dma_OTC.dbg_in = dbg_in;
 //dbg = dma_OTC.dbg;
 
 	instruct cdr.interrupt_out par{
 		IREG |= 0x0004;
 	}
-cdr.dbg_in = dbg_in;
+	cdr.intwaitm = 0b0 || intwait_scale<14:12>;
+//cdr.dbg_in = dbg_in;
 //dbg2 = 0x0000 || cdr.dbg;
 
 	sio.key_in = key_in;
 	instruct sio.interrupt_out par{
 		IREG |= 0x0080;
 	}
-sio.dbg_in = dbg_in;
+	instruct sio.interrupt_off par{
+		IREG &= ^0x0080;
+	}
+	sio.intwaitm = 0b000 || intwait_scale<15>;
+//sio.dbg_in = dbg_in;
 
 	instruct demo.gpu_write_req if(^sw_kernel_run) gpu.WriteData(demo.Dout);
 	demo.drawing = gpu.drawing;
@@ -334,8 +344,6 @@ vraming = gpu.vraming;
 				}
 			}
 
-// 0 1 0 3
-
 			if(dds.run & (^dma_OTC.running)){
 				dma_GPU.run33();
 			}
@@ -343,7 +351,11 @@ vraming = gpu.vraming;
 			if(dds.run & (^dma_GPU.running)){
 				dma_OTC.run33();
 			}
-			if(dds.run & (^dma_GPU.running) & (^dma_OTC.running)){
+
+		//	reg_wr cpu_run;
+		//	if(cpu.run) cpu_run := 0b1;
+		//	if(cpu_run & ^cpu.run) cpu_run := 0b0;
+			if(dds.run /*| cpu_run){*/ & (^dma_GPU.running) & (^dma_OTC.running)){
 				cdr.run33();
 				sio.run33();
 			}
@@ -399,13 +411,18 @@ dbg = gpu.dbg;
 
 //dbg2 = dbg2_reg;
 
+	instruct sw_outview_on par{
+		gpu.sw_outview_on();
+	}
+
 	instruct gpu.vram_write_req par{
-		vram_write_req(gpu.vram_adrs, gpu.vram_write_data);
+		vram_write_req(gpu.vram_write_adrs, gpu.vram_write_data);
 	}
 	instruct gpu.vram_read_req par{
-		vram_read_req(gpu.vram_adrs);
+		vram_read_req(gpu.vram_read_adrs);
 	}
-	instruct vram_ack gpu.vram_ack();
+	instruct vram_write_ack gpu.vram_write_ack();
+	instruct vram_read_ack gpu.vram_read_ack();
 	gpu.vram_read_data = vram_read_data;
 
 	// ir_readの時に起動
@@ -476,10 +493,7 @@ dbg = gpu.dbg;
 
 						cpu_A<15:10>==0b000111 : par{ // 0x1C00-1E00
 							if(sw_spu_off) io_reg := 0x00000000;
-							else any{
-								cpu_A<1>==0b0 : io_reg := 0x0000 || spu.io_get(cpu_A<15:0>).io_Dout;
-								cpu_A<1>==0b1 : io_reg := spu.io_get(cpu_A<15:0>).io_Dout || 0x0000;
-							}
+							else io_reg := spu.io_get(cpu_A<15:0>).io_Dout || spu.io_Dout;
 						}
 
 						else : par{
@@ -608,14 +622,6 @@ dbg = gpu.dbg;
 
 					cpu_A<15:0>==0x10F0 : DmaDPCR |= cpu_Dout; // DMAC優先度コントロール
 					cpu_A<15:0>==0x10F4 : par{ // DMAC割り込みコントロール
-/*
-						if(DmaDICR<31> & ((DmaDICR<30:24> & ^cpu_Dout<30:24>)==0b0000000)){
-							DmaDICR := 0b0 || (DmaDICR<30:24> & ^cpu_Dout<30:24>) || cpu_Dout<23:0>;
-						}
-						else{
-							DmaDICR := DmaDICR<31> || (DmaDICR<30:24> & ^cpu_Dout<30:24>) || cpu_Dout<23:0>;
-						}
-*/
 						sel tmp<32>;
 						tmp = (^cpu_Dout) & DmaDICR;
 						DmaDICR := ((tmp @ cpu_Dout) & 0x00FFFFFF) @ tmp;

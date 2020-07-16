@@ -38,8 +38,8 @@ circuit DMA_GPU
 
 	instrin Execute_vram2mem;
 
-	input gpu_busy, gpu_drawing, cpu_busy;
-	instrin vram_ack;
+	input gpu_busy, cpu_busy;
+	instrin gpu_vram_ack;
 
 	instrin run33;
 	reg_wr int_wait_max<32>, count_rst;
@@ -52,8 +52,9 @@ reg_wr halt_code_reg<8>;
 output halt_code<8>;
 output dbg<32>;
 reg_wr dbg_reg<32>;
-input dbg_in<16>;
-mul_u16 dbg_mul_m, dbg_mul_c;
+//input dbg_in<16>;
+input intwaitm_m2v<4>, intwaitm_chain<4>, intwaitm_v2m<4>;
+mul_u16 dbg_mul_m2v, dbg_mul_c, dbg_mul_v2m;
 
 	stage_name run_mem2vram { task do(); }
 	stage_name run_chain { task do(); }
@@ -87,7 +88,10 @@ dbg = dbg_reg;
 	// 16 * 16 = 32;
 	dma_size = size_mul.con(bcr<31:16>, bcr<15:0>).dout;
 
-	running = run_mem2vram.do | run_chain.do | run_vram2mem.do;
+	running = 
+		Execute_mem2vram | Execute_chain | Execute_vram2mem |
+		run_mem2vram.do | run_chain.do | run_vram2mem.do;
+
 //	running = (run_mem2vram.do & ^gpu_drawing) | (run_chain.do & ^gpu_drawing) | run_vram2mem.do;
 
 	int_waiting = int_wait.do;
@@ -133,7 +137,7 @@ dbg = dbg_reg;
 
 			if(^run_chain.do){
 //if(dma_size<31>) halt(0x45);
-				generate int_wait.do((dma_size>>1)<<(0b000+(0b0||dbg_in<1:0>))/*dbg_mul_m.con(dma_size<15:0>, 0x000||dbg_in<3:0>).dout*/, 0b1); // 320:<<2
+				generate int_wait.do(dbg_mul_m2v.con(dma_size<15:0>, 0x000||intwaitm_m2v).dout, 0b1);
 			}
 			goto st1;
 			finish;
@@ -164,7 +168,7 @@ dbg = dbg_reg;
 			if(next_addr!=0xFFFFFF) goto st2;
 			else{
 //if(trans_size<31>) halt(0x46);
-				generate int_wait.do(trans_size<<dbg_in<3:2>/*dbg_mul.con(trans_size<15:0>, dbg_in).dout*/, 0b1); // 320:<<0
+				generate int_wait.do(dbg_mul_c.con(trans_size<15:0>, 0x000||intwaitm_chain).dout, 0b1);
 				goto st1;
 				finish;
 			}
@@ -186,7 +190,7 @@ dbg = dbg_reg;
 			dma_count++;
 			goto st2w;
 		}
-		state st2w if(vram_ack /*& (^gpu_busy)*/){
+		state st2w if(gpu_vram_ack){
 			dma_data := Din;
 			goto st3;
 		}
@@ -206,7 +210,7 @@ dbg = dbg_reg;
 		state st5 if(^gpu_busy){
 
 //if(dma_size<31>) halt(0x47);
-			generate int_wait.do(dma_size<<dbg_in<7:6>, 0b1); // 320:<<0
+			generate int_wait.do(dbg_mul_v2m.con(dma_size<15:0>, 0x000||intwaitm_v2m).dout, 0b1);
 			goto st1;
 			finish;
 		}

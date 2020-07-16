@@ -71,6 +71,8 @@ circuit drawGouraudShading
 		 3, -1,  2, -2
 	};
 
+	instrin sw_outview_on;
+
 	// VIEW 640x480(320x240)
 	output view_x<10>, view_y<9>;
 	instrout view_on(view_x, view_y);
@@ -192,7 +194,7 @@ dbg = dbg_reg;
 				) view_on(x<9:0>, y<8:0>);
 
 				// for €”õƒ|ƒŠƒSƒ“•\¦
-				if(
+				if(sw_outview_on &
 					(x<10>==0b0) &          // x >= 0
 					((x-0b01010000000)<10>==0b0) //& // x >= 640
 				//	(y<0>==0b0) & (x<0>==0b0) // 320x240

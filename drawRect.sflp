@@ -14,6 +14,8 @@ circuit drawRect
 
 	sel col<15>;
 
+	instrin sw_outview_on;
+
 	output view_x<10>, view_y<9>;
 	instrout view_on(view_x, view_y);
 	output out_R<8>, out_G<8>, out_B<8>;
@@ -72,11 +74,13 @@ circuit drawRect
 		state st3 if(^vram_write_wait){
 		//	if((x!=(vx1+vx2)) & ((0b0||x)-0b01010000000)<10>){ // x < 320
 			if((x!=(vx1+vx2))){
-				if(
-				//	(x<10>==0b0) &          // x >= 0
-					((x-0b01010000000)<10>==0b0) //& // x >= 640
-				) view_on((x-640)<9:0>, y<8:0>);
-				else view_on(x<9:0>, y<8:0>);
+				if(sw_outview_on){
+					if(
+					//	(x<10>==0b0) &          // x >= 0
+						((x-0b01010000000)<10>==0b0) //& // x >= 640
+					) view_on((x-640)<9:0>, y<8:0>);
+					else view_on(x<9:0>, y<8:0>);
+				}
 
 				vram_write(y<8:0>||x<9:0>, 0b0||col);
 			}

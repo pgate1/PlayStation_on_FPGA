@@ -34,13 +34,16 @@ circuit DMA_OTC
 
 output dbg<32>;
 reg_wr count<16>;
-input dbg_in<16>;
+//input dbg_in<16>;
+input intwaitm<4>;
 mul_u16 dbg_mul;
 
 	stage_name run_dma { task do(); }
 	stage_name int_wait { task do(int_wait_max, count_rst); }
 
-	running = run_dma.do;
+	running = 
+		Execute |
+		run_dma.do;
 
 	instruct halt h_code_reg := h_code;
 	halt_code = h_code_reg;
@@ -81,7 +84,7 @@ dbg = 0x0000||count;
 		state st5 par{
 
 //if(DmaBCR_6<31>) halt(0x48);
-			generate int_wait.do(DmaBCR_6<<(0b000+(0b0||dbg_in<5:4>))/*dbg_mul.con(DmaBCR_6<15:0>,0x000||dbg_in<7:4>).dout*/, 0b1); // 320:<<2
+			generate int_wait.do(dbg_mul.con(DmaBCR_6<15:0>,0x000||intwaitm).dout, 0b1);
 			goto st1;
 			finish;
 		}
