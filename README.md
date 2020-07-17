@@ -6,4 +6,4 @@ implemented PlaxStation PSX on an FPGA.
   
 2020/07/09  
 Add texture and dither.  
-<img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/20200630_dither_home_OK.jpg">
+<img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/20200717_VGA_ok.jpg">
