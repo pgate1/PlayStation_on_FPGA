@@ -171,7 +171,8 @@ circuit core
 	dac.data_R = out_R_reg;
 	dac.RD = audio_RD;
 	audio_DATA = dac.Dout;
-	audio_VOL = 0b1111001; // 最上位ビットは1でないと音が出ない, 0db:0b1111001
+	if(SW<15>) audio_VOL = 0b1111111; // +6dB
+	else audio_VOL = 0b1111001; // 0dB
 
 	// USB
 	USB_ADDR = usb.A;
@@ -240,16 +241,20 @@ circuit core
 			vga.iB = view_ram.out_B || 0b111;
 		}
 	}
+	reg_wr vga_R<8>, vga_G<8>, vga_B<8>;
 //	if(SW<14>){ // ガンマ補正(γ=2.0)
 //		VGA_R = gammaR.con(vga.oR<7:3>).dout;
 //		VGA_G = gammaG.con(vga.oG<7:3>).dout;
 //		VGA_B = gammaB.con(vga.oB<7:3>).dout;
 //	}
 //	else{
-		VGA_R = vga.oR;
-		VGA_G = vga.oG;
-		VGA_B = vga.oB;
+		vga_R := vga.oR;
+		vga_G := vga.oG;
+		vga_B := vga.oB;
 //	}
+	VGA_R = vga_R;
+	VGA_G = vga_G;
+	VGA_B = vga_B;
 
 	instruct psx.view_on par{
 		view_ram.write(psx.view_x<9:1>, psx.view_y<8:1>,
@@ -274,7 +279,7 @@ circuit core
 
 //psx.sw_cache_off();
 //psx.sw_intpl_off();
-//	if(SW<15>) psx.sw_reverb_off();
+//psx.sw_reverb_off();
 //	if(SW<16>) psx.sw_spu_off();
 	reg_wr sw_16; sw_16 := SW<16>;
 	if(sw_16) psx.sw_outview_on();

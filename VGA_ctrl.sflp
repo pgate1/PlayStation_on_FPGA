@@ -17,40 +17,38 @@ circuit VGA_ctrl
 
 	instrself vtiming;
 
-	par{
-		h_sync = h_sync_reg;
-		v_sync = v_sync_reg;
+	h_sync = h_sync_reg;
+	v_sync = v_sync_reg;
 
-		h_en = h_en_reg;
-		v_en = v_en_reg;
-		en = h_en & v_en;
+	h_en = h_en_reg;
+	v_en = v_en_reg;
+	en = h_en & v_en;
 
-		h_count = h_count_reg;
-		v_count = v_count_reg;
+	h_count = h_count_reg;
+	v_count = v_count_reg;
 
-		if(h_en & v_en){
-			oR = iR; oG = iG; oB = iB;
-		}
-		else{
-			oR = 0; oG = 0; oB = 0;
-		}
+	if(en){
+		oR = iR; oG = iG; oB = iB;
+	}
+	else{
+		oR = 0; oG = 0; oB = 0;
 	}
 
 	instruct htiming par{
 		reg_wr h_tim<10>;
 		any{
 			h_tim==0 : par{
-				h_sync_reg := 0;
+				h_sync_reg := 0b0;
 			}
 			h_tim==96 : par{
-				h_sync_reg := 1;
+				h_sync_reg := 0b1;
 				vtiming();
 			}
 			h_tim==(96+48) : par{
-				h_en_reg := 1;
+				h_en_reg := 0b1;
 			}
 			h_tim==(96+48+640) : par{
-				h_en_reg := 0;
+				h_en_reg := 0b0;
 				hblank_begin();
 			}
 		}
@@ -69,16 +67,16 @@ circuit VGA_ctrl
 		reg_wr v_tim<10>;
 		any{
 			v_tim==0 : par{
-				v_sync_reg := 0;
+				v_sync_reg := 0b0;
 			}
 			v_tim==2 : par{
-				v_sync_reg := 1;
+				v_sync_reg := 0b1;
 			}
 			v_tim==(2+33) : par{
-				v_en_reg := 1;
+				v_en_reg := 0b1;
 			}
 			v_tim==(2+33+480) : par{
-				v_en_reg := 0;
+				v_en_reg := 0b0;
 				vblank_begin();
 			}
 		}
