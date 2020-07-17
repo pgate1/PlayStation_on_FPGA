@@ -241,20 +241,20 @@ circuit core
 			vga.iB = view_ram.out_B || 0b111;
 		}
 	}
-	reg_wr vga_R<8>, vga_G<8>, vga_B<8>;
+	reg_wr vga_R_reg<8>, vga_G_reg<8>, vga_B_reg<8>;
 //	if(SW<14>){ // ÉKÉìÉ}ï‚ê≥(É¡=2.0)
 //		VGA_R = gammaR.con(vga.oR<7:3>).dout;
 //		VGA_G = gammaG.con(vga.oG<7:3>).dout;
 //		VGA_B = gammaB.con(vga.oB<7:3>).dout;
 //	}
 //	else{
-		vga_R := vga.oR;
-		vga_G := vga.oG;
-		vga_B := vga.oB;
+		vga_R_reg := vga.oR;
+		vga_G_reg := vga.oG;
+		vga_B_reg := vga.oB;
 //	}
-	VGA_R = vga_R;
-	VGA_G = vga_G;
-	VGA_B = vga_B;
+	VGA_R = vga_R_reg;
+	VGA_G = vga_G_reg;
+	VGA_B = vga_B_reg;
 
 	instruct psx.view_on par{
 		view_ram.write(psx.view_x<9:1>, psx.view_y<8:1>,
