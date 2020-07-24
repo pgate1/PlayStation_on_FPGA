@@ -7,7 +7,6 @@
 %i "Cache_IR.h"
 %i "rootcounter.h"
 %i "SPU_core.h"
-%i "DDS_50to33868800.h"
 %i "GPU_core.h"
 %i "DMA_GPU.h"
 %i "DMA_SPU.h"
@@ -18,7 +17,7 @@
 
 circuit PSX_core
 {
-	instrin run, init;
+	instrin cpu_run;
 	R3000A cpu;
 	Cache_IR ir_cache;
 
@@ -55,8 +54,7 @@ circuit PSX_core
 	reg_wr DmaMADR_4<32>, DmaBCR_4<32>, DmaCHCR_4<32>;
 	reg_wr DmaMADR_6<32>, DmaBCR_6<32>, DmaCHCR_6<32>;
 
-	DDS_50to33868800 dds;
-
+	instrin run33;
 	rootcounter rcnt_0, rcnt_1, rcnt_2, rcnt_3;
 
 	SPU_core spu;
@@ -146,7 +144,7 @@ output vraming;
 //if(dma_GPU.running & sio.running) halt(0x44); // no
 //if(cpu_read.do & cpu_write.do) halt(0x45); // no
 
-	instruct run par{
+	instruct cpu_run par{
 		alt{
 			(halt_code!=0x00) | peripheral_running : ; // wait
 			else : par{
@@ -290,7 +288,7 @@ output vraming;
 	sio.intwaitm = 0b000 || intwait_scale<15>;
 //sio.dbg_in = dbg_in;
 
-	instruct demo.gpu_write_req if(^sw_kernel_run) gpu.WriteData(demo.Dout);
+	instruct demo.gpu_write_req gpu.WriteData(demo.Dout);
 	demo.drawing = gpu.drawing;
 
 	if(/|rcnt_0.halt_code | /|rcnt_1.halt_code |
@@ -334,35 +332,35 @@ vraming = gpu.vraming;
 		halt_code!=0x00 : ;
 		sw_kernel_run : par{
 
-			instruct dds.run par{ // 33.8688MHz
+			instruct run33 par{ // 33.8688MHz
 				spu.run33();
 			}
 
-			if(dds.run & (^dma_GPU.running) & (^dma_OTC.running)){
+			if(run33 & (^dma_GPU.running) & (^dma_OTC.running)){
 				par(i=0;i<4;i++){
 					rcnt[i].run33();
 				}
 			}
 
-			if(dds.run & (^dma_OTC.running)){
+			if(run33 & (^dma_OTC.running)){
 				dma_GPU.run33();
 			}
 		//	dma_SPU.run33();
-			if(dds.run & (^dma_GPU.running)){
+			if(run33 & (^dma_GPU.running)){
 				dma_OTC.run33();
 			}
 
-		//	reg_wr cpu_run;
-		//	if(cpu.run) cpu_run := 0b1;
-		//	if(cpu_run & ^cpu.run) cpu_run := 0b0;
-			if(dds.run /*| cpu_run){*/ & (^dma_GPU.running) & (^dma_OTC.running)){
+		//	reg_wr cpu_run_t;
+		//	if(cpu.run) cpu_run_t := 0b1;
+		//	if(cpu_run_t & ^cpu.run) cpu_run_t := 0b0;
+			if(run33 /*| cpu_run_t){*/ & (^dma_GPU.running) & (^dma_OTC.running)){
 				cdr.run33();
 				sio.run33();
 			}
 
 		}
 		else : par{ // ƒTƒEƒ“ƒhÄ¶
-			instruct dds.run par{ // 33.8688MHz
+			instruct run33 par{ // 33.8688MHz
 				par(i=0;i<4;i++){
 					rcnt[i].run33();
 				}

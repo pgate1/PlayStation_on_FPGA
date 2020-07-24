@@ -17,6 +17,7 @@ sfl2vl:
 #	verilator --cc SIO_core.v --compiler msvc --public --l2-name v
 #	verilator --cc drawTextureRect.v --compiler msvc --public --l2-name v
 	verilator --lint-only PSX_core.v -y demo
+	verilator --lint-only core.v -y demo -y ../../hdl -y ../../DE2-115
 	# ok
 
 sfl: $(SFLS)

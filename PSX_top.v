@@ -87,6 +87,7 @@ wire [31:0] sdram_rdata;
 wire sdram_ack, sdram_err;
 wire [31:0] sdram_Dout;
 wire sdram_Dout_En;
+wire sdram_refresh_doing;
 
 wire g_reset_n, CLK_18_4;
 wire audio_RD;
@@ -125,7 +126,7 @@ wire sd_cmd_out, sd_cmd_en;
 //		.SDRAM_DQM(DRAM_DQM), .SDRAM_Din(DRAM_DQ), .SDRAM_Dout(sdram_Dout),
 		.sdram_write(sdram_write), .sdram_wdata(sdram_wdata), .sdram_de(sdram_de),
 		.sdram_adrs(sdram_adrs), .sdram_read(sdram_read), .sdram_rdata(sdram_rdata),
-		.sdram_ack(sdram_ack), .sdram_err(sdram_err),
+		.sdram_ack(sdram_ack), .sdram_refresh_doing(sdram_refresh_doing), .sdram_err(sdram_err),
 //--------------------- Flash Interface --------------------
 		.FLASH_RSTn(FL_RST_N), .FLASH_CEn(FL_CE_N),
 		.FLASH_OEn(FL_OE_N), .FLASH_WEn(FL_WE_N),
@@ -175,6 +176,7 @@ wire sd_cmd_out, sd_cmd_en;
 		.read(sdram_read),
 		.rdata(sdram_rdata),
 		.ack(sdram_ack),
+		.refresh_doing(sdram_refresh_doing),
 		.err(sdram_err)
 	);
 
