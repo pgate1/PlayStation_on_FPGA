@@ -1,0 +1,16 @@
+Fitter Status : Successful - Fri Jul 24 00:41:01 2020
+Quartus II 64-Bit Version : 12.1 Build 243 01/31/2013 SP 1.33 SJ Web Edition
+Revision Name : PSX
+Top-level Entity Name : PSX_top
+Family : Cyclone IV E
+Device : EP4CE115F29C7
+Timing Models : Final
+Total logic elements : 53,172 / 114,480 ( 46 % )
+    Total combinational functions : 49,913 / 114,480 ( 44 % )
+    Dedicated logic registers : 19,478 / 114,480 ( 17 % )
+Total registers : 19564
+Total pins : 340 / 529 ( 64 % )
+Total virtual pins : 0
+Total memory bits : 3,050,496 / 3,981,312 ( 77 % )
+Embedded Multiplier 9-bit elements : 280 / 532 ( 53 % )
+Total PLLs : 2 / 4 ( 50 % )
