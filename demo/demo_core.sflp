@@ -93,14 +93,10 @@ circuit demo_core
 	else{
 		count++;
 		if(/&count){
-			any{
-				ax==359 : ax := 0;
-				else : ax++;
-			}
-			any{
-				ay==359 : ay := 0;
-				else : ay++;
-			}
+			if(ax==359) ax := 0;
+			else ax++;
+			if(ay==359) ay := 0;
+			else ay++;
 		}
 	}
 
