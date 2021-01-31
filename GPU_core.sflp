@@ -73,6 +73,8 @@ circuit GPU_core
 	instrself vram_read(io_vram_read_adrs);
 	reg_wr vram_read_wait, vram_write_wait;
 
+	instrin texture_thin;
+
 	instrself halt(halt_sel);
 	sel halt_sel<8>;
 	reg_wr halt_reg<8>;
@@ -292,7 +294,7 @@ dbg = dbg_reg;
 			}
 
 			else : par{
-dbg_reg := 0x0000||cmd||0x00;
+dbg_reg := 0x000000||cmd;
 				halt(0xA5);
 			}
 		}
@@ -304,6 +306,8 @@ dbg_reg := 0x0000||cmd||0x00;
 		gs.sw_outview_on();
 		rect.sw_outview_on();
 	}
+
+	instruct texture_thin texrect.texture_thin();
 
 gs.dbg_in = dbg_in;
 	sel f_dither;

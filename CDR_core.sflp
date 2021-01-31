@@ -3,13 +3,17 @@
 		by pgate1
 */
 
-declare mul_u16 interface
+declare mul_u32 interface
 {
-	input a<16>, b<16>;
-	output dout<32>;
+	input a<32>, b<32>;
+	output dout<64>;
 	instrin con;
 	instr_arg con(a, b);
 }
+
+%i "btoi.h"
+%i "ram_8x4k.h"
+%i "pseudo_cdrom_data.h"
 
 circuit CDR_core
 {
@@ -29,7 +33,7 @@ circuit CDR_core
 
 	reg_wr Cmd<8>, Irq<16>;
 	instrself AddIrqQueue(addq_irq, addq_ecycle);
-	sel addq_irq<16>, addq_ecycle<16>;
+	sel addq_irq<16>, addq_ecycle<28>;
 	reg_wr IrqRepeated;
 
 	mem Param[8]<8> = {0};
@@ -42,23 +46,65 @@ circuit CDR_core
 	output running;
 
 	instrin run33;
-	reg_wr int_wait_max<16>, count_rst;
+	reg_wr int_wait_max<28>, int_count_rst;
+	reg_wr play_int_wait_max<28>, play_int_count_rst;
+	reg_wr read_int_wait_max<28>, read_int_count_rst;
 	instrout interrupt_out;
 
-mul_u16 dbg_mul;
+	reg_wr Mode<8>;
+
+	reg_wr AttenuatorRightToRightT<8>;
+	reg_wr AttenuatorLeftToLeftT<8>;
+	reg_wr AttenuatorRightToLeftT<8>;
+	reg_wr AttenuatorLeftToRightT<8>;
+	reg_wr AttenuatorLeftToLeft<8>;
+	mem ResultTD[4]<8> = {0};
+
+	reg_wr Seeked;
+	reg_wr SetlocPending;
+	mem SetSectorPlay[4]<8> = {0};
+	mem SetSector[4]<8> = {0};
+	reg_wr TrackChanged, FirstSector;
+
+	reg_wr Play, FastForward, FastBackward, Reading;
+	instrself StopCdda, StopReading(stat_reading);
+	sel stat_reading;
+	reg_wr ReadRescheduled;
+
+	ram_8x4k Transfer_ram;
+	reg_wr transferIndex<12>;
+	sel transferIndex_add<12>;
+	instrself adjustTransferIndex(transferIndex_add);
+
+	btoi btoi_0, btoi_1, btoi_2;
+
+	instrin dma_read_req;
+	output dma_read_Dout<8>;
+
+	pseudo_cdrom_data cdrom_data;
+
+	instrin sw_cdrom_on;
+
+mul_u32 dbg_mul_int, dbg_mul_read, dbg_mul_play;
 
 	instrself halt(halt_sel);
 	sel halt_sel<8>;
 	reg_wr halt_code_reg<8>;
 	output halt_code<8>;
 
-output dbg<16>;
-reg_wr dbg_reg<16>;
-//input dbg_in<16>;
+output dbg<32>;
+reg_wr dbg_reg<32>;
+input dbg_in<16>;
 input intwaitm<4>;
+output dbg_irq<32>;
+reg_wr dbg_irq_reg<32>;
 
-	stage_name interrupt_wait { task do(int_wait_max, count_rst); }
+	stage_name interrupt_wait { task do(int_wait_max, int_count_rst); }
 	stage_name cdrInterrupt { task do(); }
+	stage_name play_interrupt_wait { task do(play_int_wait_max, play_int_count_rst); }
+	stage_name cdrPlayInterrupt { task do(); }
+	stage_name read_interrupt_wait { task do(read_int_wait_max, read_int_count_rst); }
+	stage_name cdrReadInterrupt { task do(); }
 
 	if(reset){
 		reset := 0b0;
@@ -68,11 +114,12 @@ input intwaitm<4>;
 	}
 
 dbg = dbg_reg;
+dbg_irq = dbg_irq_reg;
 
 	instruct halt halt_code_reg := halt_sel;
 	halt_code = halt_code_reg;
 
-	running = cdrInterrupt.do;
+	running = cdrInterrupt.do | cdrPlayInterrupt.do | cdrReadInterrupt.do;
 
 	if(Read) io_dout_reg := io_dout;
 	else io_dout = io_dout_reg;
@@ -97,7 +144,7 @@ dbg = dbg_reg;
 			else{
 				io_dout = 0x00;//Transfer[transferIndex];
 			//	transferIndex++; // adjustTransferIndex()内で行う
-			//	adjustTransferIndex();
+				adjustTransferIndex(1); // +1
 			}
 		}
 		io_adrs==3 : par{
@@ -106,20 +153,19 @@ dbg = dbg_reg;
 		}
 	}
 
-/*
 	instruct adjustTransferIndex par{
-reg_wr transferIndex<13>;
-sel bufSize<13>;
+		sel bufSize<13>;
 		alt{
 			Mode<5> : bufSize = 2340;
 			Mode<4> : bufSize = 12 + 2328;
 			else : bufSize = 12 + 2048;
 		}
-		// (transferIndex+1) >= bufSize
-		if(((transferIndex+1)-bufSize)<12>==0b0) transferIndex -= bufSize + 1;
-		else transferIndex++;
+		sel sel_transferIndex_add<13>;
+		sel_transferIndex_add = (0b0||transferIndex) + (0b0||transferIndex_add);
+		// (transferIndex+add) >= bufSize
+		if((sel_transferIndex_add - bufSize)<12>==0b0) transferIndex := (sel_transferIndex_add - bufSize)<11:0>;
+		else transferIndex := sel_transferIndex_add<11:0>;
 	}
-*/
 
 	instruct Write any{
 		io_adrs==0 : par{
@@ -129,7 +175,7 @@ sel bufSize<13>;
 			switch(Ctrl<1:0>){
 				case 0: ;
 				case 3: par{
-				//	AttenuatorRightToRightT = data;
+					AttenuatorRightToRightT := io_din;
 				}
 			}
 
@@ -140,7 +186,42 @@ sel bufSize<13>;
 				ResultReady := 0b0;
 				Ctrl |= 0x80;
 
-				AddIrqQueue(0x00||io_din, 0x0800);
+				AddIrqQueue(0x00||io_din, 0x0000800); // 変更不可
+
+				any{ // Cmd
+					io_din==1 : ; // none
+					io_din==2 : par{ //CdlSetloc:
+						//for(i=0; i<3; i++) set_loc[i] = btoi(Param[i]);
+						//if(i > 16) Seeked = 0;//SEEK_PENDING;
+						Seeked := 0b0;
+						//memcpy(SetSector, set_loc, 3);
+						SetSector[0] := btoi_0.con(Param[0]).dout;
+						SetSector[1] := btoi_1.con(Param[1]).dout;
+						SetSector[2] := btoi_2.con(Param[2]).dout;
+						SetSector[3] := 0;
+						SetlocPending := 0b1;
+					}
+					(io_din==6) |
+					(io_din==9) : par{
+if(Play) halt(0x32);
+						StopCdda();
+						StopReading(0b1);
+					}
+					io_din==10 : par{
+						Seeked := 0b1;//SEEK_DONE;
+if(Play) halt(0x3A);
+						StopCdda();
+						StopReading(0b1);
+					}
+					io_din==14 : par{
+						Mode := Param[0];
+					}
+					(io_din==20) | (io_din==21) | (io_din==25) | (io_din==26) | (io_din==30) : ; // none
+					else : par{
+dbg_reg := 0x000000 || io_din;
+						halt(0x34);
+					}
+				}
 			}
 		}
 		io_adrs==2 : par{
@@ -151,13 +232,13 @@ sel bufSize<13>;
 				}
 				case 1: par{
 					Reg2 := io_din;
-					if(/|(Stat & io_din)) interrupt_out();
+					if((Stat & io_din)!=0) interrupt_out();
 				}
 				case 2: par{
-				//	AttenuatorLeftToLeftT = data;
+					AttenuatorLeftToLeftT := io_din;
 				}
 				case 3: par{
-				//	AttenuatorRightToLeftT = data;
+					AttenuatorRightToLeftT := io_din;
 				}
 			}
 		}
@@ -169,7 +250,7 @@ sel bufSize<13>;
 					if(io_din<6>) ParamC := 0;
 				}
 				case 2: par{
-				//	AttenuatorLeftToRightT = data;
+					AttenuatorLeftToRightT := io_din;
 				}
 				case 3: par{
 					if(io_din<5>){
@@ -181,15 +262,14 @@ sel bufSize<13>;
 			if(Ctrl<1:0>==0b00){
 				if(io_din<7> & (Readed==0b0)){
 					Readed := 0b1;
-/*
-					transferIndex := 0;
-					switch(Mode & ((1<<5)|(1<<4))) {
-						case (1<<4)://MODE_SIZE_2328:
-						case 0://MODE_SIZE_2048:
-							transferIndex += 12;
-						case (1<<5)://MODE_SIZE_2340:
-							transferIndex += 0;
-			*/
+					any{
+						Mode<4> | (Mode<5:4>==0b00) : par{
+							transferIndex := 12;
+						}
+						else : par{
+							transferIndex := 0;
+						}
+					}
 				}
 			}
 		}
@@ -198,10 +278,13 @@ sel bufSize<13>;
 	instruct AddIrqQueue par{
 		if((Irq!=0) & ((addq_irq==Irq) | ((addq_irq+0x0100)==Irq))){
 			IrqRepeated := 0b1;
+			//CDR_INT(ecycle);
 		}
-		else Irq := addq_irq;
-
-		//CDR_INT(ecycle);
+		else{
+			Irq := addq_irq;
+			//CDR_INT(ecycle);
+		}
+//if(interrupt_wait.do) halt(0x31); ok
 		generate interrupt_wait.do(addq_ecycle, 0b1);
 	}
 
@@ -211,22 +294,100 @@ sel bufSize<13>;
 		ResultReady := 0b1;
 	}
 
+	instruct StopCdda par{
+		if(Play){
+			/*if(!Config.Cdda) CDR_stop();*/
+			StatP &= ^0x80;//STATUS_PLAY;
+			Play := 0b0;
+			FastForward := 0b0;
+			FastBackward := 0b0;
+		//	mem->mIREG |= 0x0200;
+		}
+	}
+
+	reg_wr interrupt_stop_read;
+
+	instruct StopReading par{
+		if(Reading){
+			Reading := 0b0;
+			//cpu->interrupt &= ~(1 << PSXINT_CDREAD);
+			if(read_interrupt_wait.do) interrupt_stop_read := 0b1;
+		}
+		if(stat_reading) StatP &= ^0x60;//~(STATUS_READ|STATUS_SEEK);
+	}
+
+	reg_wr cdrom_adrs<14>; // 2048=0x800 <11>  *8=+3
+	reg_wr dma_read_ack_reg;
+	instruct dma_read_req par{
+	//	Transfer_ram.read(transferIndex);
+		cdrom_data.read(cdrom_adrs);
+		cdrom_adrs++;
+	//	transferIndex++; adjustTransferIndex()内で行う
+		adjustTransferIndex(1);
+		dma_read_ack_reg := 0b1;
+	}
+	dma_read_Dout = cdrom_data.dout;//Transfer_ram.dout;
+	if(dma_read_ack_reg) dma_read_ack_reg := 0b0;
+
 	stage interrupt_wait {
 		reg_wr int_wait_count<32>;
 		first_state st1;
 		state st1 par{
 			int_wait_count := 0;
-			count_rst := 0b0;
+			int_count_rst := 0b0;
 			goto st2;
 		}
 		state st2 if(run33){
 			int_wait_count++;
-			if(int_wait_count==dbg_mul.con(int_wait_max<15:0>,0x000||intwaitm).dout){
-				generate cdrInterrupt.do();
+			if(int_wait_count==dbg_mul_int.con(0x0||int_wait_max, 0x0000000||/*intwaitm*/0x6).dout<31:0>){
+				generate cdrInterrupt.do(); // CDR_INT
 				goto st1;
 				finish;
 			}
-			if(count_rst) goto st1;
+			if(int_count_rst) goto st1;
+		}
+	}
+
+	stage play_interrupt_wait {
+		reg_wr play_int_wait_count<32>;
+		first_state st1;
+		state st1 par{
+			play_int_wait_count := 0;
+			play_int_count_rst := 0b0;
+			goto st2;
+		}
+		state st2 if(run33){
+			play_int_wait_count++;
+			if(play_int_wait_count==dbg_mul_play.con(0x0||play_int_wait_max, 0x00000002).dout<31:0>){
+				generate cdrPlayInterrupt.do(); // CDRMISC_INT
+				goto st1;
+				finish;
+			}
+			if(play_int_count_rst) goto st1;
+		}
+	}
+
+	stage read_interrupt_wait {
+		reg_wr read_int_wait_count<32>;
+		first_state st1;
+		state st1 par{
+			read_int_wait_count := 0;
+			read_int_count_rst := 0b0;
+			goto st2;
+		}
+		state st2 if(run33){
+			read_int_wait_count++;
+			if(read_int_wait_count==dbg_mul_read.con(0x0||read_int_wait_max, 0x00000001).dout<31:0>){
+				generate cdrReadInterrupt.do(); // CDREAD_INT
+				goto st1;
+				finish;
+			}
+			if(read_int_count_rst) goto st1;
+			if(interrupt_stop_read){
+				interrupt_stop_read := 0b0;
+				goto st1;
+				finish;
+			}
 		}
 	}
 
@@ -239,20 +400,18 @@ sel bufSize<13>;
 
 	stage cdrInterrupt {
 		reg_wr Irq_<16>, no_busy_error, start_rotating;
-	//	sel delay<16>;
-		sel disc_res<8>;
 		first_state st1;
 		state st1 par{
 			Irq_ := Irq;
 			no_busy_error := 0b0;
-			if(/|Stat){
-				generate interrupt_wait.do(0x0100, 0b1);
+			if(Stat!=0){
+				//CDR_INT(0x100);
+				generate interrupt_wait.do(0x0000100, 0b1); // 変更不可
 				finish;
 			}
 			else goto st2;
 		}
 		state st2 par{
-
 			Ctrl &= ^0x80;
 			SetResultSize(1);
 			Result[0] := StatP;
@@ -272,40 +431,99 @@ sel bufSize<13>;
 			goto st3;
 		}
 		state st3 par{
+reg_wr count<8>;
+//if((count==dbg_in) & (dbg_irq_reg!=0)) 
+dbg_irq_reg := 0b0||cdrom_adrs<13:11> || 0x0 || count || Irq_;
+//else count++;
+if(Irq_==0x0109) count++;
 			any{
+			//	Irq_==0 : ; // for debug
 				Irq_==1 : par{ // CdlNop
 					if(DriveState!=1) StatP &= ^STATUS_SHELLOPEN;
 					no_busy_error := 0b1;
 				}
+				Irq_==2 : ;
 				Irq_==8 : par{ // CdlStop
-/*
 					if(Play){
 					// grab time for current track
 					//	CDR_getTD((u8)(cdr.CurTrack), cdr.ResultTD);
-						SetSectorPlay[0] = ResultTD[2];
-						SetSectorPlay[1] = ResultTD[1];
-						SetSectorPlay[2] = ResultTD[0];
+						SetSectorPlay[0] := ResultTD[2];
+						SetSectorPlay[1] := ResultTD[1];
+						SetSectorPlay[2] := ResultTD[0];
 					}
-*/
-				//	StopCdda();
-				//	StopReading();
 
-				//	if(DriveState==0){ // DRIVESTATE_STANDB
-				//		delay = cdReadTime * 30 / 2;
-				//	}
-				//	else delay = 0x0800;
+					StopCdda();
+					StopReading(0b1);
+
+					sel delay<28>;
+					if(DriveState==0){ // DRIVESTATE_STANDB
+halt(0x33);
+						delay = 0x0675C00;//cdReadTime * 30 / 2;
+					}
+					else delay = 0x0000800; // 変更不可
 
 					DriveState := 4; // DRIVESTATE_STOPPED
 				//	AddIrqQueue(CdlStop+0x100, delay);
-					AddIrqQueue(0x0108, 0x0800);
+					AddIrqQueue(0x0108, delay);
 				}
 				Irq_==0x0108 : par{ // CdlStop
-					StatP &= ^STATUS_ROTATING;
-					Result[0] := StatP;
+					sel stat<8>;
+					stat = StatP & ^0x02; //~STATUS_ROTATING;
+					StatP := stat;
+					Result[0] := stat;
+					Stat := 2;//Complete;
+				}
+				Irq_==9 : par{ // CdlPause:
+					// 0x0000200 NG
+					// 0x0000100 OK
+					// 0x0000080 OK
+					// 0x0000020 NG
+					AddIrqQueue(0x0109 /*CdlPause*/, 
+					//	0x014AC00
+					//	0x0||dbg_in||0x00
+					//	0x0||0b0000_1011_0010_0001||0x00 // 3 0x001 (DMAwait x2)
+						0x0||0b0000_0001_1000_0010||0x00 // 2 0x109 PSロゴ
+						 /*cdReadTime*3*/);
+					Ctrl |= 0x80;
+				}
+				Irq_==0x0109 : par{ // 265
+					sel stat<8>;
+					stat = StatP & ^0x20;//~STATUS_READ;
+					StatP := stat;
+					Result[0] := stat;
+					Stat := 2;//Complete;
+				}
+				Irq_==10 : par{ //CdlInit:
+					AddIrqQueue(0x010A/*CdlInit*/, 0x0295800 /*cdReadTime*6*/);
+					no_busy_error := 0b1;
+					start_rotating := 0b1;
+				}
+				Irq_==0x010A : par{ // CdlInit 266
 					Stat := 2;//Complete;
 				}
 				Irq_==14 : par{ // CdlSetmode:
 					no_busy_error := 0b1;
+				}
+				(Irq_==21) | // 0x15
+				(Irq_==22) : par{ //CdlSeekL: 0x16
+if(Play) halt(0x31);
+					StopCdda();
+					StopReading(0b0); // StatP &= ^(0x20|0x40);//~(STATUS_READ|STATUS_SEEK)
+				//	StatP |= 0x40;//STATUS_SEEK;
+					StatP := StatP<7> || 0b10 || StatP<4:0>;
+
+					//CDRMISC_INT(Seeked == 1 ? 0x800 : cdReadTime * 4);
+					if(Seeked) generate play_interrupt_wait.do(
+						0x0000800
+						, 0b1);
+					else       generate play_interrupt_wait.do(
+					//	0x01B9000
+						0x0040000
+					//	0x0||dbg_in||0x00
+						, 0b1);
+
+					Seeked := 0b0;//SEEK_PENDING;
+					start_rotating := 0b1;
 				}
 				Irq_==25 : par{ // CdlTest 0x19
 
@@ -331,15 +549,19 @@ sel bufSize<13>;
 					no_busy_error := 0b1;
 				}
 				Irq_==26 : par{// CdlID
-					AddIrqQueue(0x011A/*CdlID*/, 20480);
+					AddIrqQueue(0x011A/*CdlID*/, 20480); // 変更不可
 				}
 				Irq_==0x011A : par{ //CdlID
-					disc_res = 0xC0;
+					sel disc_res<8>;
+					// 0xC0:ディスクが入っていない状態でホーム画面
+					// 0x80:PlayStation規格のディスクではありません
+					if(sw_cdrom_on) disc_res = 0x00; // CD-ROM
+					else disc_res = 0xC0; // HOME view
 
 					SetResultSize(8);
 					Result[0] := StatP | (0x0||disc_res<7>||0b000);
 				//	Result[1] = 0;
-					Result[2] := 0x00;
+					Result[2] := 0x20; // 仮
 					Result[3] := 0x00;
 
 					// 0x10 - audio | 0x40 - disk missing | 0x80 - unlicensed
@@ -354,21 +576,71 @@ sel bufSize<13>;
 					*/
 					Result[1] := disc_res;
 
-					Result[4] := 'S';
-					Result[5] := 'C';
-					Result[6] := 'E';
-					Result[7] := 'I';
+					reg_wr set_next;
+					if(set_next==0b0){
+						set_next := 0b1;
+						Result[4] := 'S';
+						Result[5] := 'C';
+						Result[6] := 'E';
+						Result[7] := 'I';
+					}
+					else{
+						Result[4] := 'F';
+						Result[5] := 'P';
+						Result[6] := 'G';
+						Result[7] := 'A';
+					}
 					Stat := 2; //Complete;
 				}
+				Irq_==30 : par{ // 0x1E CdlReadToc:
+					AddIrqQueue(0x011E /*30+0x100*/,
+					//	0x1361400
+						0x0200000
+						/*cdReadTime*180/4*/);
+					no_busy_error := 0b1;
+					start_rotating := 0b1;
+				}
+				Irq_==0x011E /*30+0x0100*/ : par{ //CdlReadToc:
+					Stat := 2;//Complete;
+					no_busy_error := 0b1;
+				}
+				Irq_==6 : par{
+					if(SetlocPending){
+						//memcpy(SetSectorPlay, SetSector, 4);
+						SetSectorPlay[0] := SetSector[0];
+						SetSectorPlay[1] := SetSector[1];
+						SetSectorPlay[2] := SetSector[2];
+						SetSectorPlay[3] := SetSector[3];
+						SetlocPending := 0b0;
+					}
+
+					Reading := 0b1;
+					FirstSector := 0b1;
+
+					sel stat<8>;
+					if(Seeked) stat = StatP<7> || 0b01 || StatP<4:0>;
+					else       stat = StatP<7> || 0b10 || StatP<4:0>;
+					StatP := stat;
+
+					//CDREAD_INT((Mode & 0x80) ? (cdReadTime) : cdReadTime * 2);
+					if(Mode<7>) generate read_interrupt_wait.do(
+						0x006E400
+						, 0b1);
+					else        generate read_interrupt_wait.do(
+						0x00DC800
+						, 0b1);
+
+					Result[0] := stat;
+					start_rotating := 0b1;
+				}
 				else : par{
-//dbg_reg := Irq_;
+dbg_reg := 0x0000 || Irq_;
 					halt(0x38);
 				}
 			}
 			goto st4;
 		}
 		state st4 par{
-
 			if((DriveState==4) & start_rotating){
 				DriveState := 0;
 				StatP |= STATUS_ROTATING;
@@ -402,4 +674,111 @@ sel bufSize<13>;
 			finish;
 		}
 	}
+
+	stage cdrPlayInterrupt {
+		first_state st1;
+		state st1 par{
+			if(Seeked==0b0){
+				if(Stat!=0){
+					//CDRMISC_INT( 0x100 );
+					generate play_interrupt_wait.do(0x0000100, 0b1);
+					finish;
+				}
+				else goto st2;
+			}
+			else{
+				finish;
+			}
+		}
+		state st2 par{
+			SetResultSize(1);
+			//StatP |= STATUS_ROTATING;
+			//StatP &= ~STATUS_SEEK;
+			sel stat<8>;
+			stat = StatP<7> || 0b0 || StatP<5:2> || 0b1 || StatP<0>;
+			StatP := stat;
+			Result[0] := stat;
+			Seeked := 0b1;//SEEK_DONE;
+			if(Irq==0x0000){
+				Stat := 2;//Complete;
+				if((0x02 & Reg2)!=0){
+					//IREG |= 0x0004;
+					interrupt_out();
+				}
+			}
+
+			if(SetlocPending!=0){
+				//memcpy(SetSectorPlay, SetSector, 4);
+				SetSectorPlay[0] := SetSector[0];
+				SetSectorPlay[1] := SetSector[1];
+				SetSectorPlay[2] := SetSector[2];
+				SetSectorPlay[3] := SetSector[3];
+				SetlocPending := 0b0;
+			}
+	//	Find_CurTrack(SetSectorPlay);
+	//	ReadTrack(SetSectorPlay);
+			TrackChanged := 0b0;
+			goto st1;
+			finish;
+		}
+	}
+
+	stage cdrReadInterrupt {
+		first_state st1;
+		state st1 par{
+			if(^Reading) finish;
+			else goto st2;
+		}
+		state st2 par{
+			if((Irq!=0) | (Stat!=0)){
+			//	CDREAD_INT(0x100);
+				generate read_interrupt_wait.do(0x0000100, 0b1);
+				goto st1;
+				finish;
+			}
+			else{
+				Transfer_ram.read(6);
+				goto st3;
+			}
+		}
+		state st3 par{
+			OCUP := 1;
+			SetResultSize(1);
+			//StatP |= 0x20|0x02;//STATUS_READ|STATUS_ROTATING;
+			//StatP &= ~0x40;//STATUS_SEEK;
+			sel stat<8>;
+			stat = StatP<7> || 0b01 || StatP<4:2> || 0b1 || StatP<0>;
+			StatP := stat;
+			Result[0] := stat;
+			Seeked := 1;//SEEK_DONE;
+
+			if(SetSectorPlay[2]==75){
+				SetSectorPlay[2] := 0;
+				if(SetSectorPlay[1]==60){
+					SetSectorPlay[1] := 0;
+					SetSectorPlay[0]++;
+				}
+				else SetSectorPlay[1]++;
+			}
+			else SetSectorPlay[2]++;
+
+			Readed := 0b0;
+			ReadRescheduled := 0b0;
+
+			//CDREAD_INT((Mode & 0x80) ? (cdReadTime / 2) : cdReadTime);
+			if(Mode<7>) generate read_interrupt_wait.do(0x0037200, 0b1);
+			else        generate read_interrupt_wait.do(0x006E400, 0b1);
+
+			if((Mode<6>==0b0) | (Transfer_ram.dout<2>==0b0)){
+				Stat := 1;//DataReady;
+				if(Reg2<0>){//(Stat & Reg2)!=0){
+					interrupt_out();
+				}
+			}
+
+			goto st1;
+			finish;
+		}
+	}
+
 }

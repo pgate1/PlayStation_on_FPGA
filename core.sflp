@@ -307,15 +307,19 @@ circuit core
 //psx.sw_reverb_off();
 //psx.sw_spu_off();
 	reg_wr sw_16; sw_16 := SW<16>;
-	if(sw_16) psx.sw_outview_on();
+	if(^sw_16) psx.sw_cdrom_on();
+//psx.sw_outview_on();
 	reg_wr sw_17; sw_17 := SW<17>;
 	if(^sw_17) psx.sw_kernel_run();
+reg_wr dbg_in<16>;
+dbg_in := SW<15:0>;
+psx.dbg_in = dbg_in;
 
 	any{
 		soundexe_read.do : seg = 0x0000||tA<20:5>;
 		key3 : seg = chksum || psx.dbg_cpu || 0x00 || psx.halt_code;
 		key2 : seg = psx.dbg;
-		key1 : seg = 0x000000 || halt_code;//psx.dbg2;
+		key1 : seg = psx.dbg_cdr;// || 0x00 || halt_code;//psx.dbg2;
 		else : seg = psx.pc_out;
 	}
 
@@ -351,8 +355,14 @@ circuit core
 
 reg_wr sw_scale<16>; sw_scale := SW<15:0>;
 psx.intwait_scale = 
-	0b0_101_110_011_101_110; // sr,vr,vw,sw
 //	sw_scale;
+//	0b0_110_110_011_101_110; // sr,vr,vw,sw
+	0b0_110_110_011_100_110; // 遅延スロットジャンプ無効
+//	0b0_110_110_100_101_110; // 遅延スロットジャンプ無効
+//	0b0_000_110_011_100_110 | // 遅延スロットジャンプ無効
+//	0b0_011_101_011_010_011; // new IRQ遅延スロット回避版
+//	0b0_110_100_101_101_101; // new さらに遅延スロットジャンプ無効
+//	(sw_scale & 0b0111000000000000);
 
 //if(psx.spu_mem_read_req & psx.spu_mem_write_req) halt(0x31); // no
 //if(psx.vram_read_req & psx.vram_write_req) halt(0x32); // これ

@@ -22,6 +22,8 @@ circuit drawTextureRect
 	input vu4<8>, vv4<8>;
 	instrin con(vx1, vy1, vx4, vy4, clut, tpage, vu1, vv1, vu4, vv4);
 
+	instrin texture_thin;
+
 	instrin draw;
 	output drawing;
 
@@ -90,7 +92,7 @@ circuit drawTextureRect
 			x := vx1;
 			pu := vu1 || 8#0b0;
 			alt{
-				y<10> | (y<0>==0b1) : par{ // y < 0
+				y<10> | (texture_thin & (y<0>==0b1)) : par{ // y < 0
 					y++;
 					pv += av;
 				}
@@ -121,7 +123,7 @@ circuit drawTextureRect
 				goto st3;
 			}
 
-			if(x<0>==0b0){
+			if(/*texture_thin &*/ (x<0>==0b0)){
 				x += 2;
 				pu += au << 1;
 			}
@@ -221,7 +223,8 @@ circuit drawTextureRect
 			goto st00_2;
 		}
 		state st00_2 if(/*vram_ack){*/ ^vram_read_wait){
-			if((vram_read_data_reg<15>==0b0) & (vram_read_data_reg<14:0>!=0)){
+// PSロゴ文字列表示では最上位ビットは見ない
+			if(/*(vram_read_data_reg<15>==0b0) &*/ (vram_read_data_reg<14:0>!=0)){
 				view_on(tx<9:0>, y<8:0>);
 				tr = vram_read_data_reg< 4: 0> || 0b000;
 				tg = vram_read_data_reg< 9: 5> || 0b000;
