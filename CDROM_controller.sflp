@@ -143,7 +143,7 @@ dbg_irq = dbg_irq_reg;
 			}
 			else{
 				io_dout = 0x00;//Transfer[transferIndex];
-			//	transferIndex++; // adjustTransferIndex()���ōs��
+			//	transferIndex++; // adjustTransferIndex()内で行う
 				adjustTransferIndex(1); // +1
 			}
 		}
@@ -186,7 +186,7 @@ dbg_irq = dbg_irq_reg;
 				ResultReady := 0b0;
 				Ctrl |= 0x80;
 
-				AddIrqQueue(0x00||io_din, 0x0000800); // �ύX�s��
+				AddIrqQueue(0x00||io_din, 0x0000800); // 変更不可
 
 				any{ // Cmd
 					io_din==1 : ; // none
@@ -322,7 +322,7 @@ dbg_reg := 0x000000 || io_din;
 	//	Transfer_ram.read(transferIndex);
 		cdrom_data.read(cdrom_adrs);
 		cdrom_adrs++;
-	//	transferIndex++; adjustTransferIndex()���ōs��
+	//	transferIndex++; adjustTransferIndex()内で行う
 		adjustTransferIndex(1);
 		dma_read_ack_reg := 0b1;
 	}
@@ -406,7 +406,7 @@ dbg_reg := 0x000000 || io_din;
 			no_busy_error := 0b0;
 			if(Stat!=0){
 				//CDR_INT(0x100);
-				generate interrupt_wait.do(0x0000100, 0b1); // �ύX�s��
+				generate interrupt_wait.do(0x0000100, 0b1); // 変更不可
 				finish;
 			}
 			else goto st2;
@@ -460,7 +460,7 @@ if(Irq_==0x0109) count++;
 halt(0x33);
 						delay = 0x0675C00;//cdReadTime * 30 / 2;
 					}
-					else delay = 0x0000800; // �ύX�s��
+					else delay = 0x0000800; // 変更不可
 
 					DriveState := 4; // DRIVESTATE_STOPPED
 				//	AddIrqQueue(CdlStop+0x100, delay);
@@ -482,7 +482,7 @@ halt(0x33);
 					//	0x014AC00
 					//	0x0||dbg_in||0x00
 					//	0x0||0b0000_1011_0010_0001||0x00 // 3 0x001 (DMAwait x2)
-						0x0||0b0000_0001_1000_0010||0x00 // 2 0x109 PS���S
+						0x0||0b0000_0001_1000_0010||0x00 // 2 0x109 PSロゴ
 						 /*cdReadTime*3*/);
 					Ctrl |= 0x80;
 				}
@@ -549,19 +549,19 @@ if(Play) halt(0x31);
 					no_busy_error := 0b1;
 				}
 				Irq_==26 : par{// CdlID
-					AddIrqQueue(0x011A/*CdlID*/, 20480); // �ύX�s��
+					AddIrqQueue(0x011A/*CdlID*/, 20480); // 変更不可
 				}
 				Irq_==0x011A : par{ //CdlID
 					sel disc_res<8>;
-					// 0xC0:�f�B�X�N�������Ă��Ȃ���ԂŃz�[�����
-					// 0x80:PlayStation�K�i�̃f�B�X�N�ł͂���܂���
+					// 0xC0:ディスクが入っていない状態でホーム画面
+					// 0x80:PlayStation規格のディスクではありません
 					if(sw_cdrom_on) disc_res = 0x00; // CD-ROM
 					else disc_res = 0xC0; // HOME view
 
 					SetResultSize(8);
 					Result[0] := StatP | (0x0||disc_res<7>||0b000);
 				//	Result[1] = 0;
-					Result[2] := 0x20; // ��
+					Result[2] := 0x20; // 仮
 					Result[3] := 0x00;
 
 					// 0x10 - audio | 0x40 - disk missing | 0x80 - unlicensed
