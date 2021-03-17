@@ -27,5 +27,5 @@ Add a CDROM controller.
 <img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/20200905_NotPlayStationDisc.jpg">
 
 2021/02/25  
-Add GTE for viewimg PS logo.  
+Add geometry engine for viewing PS logo.  
 <img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/PS_20210225_ok.jpg">
