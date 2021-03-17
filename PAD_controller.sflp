@@ -170,8 +170,8 @@ if(WriteData_stg.do) halt(0x44);
 		state st3 par{
 			any{
 				(CtrlReg<13>==0b0) & (CtrlReg<1>==0b1) : par{ // 0x0002:
-					// cur : ¶|‰º|‰E|ã|St| 1| 1|Sl
-					// ref :  |~|›|¢|R1|L1|R2|L2
+					// cur : ÂÂ¶|â€°Âº|â€°E|ÂÃ£|St| 1| 1|Sl
+					// ref : ÂÂ |Â~|Ââ€º|ÂÂ¢|R1|L1|R2|L2
 				//	uint8 cmd1[3] = {0x5A, 0xFF, 0xFF};
 				//	cmd1[1] = (uint8)(~key_reg);
 				//	cmd1[2] = (uint8)(~key_reg >> 8);
