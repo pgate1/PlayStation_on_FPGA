@@ -59,7 +59,7 @@ output dbg<32>;
 		ch[i].CtrlIRQ = CtrlIRQ;
 	}
 
-	// read_req‚ªo‚Ä‚¢‚é‚Æ‚«‚Íˆê’Uread_ack‚Å—‚Æ‚·
+	// read_reqãŒå‡ºã¦ã„ã‚‹ã¨ãã¯ä¸€æ—¦read_ackã§è½ã¨ã™
 	alt{
 		ack : ;
 		((doing==0x00) & ch_00.read_req) | ((doing==0x01) & ch_01.read_req) |
@@ -100,7 +100,7 @@ output dbg<32>;
 	}
 	rvb.Din = vDin;
 
-	// SPC DMA’†‚ÍƒŠƒo[ƒuƒoƒbƒtƒ@‚ÖƒAƒNƒZƒX‚µ‚È‚¢‚æ‚¤‚É
+	// SPC DMAä¸­ã¯ãƒªãƒãƒ¼ãƒ–ãƒãƒƒãƒ•ã‚¡ã¸ã‚¢ã‚¯ã‚»ã‚¹ã—ãªã„ã‚ˆã†ã«
 	rvb.dma_doing = dma_doing;
 
 	// 16bit x 24(32(5)) = 21bit
@@ -262,7 +262,7 @@ output dbg<32>;
 	}
 
 	instruct run33 par{
-		if(dcount==192){ // 44.1k~4 = 176400Hz 33868800Hz/192
+		if(dcount==192){ // 44.1kÃ—4 = 176400Hz 33868800Hz/192
 			par(i=0;i<24;i++){
 				ch[i].run();
 			}
