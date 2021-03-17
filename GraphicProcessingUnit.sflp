@@ -35,10 +35,10 @@ circuit GPU_core
 
 	output busy, drawing;
 
-	reg_wr px1<11>, py1<11>, pc1<24>; // A“_
-	reg_wr px2<11>, py2<11>, pc2<24>; // B“_
-	reg_wr px3<11>, py3<11>, pc3<24>; // C“_
-	reg_wr px4<11>, py4<11>; // D“_
+	reg_wr px1<11>, py1<11>, pc1<24>; // Aç‚¹
+	reg_wr px2<11>, py2<11>, pc2<24>; // Bç‚¹
+	reg_wr px3<11>, py3<11>, pc3<24>; // Cç‚¹
+	reg_wr px4<11>, py4<11>; // Dç‚¹
 
 	drawGouraudShading gs;
 	drawRect rect;
@@ -63,10 +63,10 @@ circuit GPU_core
 	input vram_read_data<16>;
 	reg_wr vram_read_data_reg<16>;
 
-	// WriteData—p
+	// WriteDataç”¨
 	reg_wr io_write_data<32>;
 
-	// WriteData,ReadData—p
+	// WriteData,ReadDataç”¨
 	sel io_vram_write_adrs<19>, io_vram_read_adrs<19>, io_vram_din<16>;
 	reg_wr io_vram_write_adrs_reg<19>, io_vram_read_adrs_reg<19>, io_vram_din_reg<16>;
 	instrself vram_write(io_vram_write_adrs, io_vram_din);
@@ -267,7 +267,7 @@ dbg = dbg_reg;
 			cmd==0xC0 : any{ // ReadVRAM
 				BufferOffset==2 : par{
 					status |= 0x08000000;
-					BufferOffset := 0; // 20190208’Ç‰Á
+					BufferOffset := 0; // 20190208è¿½åŠ 
 				}
 				else : par{
 					VramPosX := 0;
@@ -370,11 +370,11 @@ gs.dbg_in = dbg_in;
 //if(texrect.vram_read_req & vram_write_req) halt(0xAC); // no
 //if(texrect.vram_read_req & vram_read) halt(0xAD);
 //if(vram_write & vram_read) halt(0xAE); // no
-//if(vram_write_req & vram_read_req) halt(0xAF); // ‚±‚ê
+//if(vram_write_req & vram_read_req) halt(0xAF); // ã“ã‚Œ
 //if(VramData_image.write_vram & VramData_image.read_vram) halt(0xA1); // no
-//if(VramData_image.write_vram & vram_read_req) halt(0xA2); // ‚±‚ê
-//if(VramData_image.read_vram & vram_write_req) halt(0xA3); // ‚±‚ê
-// ‚Æ‚è‚ ‚¦‚¸read_adrs‚Æwrite_adrs‚ğ•ª‚¯‚ÄƒmƒCƒY‚ğÁ‚µ‚½
+//if(VramData_image.write_vram & vram_read_req) halt(0xA2); // ã“ã‚Œ
+//if(VramData_image.read_vram & vram_write_req) halt(0xA3); // ã“ã‚Œ
+// ã¨ã‚Šã‚ãˆãšread_adrsã¨write_adrsã‚’åˆ†ã‘ã¦ãƒã‚¤ã‚ºã‚’æ¶ˆã—ãŸ
 
 	instruct vram_write_ack par{
 		gs.vram_ack();
