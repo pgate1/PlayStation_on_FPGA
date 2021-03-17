@@ -1,0 +1,128 @@
+/*
+	DMA for CD-ROM
+		by pgate1
+*/
+
+declare mul_u16 interface
+{
+	input a<16>, b<16>;
+	output dout<32>;
+	instrin con;
+	instr_arg con(a, b);
+}
+
+circuit DMA_CDR
+{
+	input DmaMADR_3<32>, DmaBCR_3<32>, DmaCHCR_3<32>;
+
+	output A<21>, Dout<8>;
+	instrout wram_write(A, Dout);
+
+	instrout dma_read_req();
+	input dma_read_data<8>;
+
+	instrin Execute;
+	instrin wram_ack;
+	output running;
+
+	instrin run33;
+	reg_wr int_wait_max<32>, count_rst;
+	instrout interrupt;
+//	output int_waiting;
+
+	sel dma_size<18>;
+
+instrself halt(h_code);
+sel h_code<8>;
+reg_wr halt_code_reg<8>;
+output halt_code<8>;
+
+mul_u16 dbg_mul;
+input intwaitm<4>;
+output dbg32<32>;
+reg_wr dbg32_reg<32>;
+
+	stage_name run_dma { task do(); }
+	stage_name int_wait { task do(int_wait_max, count_rst); }
+
+	instruct halt halt_code_reg := h_code;
+	halt_code = halt_code_reg;
+
+dbg32 = dbg32_reg;
+
+	running = Execute | run_dma.do;
+
+	instruct Execute par{
+//if(int_wait.do) halt(0xB3);
+		generate run_dma.do();
+	}
+
+	dma_size = DmaBCR_3<15:0> || 0b00;
+
+	stage run_dma {
+		reg_wr madr<21>, dma_count<18>, dma_data<8>;
+		first_state st1;
+		state st1 par{
+			any{
+				(DmaMADR_3<31:28>==0x8) | (DmaMADR_3<31:28>==0xA) : ;
+				else : halt(0xA4);
+			}
+			madr := DmaMADR_3<20:0>;
+			dma_count := 0;
+			goto st2;
+		}
+		state st2 par{
+//if(dma_size!=2048) halt(0xB5);
+			dma_read_req();
+			dma_count++;
+			goto st2w;
+		}
+		state st2w par{
+			dma_data := dma_read_data;
+			goto st3;
+		}
+		state st3 if(wram_ack){
+//dbg32_reg += 0x000000||dma_data; // ok
+			wram_write(madr, dma_data);
+			madr++;
+			goto st3w;
+		}
+		state st3w if(wram_ack){
+			if(dma_count==dma_size) goto st4;
+			else goto st2;
+		}
+		state st4 par{
+			goto st5;
+		}
+		state st5 par{
+			sel wait_count<16>;
+			any{
+				DmaCHCR_3==0x11000000 : wait_count = dma_size<17:2>;
+				DmaCHCR_3==0x11400100 : wait_count = 0b00 || dma_size<17:4>;
+			}
+			generate int_wait.do(dbg_mul.con(wait_count, 0x000||/*intwaitm*/0x2).dout, 0b1); // 0x2
+			goto st1;
+			finish;
+		}
+	}
+
+	stage int_wait {
+		reg_wr int_wait_count<32>;
+		first_state st1;
+		state st1 par{
+			int_wait_count := 0;
+			count_rst := 0b0;
+			goto st2;
+		}
+		state st2 if(run33){
+			int_wait_count++;
+			if(int_wait_count==int_wait_max){
+				interrupt();
+				goto st1;
+				finish;
+			}
+			if(count_rst) goto st1;
+		}
+	}
+
+}

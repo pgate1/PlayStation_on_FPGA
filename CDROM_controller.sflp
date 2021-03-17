@@ -15,7 +15,7 @@ declare mul_u32 interface
 %i "ram_8x4k.h"
 %i "pseudo_cdrom_data.h"
 
-circuit CDR_core
+circuit CDROM_controller
 {
 	input io_adrs<2>;
 	instrin Read(io_adrs);
@@ -83,7 +83,7 @@ circuit CDR_core
 
 	pseudo_cdrom_data cdrom_data;
 
-	instrin sw_cdrom_on;
+	input sw_cdrom_ctrl<2>;
 
 mul_u32 dbg_mul_int, dbg_mul_read, dbg_mul_play;
 
@@ -143,7 +143,7 @@ dbg_irq = dbg_irq_reg;
 			}
 			else{
 				io_dout = 0x00;//Transfer[transferIndex];
-			//	transferIndex++; // adjustTransferIndex()å†…ã§è¡Œã†
+			//	transferIndex++; // adjustTransferIndex()“à‚Ås‚¤
 				adjustTransferIndex(1); // +1
 			}
 		}
@@ -186,10 +186,9 @@ dbg_irq = dbg_irq_reg;
 				ResultReady := 0b0;
 				Ctrl |= 0x80;
 
-				AddIrqQueue(0x00||io_din, 0x0000800); // å¤‰æ›´ä¸å¯
+				AddIrqQueue(0x00||io_din, 0x0000800); // •ÏX•s‰Â
 
 				any{ // Cmd
-					io_din==1 : ; // none
 					io_din==2 : par{ //CdlSetloc:
 						//for(i=0; i<3; i++) set_loc[i] = btoi(Param[i]);
 						//if(i > 16) Seeked = 0;//SEEK_PENDING;
@@ -216,7 +215,8 @@ if(Play) halt(0x3A);
 					io_din==14 : par{
 						Mode := Param[0];
 					}
-					(io_din==20) | (io_din==21) | (io_din==25) | (io_din==26) | (io_din==30) : ; // none
+					(io_din==1) | (io_din==8) | (io_din==20) | (io_din==21) |
+					(io_din==25) | (io_din==26) | (io_din==30) : ; // none
 					else : par{
 dbg_reg := 0x000000 || io_din;
 						halt(0x34);
@@ -316,18 +316,25 @@ dbg_reg := 0x000000 || io_din;
 		if(stat_reading) StatP &= ^0x60;//~(STATUS_READ|STATUS_SEEK);
 	}
 
-	reg_wr cdrom_adrs<14>; // 2048=0x800 <11>  *8=+3
-	reg_wr dma_read_ack_reg;
+	reg_wr cdrom_adrs<15>; // 2048=0x7FF<11> *8=+3=<14> +1 = <15>
+	reg_wr dma_read_Dout_reg<8>, dma_read_ack_reg;
 	instruct dma_read_req par{
+//if(cdrom_adrs<14>) halt(0x39);
 	//	Transfer_ram.read(transferIndex);
-		cdrom_data.read(cdrom_adrs);
+		cdrom_data.read(cdrom_adrs<13:0>);
 		cdrom_adrs++;
-	//	transferIndex++; adjustTransferIndex()å†…ã§è¡Œã†
+	//	transferIndex++; adjustTransferIndex()“à‚Ås‚¤
 		adjustTransferIndex(1);
 		dma_read_ack_reg := 0b1;
 	}
-	dma_read_Dout = cdrom_data.dout;//Transfer_ram.dout;
-	if(dma_read_ack_reg) dma_read_ack_reg := 0b0;
+	if(dma_read_ack_reg){
+		dma_read_ack_reg := 0b0;
+		dma_read_Dout_reg := cdrom_data.dout;
+		dma_read_Dout = cdrom_data.dout;
+	}
+	else{
+		dma_read_Dout = dma_read_Dout_reg;
+	}
 
 	stage interrupt_wait {
 		reg_wr int_wait_count<32>;
@@ -406,7 +413,7 @@ dbg_reg := 0x000000 || io_din;
 			no_busy_error := 0b0;
 			if(Stat!=0){
 				//CDR_INT(0x100);
-				generate interrupt_wait.do(0x0000100, 0b1); // å¤‰æ›´ä¸å¯
+				generate interrupt_wait.do(0x0000100, 0b1); // •ÏX•s‰Â
 				finish;
 			}
 			else goto st2;
@@ -457,10 +464,10 @@ if(Irq_==0x0109) count++;
 
 					sel delay<28>;
 					if(DriveState==0){ // DRIVESTATE_STANDB
-halt(0x33);
-						delay = 0x0675C00;//cdReadTime * 30 / 2;
+						// CD player exit
+						delay = 0x0075C00;//0x0675C00;//cdReadTime * 30 / 2;
 					}
-					else delay = 0x0000800; // å¤‰æ›´ä¸å¯
+					else delay = 0x0000800; // •ÏX•s‰Â
 
 					DriveState := 4; // DRIVESTATE_STOPPED
 				//	AddIrqQueue(CdlStop+0x100, delay);
@@ -482,7 +489,7 @@ halt(0x33);
 					//	0x014AC00
 					//	0x0||dbg_in||0x00
 					//	0x0||0b0000_1011_0010_0001||0x00 // 3 0x001 (DMAwait x2)
-						0x0||0b0000_0001_1000_0010||0x00 // 2 0x109 PSãƒ­ã‚´
+						0x0||0b0000_0001_1000_0010||0x00 // 2 0x109 PSƒƒS
 						 /*cdReadTime*3*/);
 					Ctrl |= 0x80;
 				}
@@ -549,19 +556,20 @@ if(Play) halt(0x31);
 					no_busy_error := 0b1;
 				}
 				Irq_==26 : par{// CdlID
-					AddIrqQueue(0x011A/*CdlID*/, 20480); // å¤‰æ›´ä¸å¯
+					AddIrqQueue(0x011A/*CdlID*/, 20480); // •ÏX•s‰Â
 				}
 				Irq_==0x011A : par{ //CdlID
+					// 0x00 : PSƒƒS
+					// 0x40 : PSƒƒS(ƒTƒEƒ“ƒhƒvƒŒƒCƒ„[‚ÉŠ„‚è“–‚Ä)
+					// 0x80 : PlayStation‹KŠi‚ÌƒfƒBƒXƒN‚Å‚Í‚ ‚è‚Ü‚¹‚ñ
+					// 0xC0 : ƒfƒBƒXƒN‚ª“ü‚Á‚Ä‚¢‚È‚¢ó‘Ô‚Åƒz[ƒ€‰æ–Ê
 					sel disc_res<8>;
-					// 0xC0:ãƒ‡ã‚£ã‚¹ã‚¯ãŒå…¥ã£ã¦ã„ãªã„çŠ¶æ…‹ã§ãƒ›ãƒ¼ãƒ ç”»é¢
-					// 0x80:PlayStationè¦æ ¼ã®ãƒ‡ã‚£ã‚¹ã‚¯ã§ã¯ã‚ã‚Šã¾ã›ã‚“
-					if(sw_cdrom_on) disc_res = 0x00; // CD-ROM
-					else disc_res = 0xC0; // HOME view
+					disc_res = sw_cdrom_ctrl || 0b000000;
 
 					SetResultSize(8);
 					Result[0] := StatP | (0x0||disc_res<7>||0b000);
 				//	Result[1] = 0;
-					Result[2] := 0x20; // ä»®
+					Result[2] := 0x20; // ‰¼
 					Result[3] := 0x00;
 
 					// 0x10 - audio | 0x40 - disk missing | 0x80 - unlicensed
@@ -577,19 +585,18 @@ if(Play) halt(0x31);
 					Result[1] := disc_res;
 
 					reg_wr set_next;
+					sel str<32>;
 					if(set_next==0b0){
 						set_next := 0b1;
-						Result[4] := 'S';
-						Result[5] := 'C';
-						Result[6] := 'E';
-						Result[7] := 'I';
+						str = "SCEI";
 					}
 					else{
-						Result[4] := 'F';
-						Result[5] := 'P';
-						Result[6] := 'G';
-						Result[7] := 'A';
+						str = "FPGA";
 					}
+					Result[4] := str<31:24>;
+					Result[5] := str<23:16>;
+					Result[6] := str<15:8>;
+					Result[7] := str<7:0>;
 					Stat := 2; //Complete;
 				}
 				Irq_==30 : par{ // 0x1E CdlReadToc:

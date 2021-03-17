@@ -1,11 +1,13 @@
 .SUFFIXES: .sflp .sfl .h .v
 
-SFLP = PSX_core.sflp R3000A.sflp div_u32.sflp bsr_s32.sflp Cache_IR.sflp rootcounter.sflp \
-DDS_50to33868800.sflp DMA_SPU.sflp SPU_core.sflp dsp_core.sflp dsp_ch.sflp bsr_s16.sflp \
-bsr_s24.sflp ADSR.sflp reverb.sflp ram_16x32k.sflp dsdac10.sflp core.sflp GPU_core.sflp \
+SFLP = PlayStation_core.sflp R3000A.sflp div_u32.sflp bsr_s32.sflp Cache_IR.sflp Timer.sflp \
+DDS_50to33868800.sflp DMA_SPU.sflp SoundProcessingUnit.sflp DigitalSignalProcessor.sflp dsp_ch.sflp bsr_s16.sflp \
+bsr_s24.sflp ADSR.sflp reverb.sflp ram_16x32k.sflp dsdac10.sflp core.sflp GraphicProcessingUnit.sflp \
 DMA_OTC.sflp DMA_GPU.sflp VGA_ctrl.sflp ram_320x240x15.sflp inv_table.sflp drawGouraudShading.sflp \
-drawRect.sflp view_ram_ctrl.sflp CDR_core.sflp SIO_core.sflp drawTextureRect.sflp \
-gamma_correction.sflp btoi.sflp ram_8x4k.sflp DMA_CDR.sflp pseudo_cdrom_data.sflp
+drawRect.sflp view_ram_ctrl.sflp CDROM_controller.sflp PAD_controller.sflp drawTextureRect.sflp \
+gamma_correction.sflp btoi.sflp ram_8x4k.sflp DMA_CDR.sflp pseudo_cdrom_data.sflp \
+GeometryTransformationEngine.sflp gte_DIVIDE.sflp gte_LIMIT.sflp
+
 SFLS = $(SFLP:.sflp=.sfl)
 HEAD = $(SFLP:.sflp=.h)
 VLOG = $(SFLS:.sfl=.v)
@@ -16,13 +18,18 @@ sfl2vl:
 	make sfl
 	make vl
 #	verilator --cc dsp_ch.v --compiler msvc --public
-#	verilator --cc GPU_core.v --compiler msvc --public --l2-name v
+#	verilator --cc GraphicProcessingUnit.v --compiler msvc --public --l2-name v
 #	verilator --cc drawGouraudShading.v --compiler msvc --public --l2-name v
-#	verilator --cc CDR_core.v --compiler msvc --public --l2-name v
-#	verilator --cc SIO_core.v --compiler msvc --public --l2-name v
+#	verilator --cc CDROM_controller.v --compiler msvc --public --l2-name v
+#	verilator --cc PAD_controller.v --compiler msvc --public --l2-name v
 #	verilator --cc drawTextureRect.v --compiler msvc --public --l2-name v
+#	verilator --cc GeometryTransformationEngine.v --compiler msvc --public --l2-name v
+#	verilator --cc gte_DIVIDE.v --compiler msvc --public --l2-name v
+#	verilator --cc GeometryTransformationEngine.v --Mdir obj_dir_gcc --exe gte_sim.cpp --public --l2-name v
+#	cd obj_dir_gcc; make -j -f VGeometryTransformationEngine.mk; ./VGeometryTransformationEngine.exe; cd ../
+
 #	verilator --cc PSX_core.v --compiler msvc --public --l2-name v -y demo
-	verilator --lint-only PSX_core.v -y demo
+	verilator --lint-only PlayStation_core.v -y demo
 #	verilator --lint-only core.v -y demo -y ../../hdl -y ../../DE2-115
 	# ok
 

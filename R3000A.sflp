@@ -3,8 +3,9 @@
 		by pgate1
 */
 
-%d READ_OP 0b0001
-%d READ_RT 0b0010
+%d READ_OP  0b0001
+%d READ_RT  0b0010
+%d READ_GTE 0b0100
 
 declare mul_u32 interface
 {
@@ -16,6 +17,8 @@ declare mul_u32 interface
 
 %i "div_u32.h"
 %i "bsr_s32.h"
+
+%i "GeometryTransformationEngine.h"
 
 circuit R3000A
 {
@@ -47,6 +50,7 @@ circuit R3000A
 	reg_wr rid_reg<4>;
 	instrout read_req;
 	instrin read_ack;
+	instrself read_gte;
 
 	instrself write(A, Dout, Word);
 	instrout write_req;
@@ -80,7 +84,7 @@ circuit R3000A
 	reg_wr ex_pc<32>, ex_opcode<32>; // test
 //sel forwarding<4>;
 	reg_wr cpr0_rd_data_reg<32>;
-	instrself rt_data_set(data), rd_data_set(data);
+	instrself rt_data_set(data), rd_data_set(data), reset_rtrd;
 //	instrself delayslot_opcode_invalid;
 
 	instrself stage_MEM;
@@ -106,6 +110,9 @@ circuit R3000A
 	instrself irq_check;
 	instrself fetch_delay_slot;
 
+	GeometryTransformationEngine gte;
+	reg_wr gte_rt<5>;
+
 	output ir_read;
 
 	output pc_out<32>, opcode_out<32>;
@@ -118,6 +125,9 @@ circuit R3000A
 output dbg<8>;
 reg_wr dbg_reg<8>;
 //instrout ir_sync;
+output dbg16<16>;
+output dbg32<32>;
+reg_wr dbg32_reg<32>;
 
 	stage_name read_wait { task do(rid_reg); }
 	stage_name mul_wait { task do(mulf_reg, mul_a, mul_b); }
@@ -140,11 +150,12 @@ reg_wr dbg_reg<8>;
 	if(write) Dout_reg := Dout;
 	else Dout = Dout_reg;
 
-	halt_code = halt_code_reg;
 	pc_out = pc;
 	opcode_out = opcode;
 
-dbg = dbg_reg;
+dbg = dbg_reg | gte.dbg;
+dbg16 = gte.dbg16;
+dbg32 = gte.dbg32;
 
 	reg_wr reset1;
 	instruct reset_act par{
@@ -177,9 +188,8 @@ dbg = dbg_reg;
 		hA==0x033 : gpr[0x1D] := h_data || gpr[0x1D]<23:0>;
 	}
 
-	instruct halt par{
-		halt_code_reg := h_code;
-	}
+	instruct halt halt_code_reg := h_code;
+	halt_code = halt_code_reg | gte.halt_code;
 
 	instruct read par{
 		read_req();
@@ -187,6 +197,10 @@ dbg = dbg_reg;
 	}
 	if(read) ir_read = rid==READ_OP;
 	else ir_read = rid_reg==READ_OP;
+
+	instruct read_gte par{
+		generate read_wait.do(READ_GTE);
+	}
 
 	instruct write par{
 		// if(cpu->SR->is_c) return;
@@ -252,7 +266,7 @@ dbg = dbg_reg;
 // |||››
 // ›››|›
 
-		if(mul_wait.do | div_wait.do);
+		if(read_wait.do | mul_wait.do | div_wait.do | gte.running);
 		else{
 			alt{
 				write_mem_rt : stall_mem2 := 1;
@@ -354,6 +368,11 @@ dbg = dbg_reg;
 		mem_rd := rd;
 	}
 
+	instruct reset_rtrd par{
+		mem_rt := 0;
+		mem_rd := 0;
+	}
+
 	instruct stage_EX par{
 //ir_sync(); // output
 
@@ -416,7 +435,7 @@ dbg = dbg_reg;
 				funct==0x08 : par{ // JR
 					// delay_pc = gpr[opcode.reg.rs];
 					jump(rs_data);
-					mem_rd := 0; mem_rt := 0;
+					reset_rtrd();
 				}
 				funct==0x09 : par{ // JALR
 					// gpr[opcode.reg.rd] = pc + 8;
@@ -428,11 +447,8 @@ dbg = dbg_reg;
 					// Exception(0x20);//EXC_SYS);
 					if(irq_run==3) exception(0x00000400); // IRQ
 					else exception(0x00000020);
-					mem_rd := 0; mem_rt := 0;
+					reset_rtrd();
 				}
-
-			//	funct==0x0D : ; // BREAK_ ?
-
 				funct==0x10 : par{ // MFHI
 					// gpr[opcode.reg.rd] = hi;
 					rd_data_set(hi);
@@ -440,7 +456,7 @@ dbg = dbg_reg;
 				funct==0x11 : par{ // MTHI
 					// hi = gpr[opcode.reg.rs];
 					hi := rs_data;
-					mem_rd := 0; mem_rt := 0;
+					reset_rtrd();
 				}
 				funct==0x12 : par{ // MFLO
 					// gpr[opcode.reg.rd] = lo;
@@ -449,21 +465,21 @@ dbg = dbg_reg;
 				funct==0x13 : par{ // MTLO
 					// lo = gpr[opcode.reg.rs];
 					lo := rs_data;
-					mem_rd := 0; mem_rt := 0;
+					reset_rtrd();
 				}
 				funct==0x18 : par{ // MULT
 					// m = (signed __int64)(signed long)gpr[opcode.reg.rs] * (signed __int64)(signed long)gpr[opcode.reg.rt];
 					// lo = m & 0x0FFFFFFFF;
 					// hi = m >> 32;
 					generate mul_wait.do(1, rs_data, rt_data);
-					mem_rd := 0; mem_rt := 0;
+					reset_rtrd();
 				}
 				funct==0x19 : par{ // MULTU
 					// m = (unsigned __int64)gpr[opcode.reg.rs] * (unsigned __int64)gpr[opcode.reg.rt];
 					// lo = m & 0x0FFFFFFFF;
 					// hi = m >> 32;
 					generate mul_wait.do(2, rs_data, rt_data);
-					mem_rd := 0; mem_rt := 0;
+					reset_rtrd();
 				}
 				funct==0x1A : par{ // DIV
 					// if(gpr[opcode.reg.rt]!=0){
@@ -479,7 +495,7 @@ dbg = dbg_reg;
 					div_ns := rs_data<31>;
 					div_ds := rt_data<31>;
 					generate div_wait.do(1);
-					mem_rd := 0; mem_rt := 0;
+					reset_rtrd();
 				}
 				funct==0x1B : par{ // DIVU
 					// if(gpr[opcode.reg.rt]!=0){
@@ -488,7 +504,7 @@ dbg = dbg_reg;
 					// }
 					div.con(rs_data, rt_data);
 					generate div_wait.do(2);
-					mem_rd := 0; mem_rt := 0;
+					reset_rtrd();
 				}
 				funct==0x20 : par{ // ADD
 					// gpr[opcode.reg.rd] = gpr[opcode.reg.rs] + gpr[opcode.reg.rt];
@@ -545,7 +561,7 @@ dbg_reg := funct; halt(0x02);
 					if(rs_data<31>){
 						jump(pc + ((32#imm_immediate)<29:0>||0b00) - 4);
 					}
-					mem_rt := 0; mem_rd := 0;
+					reset_rtrd();
 				}
 				rt==1 : par{ // BGEZ
 					// if((int)gpr[opcode.imm.rs] >= 0){
@@ -555,14 +571,14 @@ dbg_reg := funct; halt(0x02);
 					if(rs_data<31>==0b0){
 						jump(pc + ((32#imm_immediate)<29:0>||0b00) - 4);
 					}
-					mem_rt := 0; mem_rd := 0;
+					reset_rtrd();
 				}
 				else : halt(0x03);
 			}
 			op==0x02 : par{ // J
 				// delay_pc = (pc & 0xF0000000) | ((opcode.jump.target<<2)&0x0FFFFFFF);
 				jump(pc<31:28>||jmp_target||0b00);
-				mem_rt := 0; mem_rd := 0;
+				reset_rtrd();
 			}
 			op==0x03 : par{ // JAL
 				// gpr[31] = pc + 8;
@@ -578,7 +594,7 @@ dbg_reg := funct; halt(0x02);
 				if(rs_data==rt_data){
 					jump(pc + ((32#imm_immediate)<29:0>||0b00) - 4);
 				}
-				mem_rt := 0; mem_rd := 0;
+				reset_rtrd();
 			}
 			op==0x05 : par{ // BNE
 				// if(gpr[opcode.imm.rs] != gpr[opcode.imm.rt]){
@@ -587,7 +603,7 @@ dbg_reg := funct; halt(0x02);
 				if(rs_data!=rt_data){
 					jump(pc + ((32#imm_immediate)<29:0>||0b00) - 4);
 				}
-				mem_rt := 0; mem_rd := 0;
+				reset_rtrd();
 			}
 			op==0x06 : par{ // BLEZ
 				// if(((int)gpr[opcode.imm.rs]) <= 0){
@@ -598,7 +614,7 @@ dbg_reg := funct; halt(0x02);
 				if(rs_data<31> | (rs_data==0)){
 					jump(pc + ((32#imm_immediate)<29:0>||0b00) - 4);
 				}
-				mem_rt := 0; mem_rd := 0;
+				reset_rtrd();
 			}
 			op==0x07 : par{ // BGTZ
 				// if(((int)gpr[opcode.imm.rs]) > 0){
@@ -608,7 +624,7 @@ dbg_reg := funct; halt(0x02);
 				if((rs_data<31>==0b0) & (rs_data!=0)){
 					jump(pc + ((32#imm_immediate)<29:0>||0b00) - 4);
 				}
-				mem_rt := 0; mem_rd := 0;
+				reset_rtrd();
 			}
 			op==0x08 : par{ // ADDI
 				// gpr[opcode.imm.rt] = (int)(signed short)opcode.imm.immediate + gpr[opcode.imm.rs];
@@ -644,6 +660,7 @@ dbg_reg := funct; halt(0x02);
 				// gpr[opcode.imm.rt] = (int)opcode.imm.immediate << 16;
 				rt_data_set(imm_immediate || 0x0000);
 			}
+
 			op==0x10 : any{ // COP0
 				rs==0 : par{ // MFC0
 					// gpr[opcode.reg.rt] = cpr0[opcode.reg.rd];
@@ -666,8 +683,8 @@ dbg_reg := funct; halt(0x02);
 							cpr0_rd_data_reg := rt_data;
 						}
 					}
-					mem_rt := 0; mem_rd := 0;
 					cop_rs := rs; cop_rd := rd;
+					reset_rtrd();
 				}
 				rs==16 : par{
 					any{
@@ -677,45 +694,58 @@ dbg_reg := funct; halt(0x02);
 						}
 					}
 					cop_rs := rs;
-					mem_rt := 0; mem_rd := 0;
+					reset_rtrd();
 				}
 			}
 
-			op==0x12 : par{ // COP2
-				any{
-					funct==0x00 : any{ // BASIC
-						rs==0 : par{
-
+			op==0x12 : any{ // COP2
+				funct==0x00 : par{ // BASIC
+					any{
+						rs==0 : par{ // MFC2 read D
+							gte.MFC2(rd);
+							read_gte();
+							read_rt();
+							mem_rt := rt; mem_rd := 0;
 						}
-						rs==2 : par{
-		
+						rs==2 : par{ // CFC2 read C
+							gte.CFC2(rd);
+							read_gte();
+							read_rt();
+							mem_rt := rt; mem_rd := 0;
 						}
-						rs==4 : par{
-				
+						rs==4 : par{ // MTC2 write D
+							gte.MTC2(rt_data, rd);
+							reset_rtrd();
 						}
-						rs==6 : par{
-					
+						rs==6 : par{ // CTC2 write C
+							gte.CTC2(rt_data, rd);
+							reset_rtrd();
 						}
 						else : par{
 dbg_reg := 0b000||rs; halt(0x05);
 						}
 					}
-					funct==0x06 : par{
-				
-					}
-					funct==0x13 : par{
-				
-					}
-					funct==0x2D : par{
-					
-					}
-					funct==0x30 : par{
-					}
-					else : par{
-dbg_reg := funct; halt(0x04);
-					}
+					cop_rs := rs;
 				}
-				mem_rt := 0; mem_rd := 0;
+				funct==0x06 : par{ // NCLIP
+					gte.NCLIP();
+					reset_rtrd();
+				}
+				funct==0x13 : par{ // NCDS
+					gte.NCDS();
+					reset_rtrd();
+				}
+				funct==0x2D : par{ // AVSZ3
+					gte.AVSZ3();
+					reset_rtrd();
+				}
+				funct==0x30 : par{ // RTPT
+					gte.RTPT();
+					reset_rtrd();
+				}
+				else : par{
+dbg_reg := funct; halt(0x04);
+				}
 			}
 
 			op==0x20 : par{ // LB
@@ -740,6 +770,7 @@ dbg_reg := funct; halt(0x04);
 				adrs = rs_data + (32#imm_immediate);
 				read(READ_RT, adrs<31:2>||0b00, 4);
 				read_rt();
+			//	rt_data_set(rt_data);
 				mem_rt := rt; mem_rd := 0;
 				rt_data_reg := rt_data;
 				mem_A := adrs;
@@ -775,6 +806,7 @@ dbg_reg := funct; halt(0x04);
 				adrs = rs_data + (32#imm_immediate);
 				read(READ_RT, adrs<31:2>||0b00, 4);
 				read_rt();
+			//	rt_data_set(rt_data);
 				mem_rt := rt; mem_rd := 0;
 				rt_data_reg := rt_data;
 				mem_A := adrs;
@@ -786,7 +818,7 @@ dbg_reg := funct; halt(0x04);
 				adrs = rs_data + (32#imm_immediate);
 				write(adrs, 0x000000||rt_data<7:0>, 1);
 				write_rt();
-				mem_rt := 0; mem_rd := 0;
+				reset_rtrd();
 			}
 			op==0x29 : par{ // SH
 				// adrs = gpr[opcode.imm.rs] + (int)(signed short)opcode.imm.immediate;
@@ -794,7 +826,7 @@ dbg_reg := funct; halt(0x04);
 				adrs = rs_data + (32#imm_immediate);
 				write(adrs, 0x0000||rt_data<15:0>, 2);
 				write_rt();
-				mem_rt := 0; mem_rd := 0;
+				reset_rtrd();
 			}
 			op==0x2A : par{ // SWL
 				// adrs = gpr[opcode.imm.rs] + (int)(signed short)opcode.imm.immediate;
@@ -814,7 +846,7 @@ dbg_reg := funct; halt(0x04);
 				adrs = rs_data + (32#imm_immediate);
 				write(adrs, rt_data, 4);
 				write_rt();
-				mem_rt := 0; mem_rd := 0;
+				reset_rtrd();
 			}
 			op==0x2E : par{ // SWR
 				// adrs = gpr[opcode.imm.rs] + (int)(signed short)opcode.imm.immediate;
@@ -828,18 +860,23 @@ dbg_reg := funct; halt(0x04);
 				mem_A := adrs;
 				// mem.write(adrs & 0xFFFFFFFC, val);
 			}
-			op==0x32 : par{ // LWC2
+			op==0x32 : par{ // LWC2 mem -> d[rt]
 				adrs = rs_data + (32#imm_immediate);
 				read(READ_RT, adrs, 4);
 				read_rt();
-				mem_rt := rt; mem_rd := 0;
+				gte_rt := rt;
+				reset_rtrd();
 			}
-			op==0x3A : par{ // SWC2
+			op==0x3A : par{ // SWC2 d[rt] -> mem
 				// mem.write(adrs, gte.MFC2(opcode.imm.rt));
 				adrs = rs_data + (32#imm_immediate);
-				write(adrs, 0x00000000/*gte.MFC2(opcode.imm.rt)*/, 4);
-				write_rt();
-				mem_rt := 0; mem_rd := 0;
+				gte.MFC2(rt);
+				read_gte();
+				read_rt();
+				mem_A := adrs;
+				mem_rt := rt; mem_rd := 0;
+			//	write(adrs, gte.MFC2(rt).dout, 4);
+			//	write_rt();
 			}
 			else : par{
 dbg_reg := op;
@@ -875,6 +912,13 @@ dbg_reg := op;
 					cpr0[cop_rd] := cpr0_rd_data_reg;
 				}
 			}
+			mem_op==0x12 : any{ // GTE
+				mem_funct==0x00 : any{
+					(cop_rs==0) | (cop_rs==2) : par{
+						gpr[mem_rt] := rt_data_reg; // gte.dout
+					}
+				}
+			}
 			(mem_op==0x03) |
 			(mem_op==0x08) | (mem_op==0x09) | (mem_op==0x0A) | (mem_op==0x0B) |
 			(mem_op==0x0C) | (mem_op==0x0D) | (mem_op==0x0E) | (mem_op==0x0F) |
@@ -886,8 +930,13 @@ dbg_reg := op;
 				write(mem_A<31:2>||0b00, rt_data_reg, 4);
 				write_mem_rt();
 			}
-			mem_op==0x32 : par{
-				// gte.MTC2(rt_data_reg, mem_rt);
+			mem_op==0x32 : par{ // LWC2
+				gte.MTC2(rt_data_reg, gte_rt);
+				write_mem_rt();
+			}
+			mem_op==0x3A : par{ // SWC2
+				write(mem_A<31:2>||0b00, rt_data_reg, 4);
+				write_mem_rt();
 			}
 		}
 	}
@@ -898,7 +947,7 @@ dbg_reg := op;
 
 	stage read_wait {
 		sel din_half<16>, din_byte<8>;
-		if(read_ack){
+		if(((rid_reg==READ_OP) | (rid_reg==READ_RT)) & read_ack){
 			any{
 			//	Word_reg==4 : ;
 				Word_reg==2 : any{
@@ -956,6 +1005,11 @@ dbg_reg := op;
 					}
 				}
 			}
+			finish;
+		}
+		if((rid_reg==READ_GTE) & (^gte.running)){
+			// rs==4,6 op==0x3A
+			rt_data_reg := gte.dout;
 			finish;
 		}
 	}

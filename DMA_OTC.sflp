@@ -33,7 +33,7 @@ circuit DMA_OTC
 	output halt_code<8>;
 
 output dbg<32>;
-reg_wr count<16>;
+//reg_wr count<16>;
 //input dbg_in<16>;
 input intwaitm<4>;
 mul_u16 dbg_mul;
@@ -48,7 +48,7 @@ mul_u16 dbg_mul;
 	instruct halt h_code_reg := h_code;
 	halt_code = h_code_reg;
 
-dbg = 0x0000||count;
+//dbg = 0x0000||count;
 
 	instruct Execute par{
 //if(int_wait.do) halt(0xB1);

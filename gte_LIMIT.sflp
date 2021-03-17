@@ -1,0 +1,131 @@
+/*
+	LIMIT in GTE
+		by pgate1
+*/
+
+circuit gte_LIMIT
+{
+	input limB1_val<32>, limB1_lim;
+	instrin limB1(limB1_val, limB1_lim);
+	output limB1_ret<16>;
+
+	input limB2_val<32>, limB2_lim;
+	instrin limB2(limB2_val, limB2_lim);
+	output limB2_ret<16>;
+
+	input limB3_val<32>, limB3_lim;
+	instrin limB3(limB3_val, limB3_lim);
+	output limB3_ret<16>;
+
+	input limD_val<32>;
+	instrin limD(limD_val);
+	output limD_ret<16>;
+
+	output FLAG<32>;
+	instrout set_FLAG(FLAG);
+
+/*
+// #define limB1(a, l) LIM((a), 0x7fff, -0x8000 * !l, (1 << 24))
+// #define limB2(a, l) LIM((a), 0x7fff, -0x8000 * !l, (1 << 23))
+// #define limB3(a, l) LIM((a), 0x7fff, -0x8000 * !l, (1 << 22))
+static inline s64 LIM(s64 value, s64 max, s64 min, u32 f) {
+	s64 ret = value;
+	if (value > max) {
+		gteFLAG |= f;
+		ret = max;
+	} else if (value < min) {
+		gteFLAG |= f;
+		ret = min;
+	}
+	return ret;
+}
+*/
+	instruct limB1 par{
+		any{
+			(limB1_val<31>==0b0) & (limB1_val<15:14>==0b10) : par{ // value > 0x00007FFF
+				set_FLAG(0x01000000);
+				limB1_ret = 0x7FFF;
+			}
+			(limB1_lim==0b0) & (limB1_val<31>==0b1) & (limB1_val<15:14>==0b01) : par{ // value < 0xFFFF8000
+				set_FLAG(0x01000000);
+				limB1_ret = 0x8000;
+			}
+			(limB1_lim==0b1) & (limB1_val<31>==0b1) : par{ // value < 0x00000000
+				set_FLAG(0x01000000);
+				limB1_ret = 0x0000;
+			}
+			else : limB1_ret = limB1_val<15:0>;
+		}
+	}
+
+	instruct limB2 par{
+		any{
+			(limB2_val<31>==0b0) & (limB2_val<15:14>==0b10) : par{ // value > 0x00007FFF
+				set_FLAG(0x00800000);
+				limB2_ret = 0x7FFF;
+			}
+			(limB2_lim==0b0) & (limB2_val<31>==0b1) & (limB2_val<15:14>==0b01) : par{ // value < 0xFFFF8000
+				set_FLAG(0x00800000);
+				limB2_ret = 0x8000;
+			}
+			(limB2_lim==0b1) & (limB2_val<31>==0b1) : par{ // value < 0x00000000
+				set_FLAG(0x00800000);
+				limB2_ret = 0x0000;
+			}
+			else : limB2_ret = limB2_val<15:0>;
+		}
+	}
+
+	instruct limB3 par{
+		any{
+			(limB3_val<31>==0b0) & (limB3_val<15:14>==0b10) : par{ // value > 0x00007FFF
+				set_FLAG(0x00400000);
+				limB3_ret = 0x7FFF;
+			}
+			(limB3_lim==0b0) & (limB3_val<31>==0b1) & (limB3_val<15:14>==0b01) : par{ // value < 0xFFFF8000
+				set_FLAG(0x00400000);
+				limB3_ret = 0x8000;
+			}
+			(limB3_lim==0b1) & (limB3_val<31>==0b1) : par{ // value < 0x00000000
+				set_FLAG(0x00400000);
+				limB3_ret = 0x0000;
+			}
+			else : limB3_ret = limB3_val<15:0>;
+		}
+	}
+/*
+	instruct limB3 par{
+		any{
+			(limB3_val<31>==0b0) & (limB3_val<30:15>!=0x0000) : par{ // value > 0x00007FFF
+				set_FLAG(0x00400000);
+				limB3_ret = 0x00007FFF;
+			}
+			(limB3_lim==0b0) & (limB3_val<31>==0b1) & (limB3_val<30:15>!=0xFFFF) : par{ // value < 0xFFFF8000
+				set_FLAG(0x00400000);
+				limB3_ret = 0xFFFF8000;
+			}
+			(limB3_lim==0b1) & (limB3_val<31>==0b1) : par{ // value < 0x00000000
+				set_FLAG(0x00400000);
+				limB3_ret = 0x00000000;
+			}
+			else : limB3_ret = limB3_val;
+		}
+	}
+*/
+
+	// #define limD(a) LIM((a), 0xffff, 0x0000, (1 << 18))
+	instruct limD par{
+		any{
+			(limD_val<31>==0b0) & (limD_val<30:16>!=0) : par{ // value > 0x0000FFFF
+				set_FLAG(0x00040000);
+				limD_ret = 0xFFFF;
+			}
+			limD_val<31>==0b1 : par{ // value < 0x00000000
+				set_FLAG(0x00040000);
+				limD_ret = 0x0000;
+			}
+			else : limD_ret = limD_val<15:0>;
+		}
+	}
+
+}

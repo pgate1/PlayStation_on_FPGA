@@ -7,7 +7,7 @@
 %i "drawRect.h"
 %i "drawTextureRect.h"
 
-circuit GPU_core
+circuit GraphicProcessingUnit
 {
 	input din<32>;
 	output dout<32>;
@@ -35,10 +35,10 @@ circuit GPU_core
 
 	output busy, drawing;
 
-	reg_wr px1<11>, py1<11>, pc1<24>; // AÁÇπ
-	reg_wr px2<11>, py2<11>, pc2<24>; // BÁÇπ
-	reg_wr px3<11>, py3<11>, pc3<24>; // CÁÇπ
-	reg_wr px4<11>, py4<11>; // DÁÇπ
+	reg_wr px1<11>, py1<11>, pc1<24>; // Aì_
+	reg_wr px2<11>, py2<11>, pc2<24>; // Bì_
+	reg_wr px3<11>, py3<11>, pc3<24>; // Cì_
+	reg_wr px4<11>, py4<11>; // Dì_
 
 	drawGouraudShading gs;
 	drawRect rect;
@@ -63,10 +63,10 @@ circuit GPU_core
 	input vram_read_data<16>;
 	reg_wr vram_read_data_reg<16>;
 
-	// WriteDataÁî®
+	// WriteDataóp
 	reg_wr io_write_data<32>;
 
-	// WriteData,ReadDataÁî®
+	// WriteData,ReadDataóp
 	sel io_vram_write_adrs<19>, io_vram_read_adrs<19>, io_vram_din<16>;
 	reg_wr io_vram_write_adrs_reg<19>, io_vram_read_adrs_reg<19>, io_vram_din_reg<16>;
 	instrself vram_write(io_vram_write_adrs, io_vram_din);
@@ -191,9 +191,10 @@ dbg = dbg_reg;
 				}
 				else : BufferOffset++;
 			}
-			cmd==0x22 : any{
+
+			(cmd==0x20) | (cmd==0x22) : any{
 				BufferOffset==3 : par{ // Mono3PointPoly
-				//	generate draw_stg.do();
+					generate draw_stg.do();
 					BufferOffset := 0;
 				}
 				else : BufferOffset++;
@@ -267,7 +268,7 @@ dbg = dbg_reg;
 			cmd==0xC0 : any{ // ReadVRAM
 				BufferOffset==2 : par{
 					status |= 0x08000000;
-					BufferOffset := 0; // 20190208ËøΩÂä†
+					BufferOffset := 0; // 20190208í«â¡
 				}
 				else : par{
 					VramPosX := 0;
@@ -311,7 +312,7 @@ dbg_reg := 0x000000||cmd;
 
 gs.dbg_in = dbg_in;
 	sel f_dither;
-	f_dither = tpage<9> & (cmd_reg<7:4>==0x3);
+	f_dither = tpage<9>;// & (cmd_reg<7:4>==0x3);
 	gs.con(px1, py1, pc1, px2, py2, pc2, px3, py3, pc3, drawW, drawH, f_dither);
 	rect.con(px1, py1, pc1, px2, py2);
 	texrect.con(px1, py1, px4, py4, clut, tpage, pu1, pv1, pu4, pv4);
@@ -370,11 +371,11 @@ gs.dbg_in = dbg_in;
 //if(texrect.vram_read_req & vram_write_req) halt(0xAC); // no
 //if(texrect.vram_read_req & vram_read) halt(0xAD);
 //if(vram_write & vram_read) halt(0xAE); // no
-//if(vram_write_req & vram_read_req) halt(0xAF); // „Åì„Çå
+//if(vram_write_req & vram_read_req) halt(0xAF); // Ç±ÇÍ
 //if(VramData_image.write_vram & VramData_image.read_vram) halt(0xA1); // no
-//if(VramData_image.write_vram & vram_read_req) halt(0xA2); // „Åì„Çå
-//if(VramData_image.read_vram & vram_write_req) halt(0xA3); // „Åì„Çå
-// „Å®„Çä„ÅÇ„Åà„Åöread_adrs„Å®write_adrs„ÇíÂàÜ„Åë„Å¶„Éé„Ç§„Ç∫„ÇíÊ∂à„Åó„Åü
+//if(VramData_image.write_vram & vram_read_req) halt(0xA2); // Ç±ÇÍ
+//if(VramData_image.read_vram & vram_write_req) halt(0xA3); // Ç±ÇÍ
+// Ç∆ÇËÇ†Ç¶Ç∏read_adrsÇ∆write_adrsÇï™ÇØÇƒÉmÉCÉYÇè¡ÇµÇΩ
 
 	instruct vram_write_ack par{
 		gs.vram_ack();
@@ -495,7 +496,7 @@ vraming = VramData_image.write_vram | VramData_image.read_vram;
 					rect.draw();
 					goto stend;
 				}
-				cmd_reg==0x22 : par{ // Mono3PointPoly
+				(cmd_reg==0x20) | (cmd_reg==0x22) : par{ // Mono3PointPoly
 					px1 := CommandBuffer[1]<10:0>;
 					py1 := CommandBuffer[1]<26:16>;
 					pc1 := CommandBuffer[0]<23:0>;

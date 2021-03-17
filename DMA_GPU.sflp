@@ -165,7 +165,7 @@ dbg = dbg_reg;
 			goto st4;
 		}
 		state st4 if((^run_mem2vram.do) & (^gpu_busy)){
-			if(next_addr!=0xFFFFFF) goto st2;
+			if((next_addr!=0xFFFFFF) & (next_addr<20:2>!=0)) goto st2;
 			else{
 //if(trans_size<31>) halt(0x46);
 				generate int_wait.do(dbg_mul_c.con(trans_size<15:0>, 0x000||intwaitm_chain).dout, 0b1);

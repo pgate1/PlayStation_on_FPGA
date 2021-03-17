@@ -3,7 +3,7 @@
 		by pgate1
 */
 
-circuit SIO_core
+circuit PAD_controller
 {
 	input io_din<16>;
 	instrin WriteData(io_din);
@@ -55,7 +55,7 @@ input intwaitm<4>;
 	running = WriteData_stg.do;
 
 	instruct WriteData par{
-if(WriteData_stg.do) halt(0x44);
+//if(WriteData_stg.do) halt(0x44);
 		generate WriteData_stg.do(io_din<7:0>);
 	}
 
@@ -84,7 +84,7 @@ if(WriteData_stg.do) halt(0x44);
 	}
 
 	instruct ReadData par{
-if(WriteData_stg.do) halt(0x44);
+//if(WriteData_stg.do) halt(0x44);
 		if(StatReg<1>/*RX_RDY*/){
 			io_dout = 0x00 || sbuf[parp];
 			if(parp==bufcount){
@@ -118,12 +118,12 @@ if(WriteData_stg.do) halt(0x44);
 	}
 
 	instruct ReadStat par{
-if(WriteData_stg.do) halt(0x44);
+//if(WriteData_stg.do) halt(0x44);
 		io_dout = StatReg;
 	}
 
 	instruct ReadCtrl par{
-if(WriteData_stg.do) halt(0x44);
+//if(WriteData_stg.do) halt(0x44);
 		io_dout = CtrlReg;
 	}
 
@@ -170,8 +170,8 @@ if(WriteData_stg.do) halt(0x44);
 		state st3 par{
 			any{
 				(CtrlReg<13>==0b0) & (CtrlReg<1>==0b1) : par{ // 0x0002:
-					// cur : ÂÂ¶|â€°Âº|â€°E|ÂÃ£|St| 1| 1|Sl
-					// ref : ÂÂ |Â~|Ââ€º|ÂÂ¢|R1|L1|R2|L2
+					// cur : ¶|‰º|‰E|ã|St| 1| 1|Sl
+					// ref :  |~|›|¢|R1|L1|R2|L2
 				//	uint8 cmd1[3] = {0x5A, 0xFF, 0xFF};
 				//	cmd1[1] = (uint8)(~key_reg);
 				//	cmd1[2] = (uint8)(~key_reg >> 8);

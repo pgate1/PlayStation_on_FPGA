@@ -3,9 +3,9 @@
 		by pgate1
 */
 
-%i "dsp_core.h"
+%i "DigitalSignalProcessor.h"
 
-circuit SPU_core
+circuit SoundProcessingUnit
 {
 	instrin io_set(io_A, io_Din);
 	input io_A<16>, io_Din<16>;
@@ -24,7 +24,7 @@ circuit SPU_core
 
 	input dma_doing;
 
-	dsp_core dsp;
+	DigitalSignalProcessor dsp;
 	instrout mem_read_req(mem_A);
 	input mem_Dout<16>;
 	instrin sw_intpl_off, sw_reverb_off;

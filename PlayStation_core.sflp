@@ -3,28 +3,29 @@
 	Copyright (c)2017 pgate1
 */
 
-//#define DEMO
+#define DEMO
 
 %i "R3000A.h"
 %i "Cache_IR.h"
-%i "rootcounter.h"
-%i "SPU_core.h"
-%i "GPU_core.h"
+%i "Timer.h"
+%i "SoundProcessingUnit.h"
+%i "GraphicProcessingUnit.h"
 %i "DMA_GPU.h"
 %i "DMA_CDR.h"
 %i "DMA_SPU.h"
 %i "DMA_OTC.h"
-%i "CDR_core.h"
-%i "SIO_core.h"
+%i "CDROM_controller.h"
+%i "PAD_controller.h"
 #ifdef DEMO
 %i "demo/demo_core.h"
 #endif
 
-circuit PSX_core
+circuit PlayStation_core
 {
 	instrin cpu_run;
 	R3000A cpu;
 	Cache_IR ir_cache;
+//	reg_wr cache_A<21>;
 
 	output A<21>;
 	input Din<32>;
@@ -61,9 +62,9 @@ circuit PSX_core
 	reg_wr DmaMADR_6<32>, DmaBCR_6<32>, DmaCHCR_6<32>;
 
 	instrin run33;
-	rootcounter rcnt_0, rcnt_1, rcnt_2, rcnt_3;
+	Timer timer_0, timer_1, timer_2, timer_3;
 
-	SPU_core spu;
+	SoundProcessingUnit spu;
 	instrout spu_mem_write_req, spu_mem_read_req;
 	output spu_mem_A<18>, spu_mem_Din<16>;
 	instrin spu_mem_ack;
@@ -77,7 +78,7 @@ circuit PSX_core
 	DMA_SPU dma_SPU;
 	DMA_OTC dma_OTC;
 
-	GPU_core gpu;
+	GraphicProcessingUnit gpu;
 	instrin sw_outview_on;
 	instrout view_on;
 	output view_x<10>, view_y<9>;
@@ -89,20 +90,20 @@ circuit PSX_core
 	instrin vram_read_ack, vram_write_ack;
 	input vram_read_data<16>;
 
-	input intwait_scale<16>;
+input intwait_scale<16>;
 
 	instrin sw_kernel_run;
 	instrin vblank_in;
 	instrin sw_cache_off;
 	instrin sw_spu_off;
 
-	CDR_core cdr;
-	SIO_core sio;
+	CDROM_controller cdr;
+	PAD_controller pad;
 #ifdef DEMO
 	demo_core demo;
 #endif
 
-	instrin sw_cdrom_on;
+	input sw_cdrom_ctrl<2>;
 
 	instrself halt(h_code);
 	sel h_code<8>;
@@ -121,9 +122,12 @@ reg_wr opcount<32>;
 output drawing;
 output vraming;
 output dbg_cdr<32>;
-reg_wr cdr_dma_count<4>;
+output dbg16<16>;
+output dbg32<32>;
+reg_wr dbg32_reg<32>;
 
 	stage_name ir_cache_check { task do(cpu_A); }
+//	stage_name ir_cache_flag_clear { task do(cache_A); }
 	stage_name cpu_read { task do(cpu_A, cpu_Word); }
 	stage_name cpu_write { task do(cpu_A, cpu_Dout, cpu_Word); }
 	stage_name read_wram_wait { task do(); }
@@ -138,13 +142,15 @@ reg_wr cdr_dma_count<4>;
 	}
 
 dbg = dbg_reg;
+dbg16 = cpu.dbg16;
+dbg32 = /*dbg32_reg;dma_CDR.dbg32;*/cpu.dbg32;
 
 	instruct exe_set cpu.exe_set(header_adrs, header_data);
 
 	sel peripheral_running;
 	peripheral_running =
 		dma_GPU.running | dma_CDR.running | dma_SPU.running | dma_OTC.running |
-		(sw_kernel_run & gpu.busy) | cdr.running | sio.running |
+		(sw_kernel_run & gpu.busy) | cdr.running | pad.running |
 		ir_cache_check.do | cpu_read.do | cpu_write.do |
 		read_wram_wait.do | read_bios_wait.do | read_gpu_wait.do | read_io_wait.do |
 		write_wram_wait.do;
@@ -153,7 +159,7 @@ dbg = dbg_reg;
 //if(dma_GPU.running & dma_OTC.running) halt(0x41); // no
 //if(dma_GPU.running & (cpu_read.do | cpu_write.do)) halt(0x42);
 //if(dma_GPU.running & cdr.running) halt(0x43); // no
-//if(dma_GPU.running & sio.running) halt(0x44); // no
+//if(dma_GPU.running & pad.running) halt(0x44); // no
 //if(cpu_read.do & cpu_write.do) halt(0x45); // no
 
 	instruct cpu_run par{
@@ -191,7 +197,7 @@ dbg = dbg_reg;
 	cpu.IRQ_in = IREG & IMASK;
 
 	par(i=0; i<4; i++){
-		rcnt[i].index = i;
+		timer[i].index = i;
 	}
 
 	spu_mem_A = spu.mem_A;
@@ -235,7 +241,9 @@ dbg = dbg_reg;
 	instruct dma_GPU.gpu_dma_read_req gpu.ReadData();
 	instruct dma_GPU.wram_write par{
 		WRAM_WRITE(dma_GPU.A, dma_GPU.Dout, 4);
+		// ƒNƒŠƒA‚·‚é‚Æƒz[ƒ€‰æ–Ê‚ÉˆÚs‚µ‚È‚¢H
 	//	ir_cache.flag_clear(dma_GPU.A);
+	//	generate ir_cache_flag_clear.do(dma_GPU.A);
 	}
 	instruct dma_GPU.interrupt par{
 		// gpuInterrupt()
@@ -259,7 +267,9 @@ dbg = dbg_reg;
 	if(wram_ack) dma_CDR.wram_ack();
 	instruct dma_CDR.wram_write par{
 		WRAM_WRITE(dma_CDR.A, dma_CDR.Dout||dma_CDR.Dout||dma_CDR.Dout||dma_CDR.Dout, 1);
-		ir_cache.flag_clear(dma_CDR.A); // ok
+	//	WRAM_WRITE(dma_CDR.A, dma_CDR.Dout, 4);
+		ir_cache.flag_clear(dma_CDR.A);
+	//	generate ir_cache_flag_clear.do(dma_CDR.A);
 	}
 	instruct dma_CDR.interrupt par{
 		// cdrDmaInterrupt()
@@ -271,6 +281,7 @@ dbg = dbg_reg;
 			}
 		}
 	}
+	dma_CDR.intwaitm = dbg_in<3:0>;
 
 	dma_SPU.DmaMADR_4 = DmaMADR_4;
 	dma_SPU.DmaBCR_4 = DmaBCR_4;
@@ -292,7 +303,7 @@ dbg = dbg_reg;
 	dma_OTC.DmaBCR_6 = DmaBCR_6;
 	instruct dma_OTC.wram_write par{
 		WRAM_WRITE(dma_OTC.A, dma_OTC.D, 4);
-	//	ir_cache.flag_clear(dma_OTC.A);
+	//	ir_cache.flag_clear(dma_OTC.A); ƒNƒŠƒA‚µ‚È‚¢‚Á‚Û‚¢H
 	}
 	instruct wram_ack dma_OTC.wram_ack();
 	instruct dma_OTC.interrupt par{
@@ -309,34 +320,34 @@ dbg = dbg_reg;
 	instruct cdr.interrupt_out par{
 		IREG |= 0x0004;
 	}
-	cdr.intwaitm = 0b0 || intwait_scale<14:12>;
-	instruct sw_cdrom_on cdr.sw_cdrom_on();
-cdr.dbg_in = dbg_in;
+//	cdr.intwaitm = 0b0 || intwait_scale<14:12>;
+	cdr.sw_cdrom_ctrl = sw_cdrom_ctrl;
+//cdr.dbg_in = dbg_in;
 if(cdr.halt_code!=0) dbg_reg := cdr.dbg;
 dbg_cdr = cdr.dbg_irq;
 
-	sio.key_in = key_in;
-	instruct sio.interrupt_out par{
+	pad.key_in = key_in;
+	instruct pad.interrupt_out par{
 		IREG |= 0x0080;
 	}
-	instruct sio.interrupt_off par{
+	instruct pad.interrupt_off par{
 		IREG &= ^0x0080;
 	}
-	sio.intwaitm = 0b000 || intwait_scale<15>;
-//sio.dbg_in = dbg_in;
+	pad.intwaitm = 0b000 || intwait_scale<15>;
+//pad.dbg_in = dbg_in;
 
 #ifdef DEMO
 	instruct demo.gpu_write_req gpu.WriteData(demo.Dout);
 	demo.drawing = gpu.drawing;
 #endif
 
-	if(/|rcnt_0.halt_code | /|rcnt_1.halt_code |
-	   /|rcnt_2.halt_code | /|rcnt_3.halt_code) halt(0x40);
+	if(/|timer_0.halt_code | /|timer_1.halt_code |
+	   /|timer_2.halt_code | /|timer_3.halt_code) halt(0x40);
 
 	pc_out = cpu.pc_out;
 	opcode_out = cpu.opcode_out;
 	halt_code = halt_code_reg | cpu.halt_code | spu.halt_code | gpu.halt_code
-				| dma_CDR.halt_code | dma_GPU.halt_code | dma_OTC.halt_code | cdr.halt_code | sio.halt_code;
+				| dma_CDR.halt_code | dma_GPU.halt_code | dma_OTC.halt_code | cdr.halt_code | pad.halt_code;
 
 	instruct halt halt_code_reg := h_code;
 dbg_cpu = cpu.dbg;
@@ -344,7 +355,7 @@ drawing = gpu.drawing;
 vraming = gpu.vraming;
 
 	instruct cpu.read_req par{
-		if((^sw_cache_off) & ((cpu.A<31:24>==0x00) | (cpu.A<31:24>==0x80)) & cpu.ir_read){ // ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã¯0x80ã ã‘?
+		if((^sw_cache_off) & ((cpu.A<31:24>==0x00) | (cpu.A<31:24>==0x80)) & cpu.ir_read){ // ƒLƒƒƒbƒVƒ…‚Í0x80‚¾‚¯?
 			ir_cache.read(cpu.A<20:0>);
 			generate ir_cache_check.do(cpu.A);
 		}
@@ -377,7 +388,7 @@ vraming = gpu.vraming;
 
 			if(run33 & (^dma_GPU.running) & (^dma_OTC.running) & (^dma_CDR.running)){
 				par(i=0;i<4;i++){
-					rcnt[i].run33();
+					timer[i].run33();
 				}
 			}
 
@@ -400,39 +411,39 @@ vraming = gpu.vraming;
 		//	if(cpu_run_t & ^cpu.run) cpu_run_t := 0b0;
 			if(run33 /*| cpu_run_t){*/ & (^dma_GPU.running) & (^dma_OTC.running) & (^dma_CDR.running)){
 				cdr.run33();
-				sio.run33();
+				pad.run33();
 			}
 
 		}
-		else : par{ // ã‚µã‚¦ãƒ³ãƒ‰å†ç”Ÿ
+		else : par{ // ƒTƒEƒ“ƒhÄ¶
 			instruct run33 par{ // 33.8688MHz
 				par(i=0;i<4;i++){
-					rcnt[i].run33();
+					timer[i].run33();
 				}
 			//	dma_GPU.run33();
 				dma_SPU.run33();
 			//	dma_OTC.run33();
 				spu.run33();
 			//	cdr.run33();
-			//	sio.run33();
+			//	pad.run33();
 			}
 		}
 	}
 
-	instruct rcnt_0.irq_out par{
+	instruct timer_0.irq_out par{
 //if(sw_kernel_run) halt(0x51);
-		IREG |= 0x00 || rcnt_0.irq_code;
+		IREG |= 0x00 || timer_0.irq_code;
 	}
-	instruct rcnt_1.irq_out par{
+	instruct timer_1.irq_out par{
 //if(sw_kernel_run) halt(0x52);
-		IREG |= 0x00 || rcnt_1.irq_code;
+		IREG |= 0x00 || timer_1.irq_code;
 	}
-	instruct rcnt_2.irq_out par{
+	instruct timer_2.irq_out par{
 //if(sw_kernel_run) halt(0x53);
-		IREG |= 0x00 || rcnt_2.irq_code;
+		IREG |= 0x00 || timer_2.irq_code;
 	}
-//	instruct rcnt_3.irq_out par{
-//		if(^sw_kernel_run) IREG |= 0x00 || rcnt_3.irq_code;
+//	instruct timer_3.irq_out par{
+//		if(^sw_kernel_run) IREG |= 0x00 || timer_3.irq_code;
 //	}
 	instruct vblank_in par{
 		if(sw_kernel_run) IREG |= 0x0001;
@@ -440,11 +451,11 @@ vraming = gpu.vraming;
 		if(^sw_kernel_run) demo.vblank();
 #endif
 	}
-//	instruct rcnt_3.hsync par{
+//	instruct timer_3.hsync par{
 //		gpu.hsync();
 //	}
 
-	reg_wr f_texture_full;
+	reg_wr cdr_dma_count<4>, f_texture_full;
 	if(cdr_dma_count==8) f_texture_full := 0b1;
 	if(^f_texture_full) gpu.texture_thin();
 //gpu.dbg_in = dbg_in;
@@ -473,7 +484,7 @@ if(gpu.halt_code!=0) dbg_reg := gpu.dbg;
 	instruct vram_read_ack gpu.vram_read_ack();
 	gpu.vram_read_data = vram_read_data;
 
-	// ir_readã®æ™‚ã«èµ·å‹•
+	// ir_read‚Ì‚É‹N“®
 	stage ir_cache_check {
 		first_state st1;
 		state st1 par{
@@ -510,35 +521,35 @@ if(gpu.halt_code!=0) dbg_reg := gpu.dbg;
 					//		io_reg := 0x00000000;
 					//	}
 						cpu_A<15:0>==0x1014 : io_reg := spuDmaWait;
-						cpu_A<15:0>==0x1040 : io_reg := 0x0000 || sio.ReadData().io_dout; // ãƒ‘ãƒƒãƒ‰ãƒ‡ãƒ¼ã‚¿
-						cpu_A<15:0>==0x1044 : io_reg := 0x0000 || sio.ReadStat().io_dout; // ãƒ‘ãƒƒãƒ‰ã‚¹ãƒ†ãƒ¼ã‚¿ã‚¹
-						cpu_A<15:0>==0x104A : io_reg := sio.ReadCtrl().io_dout || 0x0000; // ãƒ‘ãƒƒãƒ‰ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
+						cpu_A<15:0>==0x1040 : io_reg := 0x0000 || pad.ReadData().io_dout; // ƒpƒbƒhƒf[ƒ^
+						cpu_A<15:0>==0x1044 : io_reg := 0x0000 || pad.ReadStat().io_dout; // ƒpƒbƒhƒXƒe[ƒ^ƒX
+						cpu_A<15:0>==0x104A : io_reg := pad.ReadCtrl().io_dout || 0x0000; // ƒpƒbƒhƒRƒ“ƒgƒ[ƒ‹
 						cpu_A<15:0>==0x1060 : io_reg := 0x0000 || ramSize; // test
 						cpu_A<15:0>==0x1070 : io_reg := 0x0000 || IREG;
 						cpu_A<15:0>==0x1074 : io_reg := 0x0000 || IMASK;
 
-						cpu_A<15:0>==0x10A0 : io_reg := DmaMADR_2; // DMACãƒãƒ£ãƒãƒ«2(GPU)ãƒ¡ãƒ¢ãƒªã‚¢ãƒ‰ãƒ¬ã‚¹
-						cpu_A<15:0>==0x10A8 : io_reg := DmaCHCR_2; // DMACãƒãƒ£ãƒãƒ«2(GPU)ãƒãƒ£ãƒãƒ«ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
-						cpu_A<15:0>==0x10E8 : io_reg := DmaCHCR_6; // DMACãƒãƒ£ãƒãƒ«6(OTC)ãƒãƒ£ãƒãƒ«ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
+						cpu_A<15:0>==0x10A0 : io_reg := DmaMADR_2; // DMACƒ`ƒƒƒlƒ‹2(GPU)ƒƒ‚ƒŠƒAƒhƒŒƒX
+						cpu_A<15:0>==0x10A8 : io_reg := DmaCHCR_2; // DMACƒ`ƒƒƒlƒ‹2(GPU)ƒ`ƒƒƒlƒ‹ƒRƒ“ƒgƒ[ƒ‹
+						cpu_A<15:0>==0x10E8 : io_reg := DmaCHCR_6; // DMACƒ`ƒƒƒlƒ‹6(OTC)ƒ`ƒƒƒlƒ‹ƒRƒ“ƒgƒ[ƒ‹
 
 						cpu_A<15:0>==0x10F0 : io_reg := DmaDPCR;
 						cpu_A<15:0>==0x10F4 : io_reg := DmaDICR;
 						cpu_A<15:8>==0x11 : any{ // 0x11--
-							cpu_A<7:4>==0x0 : io_reg := 0x0000 || rcnt_0.io_get(cpu_A<3:0>).io_Dout;
-							cpu_A<7:4>==0x1 : io_reg := 0x0000 || rcnt_1.io_get(cpu_A<3:0>).io_Dout;
-							cpu_A<7:4>==0x2 : io_reg := 0x0000 || rcnt_2.io_get(cpu_A<3:0>).io_Dout;
-						//	cpu_A<7:4>==0x3 : ;//io_reg := rcnt_3.io_get(cpu_A<3:0>).io_Dout;
+							cpu_A<7:4>==0x0 : io_reg := 0x0000 || timer_0.io_get(cpu_A<3:0>).io_Dout;
+							cpu_A<7:4>==0x1 : io_reg := 0x0000 || timer_1.io_get(cpu_A<3:0>).io_Dout;
+							cpu_A<7:4>==0x2 : io_reg := 0x0000 || timer_2.io_get(cpu_A<3:0>).io_Dout;
+						//	cpu_A<7:4>==0x3 : ;//io_reg := timer_3.io_get(cpu_A<3:0>).io_Dout;
 							else : halt(0x54);
 						}
-						cpu_A<15:4>==0x180 : par{ // CDROMã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ©ãƒ¬ã‚¸ã‚¹ã‚¿
+						cpu_A<15:4>==0x180 : par{ // CDROMƒRƒ“ƒgƒ[ƒ‰ƒŒƒWƒXƒ^
 							cdr.Read(cpu_A<1:0>);
 							io_reg := cdr.io_dout || cdr.io_dout || cdr.io_dout || cdr.io_dout;
 						}
-						cpu_A<15:0>==0x1810 : par{ // GPUãƒ‡ãƒ¼ã‚¿ï¼ã‚³ãƒãƒ³ãƒ‰
+						cpu_A<15:0>==0x1810 : par{ // GPUƒf[ƒ^^ƒRƒ}ƒ“ƒh
 							gpu.ReadData();
 							generate read_gpu_wait.do();
 						}
-						cpu_A<15:0>==0x1814 : par{ // GPUã‚¹ãƒ†ãƒ¼ã‚¿ã‚¹ï¼ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
+						cpu_A<15:0>==0x1814 : par{ // GPUƒXƒe[ƒ^ƒX^ƒRƒ“ƒgƒ[ƒ‹
 							io_reg := gpu.read_status().dout;
 						}
 
@@ -549,7 +560,7 @@ if(gpu.halt_code!=0) dbg_reg := gpu.dbg;
 
 						else : par{
 							dbg_reg := cpu_A;
-							halt(0x57);//io_reg := 0x0000;
+							halt(0x57);
 						}
 					}
 					generate read_io_wait.do();
@@ -607,7 +618,7 @@ if(gpu.halt_code!=0) dbg_reg := gpu.dbg;
 				map_ram : par{
 					WRAM_WRITE(cpu_A<20:0>, cpu_Dout, cpu_Word);
 					generate write_wram_wait.do();
-					ir_cache.flag_clear(cpu_A<20:0>); // ã“ã“ã§ã‚‚ã„ã„
+					ir_cache.flag_clear(cpu_A<20:0>);
 				}
 				map_pio : par{
 					halt(0x53);
@@ -622,19 +633,19 @@ if(gpu.halt_code!=0) dbg_reg := gpu.dbg;
 					cpu_A<15:0>==0x1018 : ;
 					cpu_A<15:0>==0x101C : ;
 					cpu_A<15:0>==0x1020 : ;
-					cpu_A<15:0>==0x1040 : sio.WriteData(cpu_Dout<15:0>); // ãƒ‘ãƒƒãƒ‰
-					cpu_A<15:0>==0x1048 : sio.WriteMode(cpu_Dout<15:0>); // ãƒ‘ãƒƒãƒ‰ãƒ¢ãƒ¼ãƒ‰
-					cpu_A<15:0>==0x104A : sio.WriteCtrl(cpu_Dout<15:0>); // ãƒ‘ãƒƒãƒ‰ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
-					cpu_A<15:0>==0x104E : sio.WriteBaud(cpu_Dout<15:0>); // ãƒ‘ãƒƒãƒ‰ãƒ¬ãƒ¼ãƒˆ
+					cpu_A<15:0>==0x1040 : pad.WriteData(cpu_Dout<15:0>); // ƒpƒbƒh
+					cpu_A<15:0>==0x1048 : pad.WriteMode(cpu_Dout<15:0>); // ƒpƒbƒhƒ‚[ƒh
+					cpu_A<15:0>==0x104A : pad.WriteCtrl(cpu_Dout<15:0>); // ƒpƒbƒhƒRƒ“ƒgƒ[ƒ‹
+					cpu_A<15:0>==0x104E : pad.WriteBaud(cpu_Dout<15:0>); // ƒpƒbƒhƒŒ[ƒg
 					cpu_A<15:0>==0x1060 : ramSize := cpu_Dout<15:0>;
-					cpu_A<15:0>==0x1070 : par{ // å‰²ã‚Šè¾¼ã¿ã‚¹ãƒ†ãƒ¼ã‚¿ã‚¹
+					cpu_A<15:0>==0x1070 : par{ // Š„‚è‚İƒXƒe[ƒ^ƒX
 						IREG &= cpu_Dout<15:0>;
 					}
-					cpu_A<15:0>==0x1074 : IMASK := cpu_Dout<15:0>; // å‰²ã‚Šè¾¼ã¿ãƒã‚¹ã‚¯
+					cpu_A<15:0>==0x1074 : IMASK := cpu_Dout<15:0>; // Š„‚è‚İƒ}ƒXƒN
 
-					cpu_A<15:0>==0x10A0 : DmaMADR_2 := cpu_Dout; // DMACãƒãƒ£ãƒãƒ«2(GPU)ãƒ¡ãƒ¢ãƒªã‚¢ãƒ‰ãƒ¬ã‚¹
-					cpu_A<15:0>==0x10A4 : DmaBCR_2 := cpu_Dout; // DMACãƒãƒ£ãƒãƒ«2(GPU)ãƒ–ãƒ­ãƒƒã‚¯ã‚«ã‚¦ãƒ³ãƒˆ
-					cpu_A<15:0>==0x10A8 : par{ // DMACãƒãƒ£ãƒãƒ«2(GPU)ãƒãƒ£ãƒãƒ«ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
+					cpu_A<15:0>==0x10A0 : DmaMADR_2 := cpu_Dout; // DMACƒ`ƒƒƒlƒ‹2(GPU)ƒƒ‚ƒŠƒAƒhƒŒƒX
+					cpu_A<15:0>==0x10A4 : DmaBCR_2 := cpu_Dout; // DMACƒ`ƒƒƒlƒ‹2(GPU)ƒuƒƒbƒNƒJƒEƒ“ƒg
+					cpu_A<15:0>==0x10A8 : par{ // DMACƒ`ƒƒƒlƒ‹2(GPU)ƒ`ƒƒƒlƒ‹ƒRƒ“ƒgƒ[ƒ‹
 						DmaCHCR_2 := cpu_Dout;
 						// 1000_0000_0000
 						// (n==2 && DmaCHCR[2]==0x0401 && DmaBCR[2]==0x0)
@@ -671,9 +682,9 @@ cdr_dma_count++;
 							dma_SPU.Execute();
 						}
 					}
-					cpu_A<15:0>==0x10E0 : DmaMADR_6 := cpu_Dout; // DMACãƒãƒ£ãƒãƒ«6(OTC)ãƒ¡ãƒ¢ãƒªã‚¢ãƒ‰ãƒ¬ã‚¹
-					cpu_A<15:0>==0x10E4 : DmaBCR_6 := cpu_Dout; // DMACãƒãƒ£ãƒãƒ«6(OTC)ãƒ–ãƒ­ãƒƒã‚¯ã‚«ã‚¦ãƒ³ãƒˆ
-					cpu_A<15:0>==0x10E8 : par{ // DMACãƒãƒ£ãƒãƒ«6(OTC)ãƒãƒ£ãƒãƒ«ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
+					cpu_A<15:0>==0x10E0 : DmaMADR_6 := cpu_Dout; // DMACƒ`ƒƒƒlƒ‹6(OTC)ƒƒ‚ƒŠƒAƒhƒŒƒX
+					cpu_A<15:0>==0x10E4 : DmaBCR_6 := cpu_Dout; // DMACƒ`ƒƒƒlƒ‹6(OTC)ƒuƒƒbƒNƒJƒEƒ“ƒg
+					cpu_A<15:0>==0x10E8 : par{ // DMACƒ`ƒƒƒlƒ‹6(OTC)ƒ`ƒƒƒlƒ‹ƒRƒ“ƒgƒ[ƒ‹
 						DmaCHCR_6 := cpu_Dout;
 						// 1000_0000_0000_0000_0000_0000_0000
 						if(DmaDPCR<27> & (cpu_Dout==0x11000002)){ // ok
@@ -681,33 +692,33 @@ cdr_dma_count++;
 						}
 					}
 
-					cpu_A<15:0>==0x10F0 : DmaDPCR |= cpu_Dout; // DMACå„ªå…ˆåº¦ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
-					cpu_A<15:0>==0x10F4 : par{ // DMACå‰²ã‚Šè¾¼ã¿ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
+					cpu_A<15:0>==0x10F0 : DmaDPCR |= cpu_Dout; // DMAC—Dæ“xƒRƒ“ƒgƒ[ƒ‹
+					cpu_A<15:0>==0x10F4 : par{ // DMACŠ„‚è‚İƒRƒ“ƒgƒ[ƒ‹
 						sel tmp<32>;
 						tmp = (^cpu_Dout) & DmaDICR;
 						DmaDICR := ((tmp @ cpu_Dout) & 0x00FFFFFF) @ tmp;
 					}
 					cpu_A<15:8>==0x11 : any{ // 0x11--
-						cpu_A<7:4>==0x0 : rcnt_0.io_set(cpu_A<3:0>, cpu_Dout<15:0>);
-						cpu_A<7:4>==0x1 : rcnt_1.io_set(cpu_A<3:0>, cpu_Dout<15:0>);
-						cpu_A<7:4>==0x2 : rcnt_2.io_set(cpu_A<3:0>, cpu_Dout<15:0>);
-					//	cpu_A<7:4>==0x3 : ;//rcnt_3.io_set(cpu_A<3:0>, cpu_Dout<15:0>);
+						cpu_A<7:4>==0x0 : timer_0.io_set(cpu_A<3:0>, cpu_Dout<15:0>);
+						cpu_A<7:4>==0x1 : timer_1.io_set(cpu_A<3:0>, cpu_Dout<15:0>);
+						cpu_A<7:4>==0x2 : timer_2.io_set(cpu_A<3:0>, cpu_Dout<15:0>);
+					//	cpu_A<7:4>==0x3 : ;//timer_3.io_set(cpu_A<3:0>, cpu_Dout<15:0>);
 						else : halt(0x54);
 					}
-					cpu_A<15:4>==0x180 : par{ // CDROMã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ©ãƒ¬ã‚¸ã‚¹ã‚¿
+					cpu_A<15:4>==0x180 : par{ // CDROMƒRƒ“ƒgƒ[ƒ‰ƒŒƒWƒXƒ^
 						cdr.Write(cpu_A<1:0>, cpu_Dout<7:0>);
 					}
-					cpu_A<15:0>==0x1810 : par{ // GPUãƒ‡ãƒ¼ã‚¿ï¼ã‚³ãƒãƒ³ãƒ‰
+					cpu_A<15:0>==0x1810 : par{ // GPUƒf[ƒ^^ƒRƒ}ƒ“ƒh
 						gpu.WriteData(cpu_Dout);
 //if(dma_GPU.gpu_dma_write_req) halt(0x94);
 					}
-					cpu_A<15:0>==0x1814 : par{ // GPUã‚¹ãƒ†ãƒ¼ã‚¿ã‚¹ï¼ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
+					cpu_A<15:0>==0x1814 : par{ // GPUƒXƒe[ƒ^ƒX^ƒRƒ“ƒgƒ[ƒ‹
 						gpu.write_status(cpu_Dout);
 					}
 					cpu_A<15:10>==0b000111 : par{ // 0x1F80_1C00-1E00
 						spu.io_set(cpu_A<15:0>, cpu_Dout<15:0>);
 					}
-					cpu_A<15:0>==0x2041 : ; // ãƒ‡ã‚£ãƒƒãƒ—ã‚¹ã‚¤ãƒƒãƒ?
+					cpu_A<15:0>==0x2041 : ; // ƒfƒBƒbƒvƒXƒCƒbƒ`?
 					else : par{
 						dbg_reg := cpu_A;
 						halt(0x55);
@@ -725,5 +736,12 @@ cdr_dma_count++;
 			finish;
 		}
 	}
-
+/*
+	stage ir_cache_flag_clear {
+		par{
+			ir_cache.flag_clear(cache_A);
+			finish;
+		}
+	}
+*/
 }

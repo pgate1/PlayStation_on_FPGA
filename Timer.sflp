@@ -1,9 +1,9 @@
 /*
-	RootCounter
+	Timers
 		by pgate1
 */
 
-circuit rootcounter
+circuit Timer
 {
 	input index<2>;
 
@@ -63,22 +63,22 @@ circuit rootcounter
 	halt_code = halt_code_reg;
 
 	instruct io_set any{
-		io_A==0x0 : par{ // ã‚«ã‚¦ãƒ³ãƒˆ
+		io_A==0x0 : par{ // ƒJƒEƒ“ƒg
 			count := io_Din;
 		}
-		io_A==0x4 : par{ // ãƒ¢ãƒ¼ãƒ‰
+		io_A==0x4 : par{ // ƒ‚[ƒh
 			mode := io_Din;
 			count := 0;
 			irq_state := 0;
 		}
-		io_A==0x8 : par{ // ã‚³ãƒ³ãƒšã‚¢(ã‚¿ãƒ¼ã‚²ãƒƒãƒˆ)
+		io_A==0x8 : par{ // ƒRƒ“ƒyƒA(ƒ^[ƒQƒbƒg)
 			target := io_Din;
 		}
 		else : halt(0x12);
 	}
 
 	instruct io_get any{
-		io_A==0x0 : par{ // ã‚«ã‚¦ãƒ³ãƒˆ
+		io_A==0x0 : par{ // ƒJƒEƒ“ƒg
 			io_Dout = count;
 		}
 	}
@@ -104,8 +104,8 @@ circuit rootcounter
 				}
 			}
 			if(index==3){
-			//	if(hSyncCount==270){ // IRã‚­ãƒ£ãƒƒã‚·ãƒ¥ã‚ªãƒ•ã§ã‚‚é€šã‚‹
-				if(hSyncCount==263){ // IRã‚­ãƒ£ãƒƒã‚·ãƒ¥ã‚ªãƒ•æ™‚ã«ç„¡åŠ¹å‘½ä»¤
+			//	if(hSyncCount==270){ // IRƒLƒƒƒbƒVƒ…ƒIƒt‚Å‚à’Ê‚é
+				if(hSyncCount==263){ // IRƒLƒƒƒbƒVƒ…ƒIƒt‚É–³Œø–½—ß
 					hSyncCount := 1;
 					irq_out();
 				}

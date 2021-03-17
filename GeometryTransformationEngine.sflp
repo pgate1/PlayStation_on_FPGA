@@ -1,0 +1,871 @@
+/*
+	GTE top
+		by pgate1
+*/
+
+declare mul_s32 interface
+{
+	input a<32>, b<32>;
+	output dout<64>;
+	instrin con;
+	instr_arg con(a, b);
+}
+
+%i "gte_LIMIT.h"
+%i "gte_DIVIDE.h"
+
+circuit GeometryTransformationEngine
+{
+	input rt_data<32>, rd<5>;
+	instrin MFC2(rd), CFC2(rd), MTC2(rt_data, rd), CTC2(rt_data, rd);
+	output dout<32>;
+	reg_wr dout_reg<32>;
+
+	reg_wr rt_value<32>, rd_reg<5>;
+	output running;
+
+	mem d[32]<32> = {0};
+	mem c[32]<32> = {0};
+
+	sel s_FLAG<32>; instrself set_FLAG(s_FLAG), reset_FLAG;
+	instrself SUM_FLAG;
+
+	sel s_VX<5>, VX<16>; instrself get_VX(s_VX);
+	sel s_VY<5>, VY<16>; instrself get_VY(s_VY);
+	sel s_VZ<5>, VZ<16>; instrself get_VZ(s_VZ);
+
+	sel s_fSX<5>, s_fSX_val<16>; instrself set_fSX(s_fSX, s_fSX_val);
+	sel s_fSY<5>, s_fSY_val<16>; instrself set_fSY(s_fSY, s_fSY_val);
+	sel s_fSZ<5>, s_fSZ_val<16>; instrself set_fSZ(s_fSZ, s_fSZ_val);
+
+	sel s_OTZ<16>; instrself set_OTZ(s_OTZ);
+	sel s_IR0<16>; instrself set_IR0(s_IR0);
+	sel s_IR1<16>; instrself set_IR1(s_IR1);
+	sel s_IR2<16>; instrself set_IR2(s_IR2);
+	sel s_IR3<16>; instrself set_IR3(s_IR3);
+
+	sel s_SZ0<16>; instrself set_SZ0(s_SZ0);
+
+	sel s_RGB0<32>; instrself set_RGB0(s_RGB0);
+	sel s_RGB1<32>; instrself set_RGB1(s_RGB1);
+//	sel s_R2<8>; instrself set_R2(s_R2);
+//	sel s_G2<8>; instrself set_G2(s_G2);
+//	sel s_B2<8>; instrself set_B2(s_B2);
+//	sel s_CODE2<8>; instrself set_CODE2(s_CODE2);
+
+	sel s_MAC0<32>; instrself set_MAC0(s_MAC0);
+	sel s_MAC1<64>; instrself set_MAC1(s_MAC1);
+	sel s_MAC2<64>; instrself set_MAC2(s_MAC2);
+	sel s_MAC3<64>; instrself set_MAC3(s_MAC3);
+
+//	sel s_BOUNDS1<64>;
+//	instrself BOUNDS1(s_BOUNDS1);
+
+	sel limC1_val<16>, limC1_ret<8>; instrself limC1(limC1_val);
+	sel limC2_val<16>, limC2_ret<8>; instrself limC2(limC2_val);
+	sel limC3_val<16>, limC3_ret<8>; instrself limC3(limC3_val);
+
+//	sel limE_val<32>, limE_ret<32>; instrself limE(limE_val);
+
+//	sel F_val<64>, F_ret<64>; instrself F(F_val);
+	sel limG1_val<32>, limG1_ret<16>; instrself limG1(limG1_val);
+	sel limG2_val<32>, limG2_ret<16>; instrself limG2(limG2_val);
+	sel limH_val<32>, limH_ret<16>; instrself limH(limH_val);
+
+	gte_DIVIDE divide;
+
+	instrin NCLIP;
+	instrin NCDS;
+	instrin RTPT;
+	instrin AVSZ3;
+
+	sel h_code<8>;
+	instrself halt(h_code);
+	reg_wr halt_code_reg<8>;
+	output halt_code<8>;
+
+output dbg<8>;
+reg_wr dbg_reg<8>;
+output dbg16<16>;
+reg_wr dbg16_reg<16>;
+output dbg32<32>;
+reg_wr dbg32_reg<32>;
+reg crand<24> = 1;
+
+	stage_name MFC2_stg { task do(rd_reg); }
+	stage_name CFC2_stg { task do(rd_reg); }
+	stage_name MTC2_stg { task do(rt_value, rd_reg); }
+	stage_name CTC2_stg { task do(rt_value, rd_reg); }
+	stage_name NCLIP_stg { task do(); }
+	stage_name NCDS_stg { task do(); }
+	stage_name RTPT_stg { task do(); }
+	stage_name AVSZ3_stg { task do(); }
+
+	instruct halt halt_code_reg := h_code;
+	halt_code = halt_code_reg;
+
+dbg = dbg_reg;
+dbg16 = dbg16_reg;
+dbg32 = dbg32_reg;
+
+	instruct MFC2 generate MFC2_stg.do(rd);
+	instruct CFC2 generate CFC2_stg.do(rd);
+	instruct MTC2 generate MTC2_stg.do(rt_data, rd);
+	instruct CTC2 generate CTC2_stg.do(rt_data, rd);
+	instruct NCLIP generate NCLIP_stg.do();
+	instruct NCDS generate NCDS_stg.do();
+	instruct RTPT generate RTPT_stg.do();
+	instruct AVSZ3 generate AVSZ3_stg.do();
+
+	running = MFC2_stg.do | CFC2_stg.do | MTC2_stg.do | CTC2_stg.do |
+	          NCLIP_stg.do | NCDS_stg.do | RTPT_stg.do | AVSZ3_stg.do;
+
+	dout = dout_reg;
+
+	instruct SUM_FLAG par{
+		if((c[31] & 0x7F87E000)!=0) c[31] |= 0x80000000;
+	}
+
+	sel VX0<16>; VX0 = d[0]<15:0>;
+	sel VY0<16>; VY0 = d[0]<31:16>;
+	sel VZ0<16>; VZ0 = d[1]<15:0>;
+
+	sel R<8>; R = d[6]<7:0>;
+	sel G<8>; G = d[6]<15:8>;
+	sel B<8>; B = d[6]<23:16>;
+
+	sel CODE<8>; CODE = d[6]<31:24>;
+	sel IR0<16>; IR0 = d[8]<15:0>;
+	sel IR1<16>; IR1 = d[9]<15:0>;
+	sel IR2<16>; IR2 = d[10]<15:0>;
+	sel IR3<16>; IR3 = d[11]<15:0>;
+
+	sel SX0<16>; SX0 = d[12]<15:0>;
+	sel SY0<16>; SY0 = d[12]<31:16>;
+	sel SX1<16>; SX1 = d[13]<15:0>;
+	sel SY1<16>; SY1 = d[13]<31:16>;
+	sel SXY2<32>; SXY2 = d[14];
+	sel SX2<16>; SX2 = d[14]<15:0>;
+	sel SY2<16>; SY2 = d[14]<31:16>;
+
+	sel SZ1<16>; SZ1 = d[17]<15:0>;
+	sel SZ2<16>; SZ2 = d[18]<15:0>;
+	sel SZ3<16>; SZ3 = d[19]<15:0>;
+
+	sel RGB1<32>; RGB1 = d[21];
+	sel RGB2<32>; RGB2 = d[22];
+
+	sel MAC0<32>; MAC0 = d[24];
+	sel MAC1<32>; MAC1 = d[25];
+	sel MAC2<32>; MAC2 = d[26];
+	sel MAC3<32>; MAC3 = d[27];
+
+	sel R11<16>; R11 = c[0]<15:0>;
+	sel R12<16>; R12 = c[0]<31:16>;
+	sel R13<16>; R13 = c[1]<15:0>;
+	sel R21<16>; R21 = c[1]<31:16>;
+	sel R22<16>; R22 = c[2]<15:0>;
+	sel R23<16>; R23 = c[2]<31:16>;
+	sel R31<16>; R31 = c[3]<15:0>;
+	sel R32<16>; R32 = c[3]<31:16>;
+	sel R33<16>; R33 = c[4]<15:0>;
+	sel TRX<32>; TRX = c[5];
+	sel TRY<32>; TRY = c[6];
+	sel TRZ<32>; TRZ = c[7];
+/*
+// PSÉçÉSó†
+	sel R11<16>; R11 = 4091;
+	sel R12<16>; R12 = 2000;
+	sel R13<16>; R13 = 3812;
+	sel R21<16>; R21 = 1927;
+	sel R22<16>; R22 = 3772;
+	sel R23<16>; R23 = -3590;
+	sel R31<16>; R31 = -1887;
+	sel R32<16>; R32 = 3591;
+	sel R33<16>; R33 = 8767;
+	sel TRX<32>; TRX = 400;
+	sel TRY<32>; TRY = -600;
+	sel TRZ<32>; TRZ = 6000;
+*/
+	sel L11<16>; L11 = c[8]<15:0>;
+	sel L12<16>; L12 = c[8]<31:16>;
+	sel L13<16>; L13 = c[9]<15:0>;
+	sel L21<16>; L21 = c[9]<31:16>;
+	sel L22<16>; L22 = c[10]<15:0>;
+	sel L23<16>; L23 = c[10]<31:16>;
+	sel L31<16>; L31 = c[11]<15:0>;
+	sel L32<16>; L32 = c[11]<31:16>;
+	sel L33<16>; L33 = c[12]<15:0>;
+	sel RBK<32>; RBK = c[13];
+	sel GBK<32>; GBK = c[14];
+	sel BBK<32>; BBK = c[15];
+	sel LR1<16>; LR1 = c[16]<15:0>;
+	sel LR2<16>; LR2 = c[16]<31:16>;
+	sel LR3<16>; LR3 = c[17]<15:0>;
+	sel LG1<16>; LG1 = c[17]<31:16>;
+	sel LG2<16>; LG2 = c[18]<15:0>;
+	sel LG3<16>; LG3 = c[18]<31:16>;
+	sel LB1<16>; LB1 = c[19]<15:0>;
+	sel LB2<16>; LB2 = c[19]<31:16>;
+	sel LB3<16>; LB3 = c[20]<15:0>;
+	sel RFC<32>; RFC = c[21];
+	sel GFC<32>; GFC = c[22];
+	sel BFC<32>; BFC = c[23];
+
+	sel OFX<32>; OFX = c[24];
+	sel OFY<32>; OFY = c[25];
+
+	sel H<16>; H = c[26]<15:0>;
+	sel DQA<16>; DQA = c[27]<15:0>;
+	sel DQB<32>; DQB = c[28];
+	sel ZSF3<16>; ZSF3 = c[29]<15:0>;
+
+	// #define VX(n) (n < 3 ? CP2D.p[n << 1].sw.l : CP2D.p[9].sw.l)
+	instruct get_VX par{
+		any{
+			(s_VX==0) | (s_VX==1) | (s_VX==2) : VX = d[s_VX<<1]<15:0>;
+			else : VX = d[9]<15:0>;
+		}
+	}
+	// #define VY(n) (n < 3 ? CP2D.p[n << 1].sw.h : CP2D.p[10].sw.l)
+	instruct get_VY par{
+		any{
+			(s_VY==0) | (s_VY==1) | (s_VY==2) : VY = d[s_VY<<1]<31:16>;
+			else : VY = d[10]<15:0>;
+		}
+	}
+	// #define VZ(n) (n < 3 ? CP2D.p[(n << 1) + 1].sw.l : CP2D.p[11].sw.l)
+	instruct get_VZ par{
+		any{
+			(s_VZ==0) | (s_VZ==1) | (s_VZ==2) : VZ = d[(s_VZ<<1)+1]<15:0>;
+			else : VZ = d[11]<15:0>;
+		}
+	}
+
+//#define fSX(n) ((CP2D.p)[((n) + 12)].sw.l)
+//#define fSY(n) ((CP2D.p)[((n) + 12)].sw.h)
+//#define fSZ(n) ((CP2D.p)[((n) + 17)].w.l)
+	instruct set_fSX par{
+		d[s_fSX+12] := d[s_fSX+12]<31:16> || s_fSX_val;
+	}
+	instruct set_fSY par{
+		d[s_fSY+12] := s_fSY_val || d[s_fSY+12]<15:0>;
+	}
+	instruct set_fSZ par{
+		d[s_fSZ+17] := d[s_fSZ+17]<31:16> || s_fSZ_val;
+	}
+
+/*
+	// #define A1(a) BOUNDS((a), 0x7fffffff, (1 << 30), -(s64)0x80000000, (1 << 27))
+	instruct BOUNDS1 par{
+		if((0x000000007FFFFFFF-s_BOUNDS1)<63>){ // s_BOUNDS > 0x000000007FFFFFFF
+			FLAG |= 0x40000000;
+		}
+		else{
+			if((s_BOUNDS1-0xFFFFFFFF80000000)<63>){ // s_BOUNDS < 0xFFFFFFFF80000000
+				FLAG |= 0x08000000;
+			}
+		}
+	}
+	// #define A2(a) BOUNDS((a), 0x7fffffff, (1 << 29), -(s64)0x80000000, (1 << 26))
+	// #define A3(a) BOUNDS((a), 0x7fffffff, (1 << 28), -(s64)0x80000000, (1 << 25))
+*/
+
+	instruct set_OTZ d[7] := d[7]<31:16> || s_OTZ;
+	instruct set_IR0 d[8] := d[8]<31:16> || s_IR0;
+	instruct set_IR1 d[9] := d[9]<31:16> || s_IR1;
+	instruct set_IR2 d[10] := d[10]<31:16> || s_IR2;
+	instruct set_IR3 d[11] := d[11]<31:16> || s_IR3;
+
+	// #define limC1(a) LIM((a), 0x00ff, 0x0000, (1 << 21))
+	instruct limC1 par{
+		any{ // ok
+			(limC1_val<15>==0b0) & (limC1_val<14:8>!=0) : par{ // value > 0x00FF
+				set_FLAG(0x00200000);
+				limC1_ret = 0xFF;
+			}
+			limC1_val<15>==0b1 : par{ // value < 0x0000
+				set_FLAG(0x00200000);
+				limC1_ret = 0x00;
+			}
+			else : limC1_ret = limC1_val<7:0>;
+		}
+	}
+	// #define limC2(a) LIM((a), 0x00ff, 0x0000, (1 << 20))
+	instruct limC2 par{
+		any{ // ok
+			(limC2_val<15>==0b0) & (limC2_val<14:8>!=0) : par{ // value > 0x00FF
+				set_FLAG(0x00100000);
+				limC2_ret = 0xFF;
+			}
+			limC2_val<15>==0b1 : par{ // value < 0x0000
+				set_FLAG(0x00100000);
+				limC2_ret = 0x00;
+			}
+			else : limC2_ret = limC2_val<7:0>;
+		}
+	}
+	// #define limC3(a) LIM((a), 0x00ff, 0x0000, (1 << 19))
+	instruct limC3 par{
+		any{ // ok
+			(limC3_val<15>==0b0) & (limC3_val<14:8>!=0) : par{ // value > 0x00FF
+				set_FLAG(0x00080000);
+				limC3_ret = 0xFF;
+			}
+			limC3_val<15>==0b1 : par{ // value < 0x0000
+				set_FLAG(0x00080000);
+				limC3_ret = 0x00;
+			}
+			else : limC3_ret = limC3_val<7:0>;
+		}
+	}
+
+/*
+	instruct limE par{
+		any{
+			limE_val<31:17>!=0 : par{ // result > 0x0001FFFF
+				set_FLAG(0x00020000);
+				limE_ret = 0x0001FFFF;
+			}
+			else : limE_ret = limE_val;
+		}
+	}
+*/
+	// #define F(a) BOUNDS((a), 0x7fffffff, (1 << 16), -(s64)0x80000000, (1 << 15))
+
+	// #define limG1(a) LIM((a), 0x3ff, -0x400,(1 << 14))
+	instruct limG1 par{
+		any{
+			(limG1_val<31>==0b0) & (limG1_val<30:10>!=0) : par{ // value > 0x000003FF
+				set_FLAG(0x00004000);
+				limG1_ret = 0x03FF;
+			}
+			(limG1_val<31>==0b1) & (limG1_val<30:10>!=(21#0b1)) : par{ // value < 0xFFFFFC00
+				set_FLAG(0x00004000);
+				limG1_ret = 0xFC00;
+			}
+			else : limG1_ret = limG1_val<15:0>;
+		}
+	}
+	// #define limG2(a) LIM((a), 0x3ff, -0x400, (1 << 13))
+	instruct limG2 par{
+		any{
+			(limG2_val<31>==0b0) & (limG2_val<30:10>!=0) : par{ // value > 0x000003FF
+				set_FLAG(0x00002000);
+				limG2_ret = 0x03FF;
+			}
+			(limG2_val<31>==0b1) & (limG2_val<30:10>!=(21#0b1)) : par{ // value < 0xFFFFFC00
+				set_FLAG(0x00002000);
+				limG2_ret = 0xFC00;
+			}
+			else : limG2_ret = limG2_val<15:0>;
+		}
+	}
+	// #define limH(a) LIM((a), 0x1000, 0x0000, (1 << 12))
+
+	instruct limH par{
+		any{
+			(0x00001000-limH_val)<31> : par{ // value > 0x00001000
+				set_FLAG(0x00001000);
+				limH_ret = 0x1000;
+			}
+			limH_val<31> : par{ // value < 0
+				set_FLAG(0x00001000);
+				limH_ret = 0x0000;
+			}
+			else : limH_ret = limH_val<15:0>;
+		}
+	}
+
+	instruct set_SZ0 d[16] := d[16]<31:16> || s_SZ0;
+
+	instruct set_RGB0 d[20] := s_RGB0;
+	instruct set_RGB1 d[21] := s_RGB1;
+//	instruct set_R2 d[22] := d[22]<31:8> || s_R2;
+//	instruct set_G2 d[22] := d[22]<31:16> || s_G2 || d[22]<7:0>;
+//	instruct set_B2 d[22] := d[22]<31:24> || s_B2 || d[22]<15:0>;
+//	instruct set_CODE2 d[22] := s_CODE2 || d[22]<23:0>;
+
+	instruct set_MAC0 d[24] := s_MAC0;
+	instruct set_MAC1 d[25] := s_MAC1<31:0>;
+	instruct set_MAC2 d[26] := s_MAC2<31:0>;
+	instruct set_MAC3 d[27] := s_MAC3<31:0>;
+
+	instruct set_FLAG c[31] |= s_FLAG;
+	instruct reset_FLAG c[31] := 0x00000000;
+
+	stage MFC2_stg {
+		par{
+			sel value<32>;
+			any{
+				(rd_reg==1) | (rd_reg== 3) | (rd_reg== 5) | (rd_reg==8) |
+				(rd_reg==9) | (rd_reg==10) | (rd_reg==11) : par{
+					// CP2D.r[reg] = (s32)CP2D.p[reg].sw.l;
+					value = 32#d[rd_reg]<15:0>;
+					d[rd_reg] := value;
+				}
+				(rd_reg== 7) | (rd_reg==16) | (rd_reg==17) |
+				(rd_reg==18) | (rd_reg==19) : par{
+					// CP2D.r[reg] = (u32)CP2D.p[reg].w.l;
+					value = 0x0000 || d[rd_reg]<15:0>;
+					d[rd_reg] := value;
+				}
+				(rd_reg==15) : par{
+					// CP2D.r[reg] = gteSXY2;
+					value = SXY2;
+					d[rd_reg] := value;
+				}
+				(rd_reg==28) | (rd_reg==29) : par{
+dbg_reg := 0b000||rd_reg; halt(0xB1);
+				//	value = 32#d[rd_reg]<15:0>;
+				}
+				else : value = d[rd_reg];
+			}
+			dout_reg := value;
+			finish;
+		}
+	}
+
+	stage CFC2_stg {
+		par{
+			if(rd_reg==31) SUM_FLAG();
+			dout_reg := c[rd_reg];
+			finish;
+		}
+	}
+
+	stage MTC2_stg {
+		par{
+			any{
+				rd_reg==15 : par{dbg_reg:=0b000||rd_reg; halt(0xB2);}
+				rd_reg==28 : par{dbg_reg:=0b000||rd_reg; halt(0xB2);}
+				rd_reg==30 : par{dbg_reg:=0b000||rd_reg; halt(0xB2);}
+				rd_reg==31 : par{dbg_reg:=0b000||rd_reg; halt(0xB2);}
+				else : d[rd_reg] := rt_value;
+			}
+			finish;
+		}
+	}
+
+	stage CTC2_stg {
+		par{
+			sel value<32>;
+			any{
+				(rd_reg== 4) | (rd_reg==12) | (rd_reg==20) | (rd_reg==26) |
+				(rd_reg==27) | (rd_reg==29) | (rd_reg==30) : par{
+					value = 32#rt_value<15:0>;
+				}
+				rd_reg==31 : value = rt_value & 0x7FFFF000;
+				else : value = rt_value;
+			}
+			c[rd_reg] := value;
+			finish;
+		}
+	}
+
+	stage NCLIP_stg {
+		mul_s32 nclip_smul0, nclip_smul1, nclip_smul2;
+		first_state st_init;
+		state st_init par{
+			reset_FLAG();
+			goto st_mac0;
+		}
+		state st_mac0 par{
+/*
+			MAC0 = F(
+				(s64)SX0 * (SY1 - SY2) +
+				SX1 * (SY2 - SY0) +
+				SX2 * (SY0 - SY1)
+			);
+*/
+			sel t<64>;
+			t = 
+				nclip_smul0.con(32#SX0, (32#SY1 - 32#SY2)).dout +
+				nclip_smul1.con(32#SX1, (32#SY2 - 32#SY0)).dout +
+				nclip_smul2.con(32#SX2, (32#SY0 - 32#SY1)).dout;
+		//	F(t);
+			set_MAC0(t<31:0>);
+			goto st_init;
+			finish;
+		}
+	}
+
+	stage NCDS_stg {
+		reg_wr st<2>;
+		mul_s32 ncds_smul1, ncds_smul2, ncds_smul3;
+		mul_s32 ncds_smul1_3, ncds_smul2_3, ncds_smul3_3;
+		reg_wr ncds_mul_reg<64>;
+		gte_LIMIT lim_NCDS;
+		first_state st_init;
+
+		par{
+			if(0b0){
+				lim_NCDS.limD(0);
+			}
+			instruct lim_NCDS.set_FLAG set_FLAG(lim_NCDS.FLAG);
+		}
+
+		state st_init par{
+			reset_FLAG();
+			st := 0;
+			goto st_mac1_1;
+		}
+
+		state st_mac1_1 par{
+			// MAC1 = A1((((s64)L11 * VX0) + (L12 * VY0) + (L13 * VZ0)) >> 12);
+			sel t<64>;
+			t = (
+				ncds_smul1.con(32#L11, 32#VX0).dout +
+				ncds_smul2.con(32#L12, 32#VY0).dout +
+				ncds_smul3.con(32#L13, 32#VZ0).dout
+				) >> 12;
+		//	A1(t);
+			set_MAC1(t);
+			goto st_mac2_1;
+		}
+		state st_mac2_1 par{
+			// 	MAC2 = A2((((s64)L21 * VX0) + (L22 * VY0) + (L23 * VZ0)) >> 12);
+			sel t<64>;
+			t = (
+				ncds_smul1.con(32#L21, 32#VX0).dout +
+				ncds_smul2.con(32#L22, 32#VY0).dout +
+				ncds_smul3.con(32#L23, 32#VZ0).dout
+				) >> 12;
+		//	A2(t);
+			set_MAC2(t);
+			goto st_mac3_1;
+		}
+		state st_mac3_1 par{
+			// MAC3 = A3((((s64)L31 * VX0) + (L32 * VY0) + (L33 * VZ0)) >> 12);
+			sel t<64>;
+			t = (
+				ncds_smul1.con(32#L31, 32#VX0).dout +
+				ncds_smul2.con(32#L32, 32#VY0).dout +
+				ncds_smul3.con(32#L33, 32#VZ0).dout
+				) >> 12;
+		//	A3(t);
+			set_MAC3(t);
+			goto st_ir;
+		}
+
+		state st_mac1_2 par{
+			// MAC1 = A1((((s64)RBK << 12) + (LR1 * IR1) + (LR2 * IR2) + (LR3 * IR3)) >> 12);
+			sel t<64>;
+			t = (
+				(64#RBK << 12) +
+				ncds_smul1.con(32#LR1, 32#IR1).dout +
+				ncds_smul2.con(32#LR2, 32#IR2).dout +
+				ncds_smul3.con(32#LR3, 32#IR3).dout
+				) >> 12;
+		//	A1(t);
+			set_MAC1(t);
+			goto st_mac2_2;
+		}
+		state st_mac2_2 par{
+			// MAC2 = A2((((s64)GBK << 12) + (LG1 * IR1) + (LG2 * IR2) + (LG3 * IR3)) >> 12);
+			sel t<64>;
+			t = (
+				(64#GBK << 12) +
+				ncds_smul1.con(32#LG1, 32#IR1).dout +
+				ncds_smul2.con(32#LG2, 32#IR2).dout +
+				ncds_smul3.con(32#LG3, 32#IR3).dout
+				) >> 12;
+		//	A2(t);
+			set_MAC2(t);
+			goto st_mac3_2;
+		}
+		state st_mac3_2 par{
+			// MAC3 = A3((((s64)BBK << 12) + (LB1 * IR1) + (LB2 * IR2) + (LB3 * IR3)) >> 12);
+			sel t<64>;
+			t = (
+				((64#BBK) << 12) +
+				ncds_smul1.con(32#LB1, 32#IR1).dout +
+				ncds_smul2.con(32#LB2, 32#IR2).dout +
+				ncds_smul3.con(32#LB3, 32#IR3).dout
+				) >> 12;
+		//	A3(t);
+			set_MAC3(t);
+			goto st_ir;
+		}
+
+		state st_mac_3 par{
+			ncds_mul_reg := ncds_smul3_3.con(24#0b0||R, 32#IR1).dout;
+			goto st_mac1_3;
+		}
+		state st_mac1_3 par{
+/*
+			MAC1 = A1(
+				(
+					(((s64)R << 4) * IR1) +
+					(IR0 * limB1(
+						RFC - ((R * IR1) >> 8), 0
+					))
+				) >> 12
+			);
+*/
+			sel t<64>;
+			t = (
+				ncds_smul1_3.con((24#0b0||R)<<4, 32#IR1).dout +
+				ncds_smul2_3.con(32#IR0, 32#lim_NCDS.limB1(RFC - (ncds_mul_reg>>8)<31:0>, 0b0).limB1_ret).dout
+				) >> 12;
+		//	A1(t);
+			set_MAC1(t);
+
+			ncds_mul_reg := ncds_smul3_3.con(24#0b0||G, 32#IR2).dout;
+			goto st_mac2_3;
+		}
+		state st_mac2_3 par{
+			// MAC2 = A2(((((s64)G << 4) * IR2) + (IR0 * limB2(GFC - ((G * IR2) >> 8), 0))) >> 12);
+			sel t<64>;
+			t = (
+				ncds_smul1_3.con((24#0b0||G)<<4, 32#IR2).dout +
+				ncds_smul2_3.con(32#IR0, 32#lim_NCDS.limB2(GFC - (ncds_mul_reg>>8)<31:0>, 0b0).limB2_ret).dout
+				) >> 12;
+		//	A2(t);
+			set_MAC2(t);
+
+			ncds_mul_reg := ncds_smul3_3.con(24#0b0||B, 32#IR3).dout;
+			goto st_mac3_3;
+		}
+		state st_mac3_3 par{
+			// MAC3 = A3(((((s64)B << 4) * IR3) + (IR0 * limB3(BFC - ((B * IR3) >> 8), 0))) >> 12);
+			sel t<64>;
+			t = (
+				ncds_smul1_3.con((20#0b0||B||0x0), 32#IR3).dout +
+				ncds_smul2_3.con(32#IR0, 32#lim_NCDS.limB3(BFC - (ncds_mul_reg>>8)<31:0>, 0b0).limB3_ret).dout
+				) >> 12;
+		//	A3(t);
+			set_MAC3(t);
+			goto st_ir;
+		}
+
+		state st_ir par{
+			// IR1 = limB1(MAC1, 1);
+			set_IR1(lim_NCDS.limB1(MAC1, 0b1).limB1_ret);
+			// IR2 = limB2(MAC2, 1);
+			set_IR2(lim_NCDS.limB2(MAC2, 0b1).limB2_ret);
+			// IR3 = limB3(MAC3, 1);
+			set_IR3(lim_NCDS.limB3(MAC3, 0b1).limB3_ret);
+			any{
+				st==0 : goto st_mac1_2;
+				st==1 : goto st_mac_3;
+				st==2 : goto st_rgb0;
+			}
+			st++;
+		}
+
+		state st_rgb0 par{
+			// RGB0 = RGB1;
+			set_RGB0(RGB1);
+			// RGB1 = RGB2;
+			set_RGB1(RGB2);
+/*
+			// CODE2 = CODE;
+			set_CODE2(CODE);
+			// R2 = limC1(MAC1 >> 4);
+			set_R2(limC1((MAC1>>4)<15:0>).limC1_ret);
+			// G2 = limC2(MAC2 >> 4);
+			set_G2(limC2((MAC2>>4)<15:0>).limC2_ret);
+			// B2 = limC3(MAC3 >> 4);
+			set_B2(limC3((MAC3>>4)<15:0>).limC3_ret);
+*/
+// LFSR test
+//crand := crand<22:0> || (crand<23> @ crand<22> @ crand<21> @ crand<16>);
+
+			d[22] := //0x20 || crand;
+				CODE ||
+				limC3((MAC3>>4)<15:0>).limC3_ret ||
+				limC2((MAC2>>4)<15:0>).limC2_ret ||
+				limC1((MAC1>>4)<15:0>).limC1_ret;
+
+			goto st_init;
+			finish;
+		}
+	}
+
+	stage RTPT_stg {
+		reg_wr v<5>, vx<16>, vy<16>, vz<16>, szv<16>, quotient<32>;
+		mul_s32 rtpt_smul1, rtpt_smul2, rtpt_smul3, rtpt_mulq;
+		gte_LIMIT lim_RTPT;
+		first_state st_init;
+
+		par{
+			instruct lim_RTPT.set_FLAG set_FLAG(lim_RTPT.FLAG);
+		}
+
+		state st_init par{
+			reset_FLAG();
+			set_SZ0(SZ3);
+			v := 0;
+			goto st_vset;
+		}
+		state st_vset par{
+			vx := get_VX(v).VX;
+			vy := get_VY(v).VY;
+			vz := get_VZ(v).VZ;
+			goto st_mac1;
+		}
+		state st_mac1 par{
+			sel t<64>;
+/*
+			MAC1 = 
+				A1(
+					(
+						((s64)TRX << 12) +
+						(R11 * vx) +
+						(R12 * vy) +
+						(R13 * vz)
+					) >> 12
+				);
+*/
+				t = 
+					(
+						((64#TRX) << 12) + 
+						rtpt_smul1.con(32#R11,32#vx).dout + 
+						rtpt_smul2.con(32#R12,32#vy).dout + 
+						rtpt_smul3.con(32#R13,32#vz).dout
+					) >> 12
+				;
+		//	A1(t);
+			set_MAC1(t);
+			goto st_mac2;
+		}
+		state st_mac2 par{
+			sel t<64>;
+				t = 
+					(
+						((64#TRY) << 12) + 
+						rtpt_smul1.con(32#R21,32#vx).dout + 
+						rtpt_smul2.con(32#R22,32#vy).dout + 
+						rtpt_smul3.con(32#R23,32#vz).dout
+					) >> 12
+				;
+		//	A2(t);
+			set_MAC2(t);
+			goto st_mac3;
+		}
+		state st_mac3 par{
+			sel t<64>;
+				t = 
+					(
+						((64#TRZ) << 12) + 
+						rtpt_smul1.con(32#R31,32#vx).dout + 
+						rtpt_smul2.con(32#R32,32#vy).dout + 
+						rtpt_smul3.con(32#R33,32#vz).dout
+					) >> 12
+				;
+		//	A3(t);
+			set_MAC3(t);
+			goto st_ir;
+		}
+		state st_ir par{
+			// IR1 = limB1(MAC1, 0);
+			set_IR1(lim_RTPT.limB1(MAC1, 0b0).limB1_ret);
+			// IR2 = limB2(MAC2, 0);
+			set_IR2(lim_RTPT.limB2(MAC2, 0b0).limB2_ret);
+			// IR3 = limB3(MAC3, 0);
+			set_IR3(lim_RTPT.limB3(MAC3, 0b0).limB3_ret);
+			goto st_sz;
+		}
+		state st_sz par{
+			// fSZ(v) = limD(MAC3);
+			sel fszv<16>;
+			fszv = lim_RTPT.limD(MAC3).limD_ret;
+			set_fSZ(v, fszv);
+			szv := fszv;
+
+			divide.con0(H, fszv);
+			goto st_div1;
+		}
+		state st_div1 par{
+			divide.con1();
+			goto st_div2;
+		}
+		state st_div2 par{
+			divide.con2();
+			goto st_div3;
+		}
+		state st_div3 par{
+			// quotient = limE(DIVIDE(H, fSZ(v)));
+		//	quotient := limE(divide.con(H, szv).dout).limE_ret;
+			divide.con3(H, szv);
+			quotient := divide.dout;
+			goto st_sx;
+		}
+		state st_sx par{
+/*
+			// fSX(v) = 
+				limG1(
+					F(
+						(s64)OFX +
+						((s64)IR1 * quotient)
+					) >> 16
+				);
+*/
+			sel f<64>;
+			f = (64#OFX) + rtpt_mulq.con(32#IR1, quotient).dout;
+		//	F(f);
+			set_fSX(v, limG1(f<32+16-1:16>).limG1_ret);
+			goto st_sy;
+		}
+		state st_sy par{
+			// fSY(v) = limG2(F((s64)OFY + ((s64)IR2 * quotient)) >> 16);
+			sel f<64>;
+			f = (64#OFY) + rtpt_mulq.con(32#IR2, quotient).dout;
+		//	F(f);
+			set_fSY(v, limG2(f<32+16-1:16>).limG2_ret);
+			goto st_vnew;
+		}
+		state st_vnew par{
+			if(v==2) goto st_mac0;
+			else goto st_vset;
+			v++;
+		}
+		state st_mac0 par{
+			// MAC0 = F((s64)(DQB + ((s64)DQA * quotient)) >> 12);
+			sel f<64>;
+			f = (64#DQB) + rtpt_mulq.con(32#DQA, quotient).dout;
+		//	F(f);
+			set_MAC0(f<32+12-1:12>);
+			goto st_ir0;
+		}
+		state st_ir0 par{
+			// IR0 = limH(MAC0);
+			set_IR0(limH(MAC0).limH_ret);
+			goto st_init;
+			finish;
+		}
+	}
+
+	stage AVSZ3_stg {
+		reg_wr sz_add<32>;
+		mul_s32 avsz3mul;
+		gte_LIMIT lim_AVSZ3;
+		first_state st_init;
+
+		par{
+			if(0b0){
+				lim_AVSZ3.limB1(0,0);
+				lim_AVSZ3.limB2(0,0);
+				lim_AVSZ3.limB3(0,0);
+			}
+			instruct lim_AVSZ3.set_FLAG set_FLAG(lim_AVSZ3.FLAG);
+		}
+
+		state st_init par{
+			reset_FLAG();
+			sz_add := 32#SZ1 + 32#SZ2 + 32#SZ3;
+			goto st_mac0;
+		}
+		state st_mac0 par{
+			sel t<64>;
+			t = avsz3mul.con(32#ZSF3, sz_add).dout;
+			set_MAC0(t<31:0>);
+			// OTZ = limD(t >> 12);
+			set_OTZ(lim_AVSZ3.limD(t<32+12-1:12>).limD_ret);
+			goto st_init;
+			finish;
+		}
+	}
+
+}

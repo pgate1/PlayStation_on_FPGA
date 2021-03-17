@@ -38,7 +38,7 @@ circuit div_u32
 		else{ // ˆø‚¯‚È‚¢ê‡
 			zr := zr<62:0> || 0b0;
 		}
-		
+
 		count++;
 	}
 

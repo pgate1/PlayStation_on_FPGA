@@ -1,7 +1,7 @@
-// PSX PlayStation on FPGA .feat DE2-115
+// PlayStation(PSX) on FPGA .feat DE2-115
 // Copyright (c)2017 pgate1
 
-module PSX_top
+module PlayStation_top
 (
 	input wire CLOCK_50, CLOCK2_50, CLOCK3_50, ENETCLK_25,
 	output wire [8:0] LEDG, // LED Green '1'light
@@ -216,10 +216,10 @@ wire sd_cmd_out, sd_cmd_en;
 	assign OTG_FSPEED = 1'b1;
 	assign OTG_LSPEED = 1'b0;
 
-	// CMD SPI:ã‚³ãƒãƒ³ãƒ‰å‡ºåŠ›ã€SD:ã‚³ãƒãƒ³ãƒ‰å‡ºåŠ›ã¨ãƒ¬ã‚¹ãƒãƒ³ã‚¹å…¥åŠ›
+	// CMD SPI:ƒRƒ}ƒ“ƒho—ÍASD:ƒRƒ}ƒ“ƒho—Í‚ÆƒŒƒXƒ|ƒ“ƒX“ü—Í
 	assign SD_CMD = (sd_cmd_en==1'b1) ? sd_cmd_out : 1'bz;
 
 	assign LCD_ON = 1'b1;
-	assign LCD_BLON = 1'b0; // 1ã§ã‚‚å…‰ã‚‰ãªã„
+	assign LCD_BLON = 1'b0; // 1‚Å‚àŒõ‚ç‚È‚¢
 
 endmodule
