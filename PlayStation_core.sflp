@@ -344,7 +344,7 @@ drawing = gpu.drawing;
 vraming = gpu.vraming;
 
 	instruct cpu.read_req par{
-		if((^sw_cache_off) & ((cpu.A<31:24>==0x00) | (cpu.A<31:24>==0x80)) & cpu.ir_read){ // ƒLƒƒƒbƒVƒ…‚Í0x80‚¾‚¯?
+		if((^sw_cache_off) & ((cpu.A<31:24>==0x00) | (cpu.A<31:24>==0x80)) & cpu.ir_read){ // ã‚­ãƒ£ãƒƒã‚·ãƒ¥ã¯0x80ã ã‘?
 			ir_cache.read(cpu.A<20:0>);
 			generate ir_cache_check.do(cpu.A);
 		}
@@ -404,7 +404,7 @@ vraming = gpu.vraming;
 			}
 
 		}
-		else : par{ // ƒTƒEƒ“ƒhÄ¶
+		else : par{ // ã‚µã‚¦ãƒ³ãƒ‰å†ç”Ÿ
 			instruct run33 par{ // 33.8688MHz
 				par(i=0;i<4;i++){
 					rcnt[i].run33();
@@ -473,7 +473,7 @@ if(gpu.halt_code!=0) dbg_reg := gpu.dbg;
 	instruct vram_read_ack gpu.vram_read_ack();
 	gpu.vram_read_data = vram_read_data;
 
-	// ir_read‚Ì‚É‹N“®
+	// ir_readã®æ™‚ã«èµ·å‹•
 	stage ir_cache_check {
 		first_state st1;
 		state st1 par{
@@ -510,16 +510,16 @@ if(gpu.halt_code!=0) dbg_reg := gpu.dbg;
 					//		io_reg := 0x00000000;
 					//	}
 						cpu_A<15:0>==0x1014 : io_reg := spuDmaWait;
-						cpu_A<15:0>==0x1040 : io_reg := 0x0000 || sio.ReadData().io_dout; // ƒpƒbƒhƒf[ƒ^
-						cpu_A<15:0>==0x1044 : io_reg := 0x0000 || sio.ReadStat().io_dout; // ƒpƒbƒhƒXƒe[ƒ^ƒX
-						cpu_A<15:0>==0x104A : io_reg := sio.ReadCtrl().io_dout || 0x0000; // ƒpƒbƒhƒRƒ“ƒgƒ[ƒ‹
+						cpu_A<15:0>==0x1040 : io_reg := 0x0000 || sio.ReadData().io_dout; // ãƒ‘ãƒƒãƒ‰ãƒ‡ãƒ¼ã‚¿
+						cpu_A<15:0>==0x1044 : io_reg := 0x0000 || sio.ReadStat().io_dout; // ãƒ‘ãƒƒãƒ‰ã‚¹ãƒ†ãƒ¼ã‚¿ã‚¹
+						cpu_A<15:0>==0x104A : io_reg := sio.ReadCtrl().io_dout || 0x0000; // ãƒ‘ãƒƒãƒ‰ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
 						cpu_A<15:0>==0x1060 : io_reg := 0x0000 || ramSize; // test
 						cpu_A<15:0>==0x1070 : io_reg := 0x0000 || IREG;
 						cpu_A<15:0>==0x1074 : io_reg := 0x0000 || IMASK;
 
-						cpu_A<15:0>==0x10A0 : io_reg := DmaMADR_2; // DMACƒ`ƒƒƒlƒ‹2(GPU)ƒƒ‚ƒŠƒAƒhƒŒƒX
-						cpu_A<15:0>==0x10A8 : io_reg := DmaCHCR_2; // DMACƒ`ƒƒƒlƒ‹2(GPU)ƒ`ƒƒƒlƒ‹ƒRƒ“ƒgƒ[ƒ‹
-						cpu_A<15:0>==0x10E8 : io_reg := DmaCHCR_6; // DMACƒ`ƒƒƒlƒ‹6(OTC)ƒ`ƒƒƒlƒ‹ƒRƒ“ƒgƒ[ƒ‹
+						cpu_A<15:0>==0x10A0 : io_reg := DmaMADR_2; // DMACãƒãƒ£ãƒãƒ«2(GPU)ãƒ¡ãƒ¢ãƒªã‚¢ãƒ‰ãƒ¬ã‚¹
+						cpu_A<15:0>==0x10A8 : io_reg := DmaCHCR_2; // DMACãƒãƒ£ãƒãƒ«2(GPU)ãƒãƒ£ãƒãƒ«ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
+						cpu_A<15:0>==0x10E8 : io_reg := DmaCHCR_6; // DMACãƒãƒ£ãƒãƒ«6(OTC)ãƒãƒ£ãƒãƒ«ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
 
 						cpu_A<15:0>==0x10F0 : io_reg := DmaDPCR;
 						cpu_A<15:0>==0x10F4 : io_reg := DmaDICR;
@@ -530,15 +530,15 @@ if(gpu.halt_code!=0) dbg_reg := gpu.dbg;
 						//	cpu_A<7:4>==0x3 : ;//io_reg := rcnt_3.io_get(cpu_A<3:0>).io_Dout;
 							else : halt(0x54);
 						}
-						cpu_A<15:4>==0x180 : par{ // CDROMƒRƒ“ƒgƒ[ƒ‰ƒŒƒWƒXƒ^
+						cpu_A<15:4>==0x180 : par{ // CDROMã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ©ãƒ¬ã‚¸ã‚¹ã‚¿
 							cdr.Read(cpu_A<1:0>);
 							io_reg := cdr.io_dout || cdr.io_dout || cdr.io_dout || cdr.io_dout;
 						}
-						cpu_A<15:0>==0x1810 : par{ // GPUƒf[ƒ^^ƒRƒ}ƒ“ƒh
+						cpu_A<15:0>==0x1810 : par{ // GPUãƒ‡ãƒ¼ã‚¿ï¼ã‚³ãƒãƒ³ãƒ‰
 							gpu.ReadData();
 							generate read_gpu_wait.do();
 						}
-						cpu_A<15:0>==0x1814 : par{ // GPUƒXƒe[ƒ^ƒX^ƒRƒ“ƒgƒ[ƒ‹
+						cpu_A<15:0>==0x1814 : par{ // GPUã‚¹ãƒ†ãƒ¼ã‚¿ã‚¹ï¼ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
 							io_reg := gpu.read_status().dout;
 						}
 
@@ -607,7 +607,7 @@ if(gpu.halt_code!=0) dbg_reg := gpu.dbg;
 				map_ram : par{
 					WRAM_WRITE(cpu_A<20:0>, cpu_Dout, cpu_Word);
 					generate write_wram_wait.do();
-					ir_cache.flag_clear(cpu_A<20:0>); // ‚±‚±‚Å‚à‚¢‚¢
+					ir_cache.flag_clear(cpu_A<20:0>); // ã“ã“ã§ã‚‚ã„ã„
 				}
 				map_pio : par{
 					halt(0x53);
@@ -622,19 +622,19 @@ if(gpu.halt_code!=0) dbg_reg := gpu.dbg;
 					cpu_A<15:0>==0x1018 : ;
 					cpu_A<15:0>==0x101C : ;
 					cpu_A<15:0>==0x1020 : ;
-					cpu_A<15:0>==0x1040 : sio.WriteData(cpu_Dout<15:0>); // ƒpƒbƒh
-					cpu_A<15:0>==0x1048 : sio.WriteMode(cpu_Dout<15:0>); // ƒpƒbƒhƒ‚[ƒh
-					cpu_A<15:0>==0x104A : sio.WriteCtrl(cpu_Dout<15:0>); // ƒpƒbƒhƒRƒ“ƒgƒ[ƒ‹
-					cpu_A<15:0>==0x104E : sio.WriteBaud(cpu_Dout<15:0>); // ƒpƒbƒhƒŒ[ƒg
+					cpu_A<15:0>==0x1040 : sio.WriteData(cpu_Dout<15:0>); // ãƒ‘ãƒƒãƒ‰
+					cpu_A<15:0>==0x1048 : sio.WriteMode(cpu_Dout<15:0>); // ãƒ‘ãƒƒãƒ‰ãƒ¢ãƒ¼ãƒ‰
+					cpu_A<15:0>==0x104A : sio.WriteCtrl(cpu_Dout<15:0>); // ãƒ‘ãƒƒãƒ‰ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
+					cpu_A<15:0>==0x104E : sio.WriteBaud(cpu_Dout<15:0>); // ãƒ‘ãƒƒãƒ‰ãƒ¬ãƒ¼ãƒˆ
 					cpu_A<15:0>==0x1060 : ramSize := cpu_Dout<15:0>;
-					cpu_A<15:0>==0x1070 : par{ // Š„‚è‚İƒXƒe[ƒ^ƒX
+					cpu_A<15:0>==0x1070 : par{ // å‰²ã‚Šè¾¼ã¿ã‚¹ãƒ†ãƒ¼ã‚¿ã‚¹
 						IREG &= cpu_Dout<15:0>;
 					}
-					cpu_A<15:0>==0x1074 : IMASK := cpu_Dout<15:0>; // Š„‚è‚İƒ}ƒXƒN
+					cpu_A<15:0>==0x1074 : IMASK := cpu_Dout<15:0>; // å‰²ã‚Šè¾¼ã¿ãƒã‚¹ã‚¯
 
-					cpu_A<15:0>==0x10A0 : DmaMADR_2 := cpu_Dout; // DMACƒ`ƒƒƒlƒ‹2(GPU)ƒƒ‚ƒŠƒAƒhƒŒƒX
-					cpu_A<15:0>==0x10A4 : DmaBCR_2 := cpu_Dout; // DMACƒ`ƒƒƒlƒ‹2(GPU)ƒuƒƒbƒNƒJƒEƒ“ƒg
-					cpu_A<15:0>==0x10A8 : par{ // DMACƒ`ƒƒƒlƒ‹2(GPU)ƒ`ƒƒƒlƒ‹ƒRƒ“ƒgƒ[ƒ‹
+					cpu_A<15:0>==0x10A0 : DmaMADR_2 := cpu_Dout; // DMACãƒãƒ£ãƒãƒ«2(GPU)ãƒ¡ãƒ¢ãƒªã‚¢ãƒ‰ãƒ¬ã‚¹
+					cpu_A<15:0>==0x10A4 : DmaBCR_2 := cpu_Dout; // DMACãƒãƒ£ãƒãƒ«2(GPU)ãƒ–ãƒ­ãƒƒã‚¯ã‚«ã‚¦ãƒ³ãƒˆ
+					cpu_A<15:0>==0x10A8 : par{ // DMACãƒãƒ£ãƒãƒ«2(GPU)ãƒãƒ£ãƒãƒ«ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
 						DmaCHCR_2 := cpu_Dout;
 						// 1000_0000_0000
 						// (n==2 && DmaCHCR[2]==0x0401 && DmaBCR[2]==0x0)
@@ -671,9 +671,9 @@ cdr_dma_count++;
 							dma_SPU.Execute();
 						}
 					}
-					cpu_A<15:0>==0x10E0 : DmaMADR_6 := cpu_Dout; // DMACƒ`ƒƒƒlƒ‹6(OTC)ƒƒ‚ƒŠƒAƒhƒŒƒX
-					cpu_A<15:0>==0x10E4 : DmaBCR_6 := cpu_Dout; // DMACƒ`ƒƒƒlƒ‹6(OTC)ƒuƒƒbƒNƒJƒEƒ“ƒg
-					cpu_A<15:0>==0x10E8 : par{ // DMACƒ`ƒƒƒlƒ‹6(OTC)ƒ`ƒƒƒlƒ‹ƒRƒ“ƒgƒ[ƒ‹
+					cpu_A<15:0>==0x10E0 : DmaMADR_6 := cpu_Dout; // DMACãƒãƒ£ãƒãƒ«6(OTC)ãƒ¡ãƒ¢ãƒªã‚¢ãƒ‰ãƒ¬ã‚¹
+					cpu_A<15:0>==0x10E4 : DmaBCR_6 := cpu_Dout; // DMACãƒãƒ£ãƒãƒ«6(OTC)ãƒ–ãƒ­ãƒƒã‚¯ã‚«ã‚¦ãƒ³ãƒˆ
+					cpu_A<15:0>==0x10E8 : par{ // DMACãƒãƒ£ãƒãƒ«6(OTC)ãƒãƒ£ãƒãƒ«ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
 						DmaCHCR_6 := cpu_Dout;
 						// 1000_0000_0000_0000_0000_0000_0000
 						if(DmaDPCR<27> & (cpu_Dout==0x11000002)){ // ok
@@ -681,8 +681,8 @@ cdr_dma_count++;
 						}
 					}
 
-					cpu_A<15:0>==0x10F0 : DmaDPCR |= cpu_Dout; // DMAC—Dæ“xƒRƒ“ƒgƒ[ƒ‹
-					cpu_A<15:0>==0x10F4 : par{ // DMACŠ„‚è‚İƒRƒ“ƒgƒ[ƒ‹
+					cpu_A<15:0>==0x10F0 : DmaDPCR |= cpu_Dout; // DMACå„ªå…ˆåº¦ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
+					cpu_A<15:0>==0x10F4 : par{ // DMACå‰²ã‚Šè¾¼ã¿ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
 						sel tmp<32>;
 						tmp = (^cpu_Dout) & DmaDICR;
 						DmaDICR := ((tmp @ cpu_Dout) & 0x00FFFFFF) @ tmp;
@@ -694,20 +694,20 @@ cdr_dma_count++;
 					//	cpu_A<7:4>==0x3 : ;//rcnt_3.io_set(cpu_A<3:0>, cpu_Dout<15:0>);
 						else : halt(0x54);
 					}
-					cpu_A<15:4>==0x180 : par{ // CDROMƒRƒ“ƒgƒ[ƒ‰ƒŒƒWƒXƒ^
+					cpu_A<15:4>==0x180 : par{ // CDROMã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ©ãƒ¬ã‚¸ã‚¹ã‚¿
 						cdr.Write(cpu_A<1:0>, cpu_Dout<7:0>);
 					}
-					cpu_A<15:0>==0x1810 : par{ // GPUƒf[ƒ^^ƒRƒ}ƒ“ƒh
+					cpu_A<15:0>==0x1810 : par{ // GPUãƒ‡ãƒ¼ã‚¿ï¼ã‚³ãƒãƒ³ãƒ‰
 						gpu.WriteData(cpu_Dout);
 //if(dma_GPU.gpu_dma_write_req) halt(0x94);
 					}
-					cpu_A<15:0>==0x1814 : par{ // GPUƒXƒe[ƒ^ƒX^ƒRƒ“ƒgƒ[ƒ‹
+					cpu_A<15:0>==0x1814 : par{ // GPUã‚¹ãƒ†ãƒ¼ã‚¿ã‚¹ï¼ã‚³ãƒ³ãƒˆãƒ­ãƒ¼ãƒ«
 						gpu.write_status(cpu_Dout);
 					}
 					cpu_A<15:10>==0b000111 : par{ // 0x1F80_1C00-1E00
 						spu.io_set(cpu_A<15:0>, cpu_Dout<15:0>);
 					}
-					cpu_A<15:0>==0x2041 : ; // ƒfƒBƒbƒvƒXƒCƒbƒ`?
+					cpu_A<15:0>==0x2041 : ; // ãƒ‡ã‚£ãƒƒãƒ—ã‚¹ã‚¤ãƒƒãƒ?
 					else : par{
 						dbg_reg := cpu_A;
 						halt(0x55);
