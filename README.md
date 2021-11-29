@@ -29,3 +29,12 @@ Add a CDROM controller.
 2021/02/25  
 Add geometry engine for viewing PS logo.  
 <img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/PS_20210225_ok.jpg">
+  
+Tobal No.1 play  
+<img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/v_TobalNo1.jpg">
+  
+Einhander play  
+<img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/v_Einhander.jpg">
+  
+Metalgear Solid demo  
+<img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/v_MetalgearSolid.jpg">
