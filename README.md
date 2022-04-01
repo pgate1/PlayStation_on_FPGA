@@ -23,7 +23,7 @@ Add texture and dither.
 <img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/20200717_VGA_ok.jpg">
 
 2020/09/05  
-Add a CDROM controller.  
+Add CDROM controller.  
 <img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/20200905_NotPlayStationDisc.jpg">
 
 2021/02/25  
@@ -39,5 +39,6 @@ Einhander play
 Metalgear Solid demo  
 <img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/v_MetalgearSolid.jpg">
   
-Saga Frontier 2  
+2022/03/27  
+Add MemoryCard Controller for Saga Frontier 2.  
 <img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/v_SagaFrontier2.jpg">
