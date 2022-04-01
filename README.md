@@ -38,3 +38,6 @@ Einhander play
   
 Metalgear Solid demo  
 <img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/v_MetalgearSolid.jpg">
+  
+Saga Frontier 2
+<img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/v_SagaFrontier2.jpg">
