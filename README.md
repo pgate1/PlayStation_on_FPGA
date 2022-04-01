@@ -19,7 +19,7 @@ Run BIOS.
 <img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/20191112_sony.jpg">
 
 2020/07/09  
-Add texture and dither.   
+Add texture and dither.  
 <img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/20200717_VGA_ok.jpg">
 
 2020/09/05  
@@ -39,5 +39,5 @@ Einhander play
 Metalgear Solid demo  
 <img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/v_MetalgearSolid.jpg">
   
-Saga Frontier 2
+Saga Frontier 2  
 <img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/v_SagaFrontier2.jpg">
