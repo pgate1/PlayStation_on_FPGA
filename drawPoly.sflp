@@ -36,9 +36,9 @@ declare mul_s11 interface
 
 circuit drawGouraudShading
 {
-	input vx1<11>, vy1<11>, vc1<24>; // A“_
-	input vx2<11>, vy2<11>, vc2<24>; // B“_
-	input vx3<11>, vy3<11>, vc3<24>; // C“_
+	input vx1<11>, vy1<11>, vc1<24>; // Aç‚¹
+	input vx2<11>, vy2<11>, vc2<24>; // Bç‚¹
+	input vx3<11>, vy3<11>, vc3<24>; // Cç‚¹
 	input drawW<10>, drawH<10>;
 	input f_dither;
 	instrin con(vx1, vy1, vc1, vx2, vy2, vc2, vx3, vy3, vc3, drawW, drawH, f_dither);
@@ -46,7 +46,7 @@ circuit drawGouraudShading
 	instrin draw;
 	output drawing;
 
-	// Yƒ\[ƒgŒã
+	// Yã‚½ãƒ¼ãƒˆå¾Œ
 	reg_wr x1<11>, y1<11>, r1<8>, g1<8>, b1<8>;
 	reg_wr x2<11>, y2<11>, r2<8>, g2<8>, b2<8>;
 	reg_wr x3<11>, y3<11>, r3<8>, g3<8>, b3<8>;
@@ -102,9 +102,9 @@ dbg = dbg_reg;
 // eval 640*480=0x4B000
 //<18> NG
 //<19> OK
-	// eval ƒ}ƒCƒiƒX:¶“Ê, ƒvƒ‰ƒX:‰E“Ê
+	// eval ãƒã‚¤ãƒŠã‚¹:å·¦å‡¸, ãƒ—ãƒ©ã‚¹:å³å‡¸
 	eval := (mule1.con(y3-y1, x2-x1).dout - mule2.con(x3-x1, y2-y1).dout)<19>;
-	// y2‚æ‚èã‚©‚Ç‚¤‚©
+	// y2ã‚ˆã‚Šä¸Šã‹ã©ã†ã‹
 	upper = ((y2-y)<10>==0b0) & (y1!=y2);
 
 	reg_wr vram_write_wait;
@@ -183,7 +183,7 @@ dbg = dbg_reg;
 				}
 			}
 		}
-		state st4 if(^vram_write_wait){ // ƒ‰ƒCƒ“•`‰æ
+		state st4 if(^vram_write_wait){ // ãƒ©ã‚¤ãƒ³æç”»
 			if((x!=ex) & (x!=(ex+1)) & (((0b0||drawW)-x)<10>==0b0)){ // x <= drawW
 				if(
 				//	(y<10>==0b0) &          // y >= 0
@@ -193,7 +193,7 @@ dbg = dbg_reg;
 				//	(y<0>==0b0) & (x<0>==0b0) // 320x240
 				) view_on(x<9:0>, y<8:0>);
 
-				// for €”õƒ|ƒŠƒSƒ“•\¦
+				// for æº–å‚™ãƒãƒªã‚´ãƒ³è¡¨ç¤º
 				if(sw_outview_on &
 					(x<10>==0b0) &          // x >= 0
 					((x-0b01010000000)<10>==0b0) //& // x >= 640
@@ -203,7 +203,7 @@ dbg = dbg_reg;
 				if(
 				//	(y<10>==0b0) & // y >= 0
 					(x<10>==0b0) & // x >= 0
-					((x-0b01010000000)<10>==0b0) // x >= 640 for €”õƒ|ƒŠƒSƒ“
+					((x-0b01010000000)<10>==0b0) // x >= 640 for æº–å‚™ãƒãƒªã‚´ãƒ³
 				){
 					vram_write(y<8:0>||x<9:0>, 0b0||pb<CMULS+7:CMULS+3>||pg<CMULS+7:CMULS+3>||pr<CMULS+7:CMULS+3>);
 				}
@@ -370,42 +370,42 @@ dbg = dbg_reg;
 		mul_s18s16 mulca;
 		first_state st1;
 		par{
-			if(eval){ // ¶‚É“Ê
-				if(upper){ // ã
+			if(eval){ // å·¦ã«å‡¸
+				if(upper){ // ä¸Š
 					sr = r12<CMULS+7:CMULS>; sg = g12<CMULS+7:CMULS>; sb = b12<CMULS+7:CMULS>;
 				}
-				else{ // ‰º
+				else{ // ä¸‹
 					sr = r23<CMULS+7:CMULS>; sg = g23<CMULS+7:CMULS>; sb = b23<CMULS+7:CMULS>;
 				}
 				er = r13<CMULS+7:CMULS>; eg = g13<CMULS+7:CMULS>; eb = b13<CMULS+7:CMULS>;
 			}
-			else{ // ‰E‚É“Ê
+			else{ // å³ã«å‡¸
 				sr = r13<CMULS+7:CMULS>; sg = g13<CMULS+7:CMULS>; sb = b13<CMULS+7:CMULS>;
-				if(upper){ // ã
+				if(upper){ // ä¸Š
 					er = r12<CMULS+7:CMULS>; eg = g12<CMULS+7:CMULS>; eb = b12<CMULS+7:CMULS>;
 				}
-				else{ // ‰º
+				else{ // ä¸‹
 					er = r23<CMULS+7:CMULS>; eg = g23<CMULS+7:CMULS>; eb = b23<CMULS+7:CMULS>;
 				}
 			}
 		}
 
 		state st1 par{
-			if(eval){ // ¶‚É“Ê
-				if(upper){ // ã
+			if(eval){ // å·¦ã«å‡¸
+				if(upper){ // ä¸Š
 					sx := x12<25:15>;
 				}
-				else{ // ‰º
+				else{ // ä¸‹
 					sx := x23<25:15>;
 				}
 				ex := x13<25:15>;
 			}
-			else{ // ‰E‚É“Ê
+			else{ // å³ã«å‡¸
 				sx := x13<25:15>;
-				if(upper){ // ã
+				if(upper){ // ä¸Š
 					ex := x12<25:15>;
 				}
-				else{ // ‰º
+				else{ // ä¸‹
 					ex := x23<25:15>;
 				}
 			}
@@ -436,7 +436,7 @@ dbg = dbg_reg;
 			pg := sg || CMULS#0b0;
 			pb := sb || CMULS#0b0;
 
-			if(upper){ // ã
+			if(upper){ // ä¸Š
 				x12 += ax12;
 				r12 += ar12;
 				g12 += ag12;
