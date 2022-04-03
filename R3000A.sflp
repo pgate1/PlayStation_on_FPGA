@@ -29,16 +29,12 @@ circuit R3000A
 	input Din<32>;
 
 	reg_ws reset;
-	instrself reset_act;
 
 	instrin exe_set(hA, h_data);
 	input hA<12>, h_data<8>;
 
-	mem gpr[32]<32>;
-
-	// cpr0[0x0C] := 0x10900000;
-	// cpr0[0x0F] := 0x00000002;
-	mem cpr0[32]<32>;
+	mem gpr[32]<32> = {0};
+	mem cpr0[32]<32> = {0};
 
 	reg_wr pc<32>;
 	reg_wr hi<32>, lo<32>;
@@ -58,34 +54,31 @@ circuit R3000A
 	reg_wr Dout_reg<32>;
 
 	instrself stage_IF;
-	reg_wr stall_mem, stall_sys;
+	reg_wr stall_mem;
 
 	instrself stage_ID;
-	reg_wr op<8>; // 6bit
-	reg_wr rs<5>, rt<5>, imm_immediate<16>;
-	reg_wr rd<5>, reg_sa<5>;
-	reg_wr funct<8>; // 6bit
-	reg_wr jmp_target<26>;
 	reg_wr id_pc<32>;
 
 	instrself stage_EX;
+	reg_wr ex_opcode<32>;
+	sel op<8>; // 6bit
+	sel rs<5>, rt<5>, immediate<16>;
+	sel target<26>;
+	sel rd<5>, shift<5>;
+	sel funct<8>; // 6bit
 	reg_wr rt_data_reg<32>, rd_data_reg<32>;
 	sel rs_data<32>, rt_data<32>, sa;
-	sel cpr0_rd_data<32>;
 	reg_wr mem_op<8>; // 6bit;
 	reg_wr mem_rt<5>;
 	reg_wr cop_rs<5>;
 	reg_wr mem_funct<8>; // 6bit;
 	reg_wr mem_rd<5>;
-	reg_wr cop_rd<5>;
+	reg_wr mem_bcond_rt<5>;
 	instrself read_rt, write_rt;
 	instrself jump(jump_pc);
 	sel jump_pc<32>, data<32>;
-	reg_wr ex_pc<32>, ex_opcode<32>; // test
-//sel forwarding<4>;
-	reg_wr cpr0_rd_data_reg<32>;
+	reg_wr ex_pc<32>; // test
 	instrself rt_data_set(data), rd_data_set(data), reset_rtrd;
-//	instrself delayslot_opcode_invalid;
 
 	instrself stage_MEM;
 	instrself write_mem_rt;
@@ -106,12 +99,13 @@ circuit R3000A
 	bsr_s32 sra;
 
 	input IRQ_in<16>;
-	reg_wr irq_run<2>;
+	reg_wr st_irq_run<2>, irq_return_pc<32>;
 	instrself irq_check;
 	instrself fetch_delay_slot;
 
 	GeometryTransformationEngine gte;
 	reg_wr gte_rt<5>;
+	reg_wr gte_op<32>;
 
 	output ir_read;
 
@@ -129,13 +123,25 @@ output dbg16<16>;
 output dbg32<32>;
 reg_wr dbg32_reg<32>;
 
+reg_wr in_irq, in_syscall;
+
 	stage_name read_wait { task do(rid_reg); }
 	stage_name mul_wait { task do(mulf_reg, mul_a, mul_b); }
 	stage_name div_wait { task do(divf_reg); }
 
+	reg_wr reset_1;
 	if(reset){
-		reset_act();
+		pc := 0xBFC00000;
+		par(i=0;i<32;i++){
+			gpr[i] := 0; cpr0[i] := 0;
+		}
 		reset := 0b0;
+		reset_1 := 0b1;
+	}
+	if(reset_1){
+		cpr0[0x0C] := 0x10900000;
+		cpr0[0x0F] := 0x00000002;
+		reset_1 := 0b0;
 	}
 
 	if(read | write){
@@ -154,38 +160,23 @@ reg_wr dbg32_reg<32>;
 	opcode_out = opcode;
 
 dbg = dbg_reg | gte.dbg;
-dbg16 = gte.dbg16;
-dbg32 = gte.dbg32;
-
-	reg_wr reset1;
-	instruct reset_act par{
-		pc := 0xBFC00000;
-		hi := 0x00000000;
-		lo := 0x00000000;
-		par(i=0;i<32;i++){
-			gpr[i] := 0x00000000; cpr0[i] := 0x00000000;
-		}
-		reset1 := 0b1;
-	}
-	if(reset1){
-		cpr0[0x0C] := 0x10900000;
-		cpr0[0x0F] := 0x00000002;
-		reset1 := 0b0;
-	}
+dbg16 = 0;//gte.dbg16;
+dbg32 = 0;//dbg32_reg;//gte.dbg32;
 
 	instruct exe_set any{
 		hA==0x010 : pc := pc<31:8> || h_data;
 		hA==0x011 : pc := pc<31:16> || h_data || pc<7:0>;
 		hA==0x012 : pc := pc<31:24> || h_data || pc<15:0>;
 		hA==0x013 : pc := h_data || pc<23:0>;
-		hA==0x014 : gpr[0x1C] := gpr[0x1C]<31:8> || h_data;
-		hA==0x015 : gpr[0x1C] := gpr[0x1C]<31:16> || h_data || gpr[0x1C]<7:0>;
-		hA==0x016 : gpr[0x1C] := gpr[0x1C]<31:24> || h_data || gpr[0x1C]<15:0>;
-		hA==0x017 : gpr[0x1C] := h_data || gpr[0x1C]<23:0>;
 		hA==0x030 : gpr[0x1D] := gpr[0x1D]<31:8> || h_data;
 		hA==0x031 : gpr[0x1D] := gpr[0x1D]<31:16> || h_data || gpr[0x1D]<7:0>;
 		hA==0x032 : gpr[0x1D] := gpr[0x1D]<31:24> || h_data || gpr[0x1D]<15:0>;
-		hA==0x033 : gpr[0x1D] := h_data || gpr[0x1D]<23:0>;
+		hA==0x033 : par{
+			sel sp_adrs<32>;
+			sp_adrs = h_data || gpr[0x1D]<23:0>;
+			if(sp_adrs!=0x00000000) gpr[0x1D] := sp_adrs;
+			else gpr[0x1D] := 0x801FFF00;
+		}
 	}
 
 	instruct halt halt_code_reg := h_code;
@@ -198,31 +189,33 @@ dbg32 = gte.dbg32;
 	if(read) ir_read = rid==READ_OP;
 	else ir_read = rid_reg==READ_OP;
 
-	instruct read_gte par{
-		generate read_wait.do(READ_GTE);
-	}
-
 	instruct write par{
 		// if(cpu->SR->is_c) return;
 		if(cpr0[0x0C]<16>==0b0) write_req();
 	}
 
-	instruct exception par{
-		cpr0[13] := exception_code;
+	reg_wr id_delay_slot, ex_delay_slot;
+//	sel id_cop;
 
-	//	if(delay_type==DELAY_SLOT){
-	//		cpr0[13] |= 0x80000000;
-	//		cpr0[14] = pc - 4;
-	//	}
-	//	else{
-			if(irq_run==3){ // Ç±ÇÍÇ«Ç§Ç»ÇÃÅH
-				cpr0[14] := pc - 4;
-				irq_run := 0;
-			}
-			else{
-				cpr0[14] := pc - 8;
-			}
-	//	}
+	// EXÉXÉeÅ[ÉWÇ≈é¿çs
+	instruct exception par{
+		if(ex_delay_slot) cpr0[13] := exception_code | 0x80000000;
+		else              cpr0[13] := exception_code;
+
+		if(st_irq_run==3){ // IRQ
+if(in_irq) halt(0x07);
+if(in_syscall) halt(0x08); // IRQ on SYSCALL
+			st_irq_run := 0;
+			in_irq := 0b1;
+			cpr0[14] := irq_return_pc;
+		}
+		else{ // í èÌÇÃSYSCALL
+if(in_irq) halt(0x09);
+if(in_syscall) halt(0x0A);
+			in_syscall := 0b1;
+			// SYSCALLÇÃéüÇÃÉAÉhÉåÉXÇï€ë∂(íxâÑÉXÉçÉbÉgÇ≈ÇÕÇ»Ç¢)
+			cpr0[14] := pc - 8;
+		}
 
 		if(cpr0[12]<22>){ // Status.bev
 			jump(0xBFC00180);
@@ -233,60 +226,57 @@ dbg32 = gte.dbg32;
 
 		cpr0[12] := cpr0[12]<31:6> || cpr0[12]<3:0> || 0b00;
 	}
-
+/*
 	instruct irq_check par{
-		//if((mem.IREG & mem.IMASK) && delay_type==DELAY_NONE){
-		//	if((cpr0[12] & 0x401) == 0x401){
-		//		Exception(0x400);
-		//	}
-		//}
-
-		if((IRQ_in!=0) & (irq_run==0)){
+		if((IRQ_in!=0) & (st_irq_run==0)){
 			if(cpr0[12]<10> & cpr0[12]<0>){
-				irq_run := 1;
+				st_irq_run := 1;
 			}
 		}
 	}
+*/
+	sel irq_on;
+	irq_on = (IRQ_in!=0) & (st_irq_run==0) & cpr0[12]<10> & cpr0[12]<0>;
 
 	instruct run par{
-		irq_check();
 
-// F D E M B
+//  F D E M B
 // mem
-// Å|ÅõÅõÅõÅõ
-// ÅõÅ|Å|Å|Å|
+//  Å|ÅõÅõÅõÅõ
+//  ÅõÅ|Å|Å|Å|
 // syscall
-// ÅõÅ|ÅõÅõÅõ
-// ÅõÅõÅ|Å|Å|
+//  syÅZÅZÅZÅZ
+//  **syÅZÅZÅZ opcode=0x00000000 NOP
+//  jpnpsyÅõÅõ
 // irq
-// ÅõÅõÅõÅõÅõ irq:1 opcode=0x0000000C
-// Å|ÅõÅõÅõÅõ irq:2
-// jpÅ|ÅõÅõÅõ irq:3
+//  exÅõÅõÅõÅõ irq:1 opcode=0x0000000C SYSCALL(IRQ)
+//  **exÅõÅõÅõ irq:2 opcode=0x00000000 NOP
+//  jpnpexÅõÅõ irq:3
 // mem2
-// Å|Å|Å|ÅõÅõ
-// ÅõÅõÅõÅ|Åõ
+//  Å|Å|Å|ÅõÅõ
+//  ÅõÅõÅõÅ|Åõ
 
 		if(read_wait.do | mul_wait.do | div_wait.do | gte.running);
 		else{
 			alt{
 				write_mem_rt : stall_mem2 := 1;
 				read_rt | write_rt : stall_mem := 1;
-				irq_run==2 : irq_run := 3;
 				else : stage_IF();
 			}
 			alt{
-				exception : stall_sys := 1;
 				stall_mem | write_mem_rt : ;
 				else : stage_ID();
 			}
 			alt{
-				stall_mem | stall_sys : par{
+				stall_mem : par{
 					stall_mem := 0;
-					stall_sys := 0;
 				}
 				else : par{
 					if(write_mem_rt);
-					else stage_EX();
+					else{
+					//	irq_check();
+						stage_EX();
+					}
 					if(stall_mem2) stall_mem2 := 0;
 					else stage_MEM();
 					stage_WB();
@@ -297,15 +287,28 @@ dbg32 = gte.dbg32;
 
 	instruct stage_IF par{
 		alt{
+		//	(st_irq_run==1) & (cpr0[12]<10> & cpr0[12]<0> & (^exception)) & fetch_delay_slot : par{ // íxâÑÉXÉçÉbÉgÇ≈IRQÇ…ì¸ÇÈ
+			irq_on & (^exception) & fetch_delay_slot : par{ // íxâÑÉXÉçÉbÉgÇ≈IRQÇ…ì¸ÇÈ
+				opcode := 0x0000000C; // IRQ(SYSCALL)
+				// IRQÇ©ÇÁñﬂÇÈÉAÉhÉåÉXÇï€ë∂
+			//	if(fetch_delay_slot){
+					// íxâÑÉXÉçÉbÉgÇ»ÇÁëOÇÃÉWÉÉÉìÉvñΩóﬂÇ©ÇÁ
+					irq_return_pc := pc - 4;
+			//	}
+			//	else{
+			//		irq_return_pc := pc;
+			//	}
+				st_irq_run := 2;
+				id_pc := pc;
+			}
+			(st_irq_run==2) : par{ // IRQÇÃíxâÑÉXÉçÉbÉgë}ì¸
+				st_irq_run := 3;
+				id_pc := pc;
+			}
 			jump : par{
 				read(READ_OP, jump_pc, 4);
 				pc := jump_pc + 4;
 				id_pc := jump_pc;
-			}
-			irq_run==1 : par{
-				opcode := 0x0000000C; // IRQ(SYSCALL)
-				irq_run := 2;
-				id_pc := pc;
 			}
 			else : par{
 				read(READ_OP, pc, 4);
@@ -313,29 +316,23 @@ dbg32 = gte.dbg32;
 				id_pc := pc;
 			}
 		}
+
+		id_delay_slot := fetch_delay_slot;
 	}
 
 	instruct stage_ID par{
 		// ÉWÉÉÉìÉvñΩóﬂÇ≈ï™äÚÇµÇΩÇÁíxâÑÉXÉçÉbÉgÇ…Ç†ÇÈÉWÉÉÉìÉvñΩóﬂÇÕñ≥å¯âªÇ∑ÇÈ
-		if(jump & fetch_delay_slot){
-			op := 0b00000000;
+		if(
+			(jump & fetch_delay_slot) | // EXÇ≈jumpÇ∑ÇÈ Ç©Ç¬ IDÇ…jumpñΩóﬂÇ™Ç†ÇÈ
+			(exception) // SYSCALLÇÃéüÇÕNOPÇ…Ç∑ÇÈ
+			){
+			ex_opcode := 0x00000000;
 		}
 		else{
-			op := 0b00 || opcode<31:26>;
+			ex_opcode := opcode;
 		}
-		rs := opcode<25:21>;
-		rt := opcode<20:16>;
-		imm_immediate := opcode<15:0>;
-
-		rd := opcode<15:11>;
-		reg_sa := opcode<10:6>;
-		funct := 0b00 || opcode<5:0>;
-
-		// jmp_op := <31:26>
-		jmp_target := opcode<25:0>;
 
 		ex_pc := id_pc; // test
-		ex_opcode := opcode; // test
 
 // ÉWÉÉÉìÉvñΩóﬂÇÃéüÇ…ÉWÉÉÉìÉvñΩóﬂÇ™Ç†ÇÈ
 //if(jump & fetch_delay_slot){ dbg_reg:=op; halt(0x06); } // Ç±ÇÍ
@@ -346,14 +343,17 @@ dbg32 = gte.dbg32;
 		j_funct = 0b00 || opcode<5:0>;
 		j_rt = opcode<20:16>;
 		if(
-			((j_op==0x00) & ((j_funct==0x08) | (j_funct==0x09) | (j_funct==0x0C))) |
-			((j_op==0x01) &	((j_rt==0) | (j_rt==1))) |
+			((j_op==0x00) & ((j_funct==0x08) | (j_funct==0x09) /*| (j_funct==0x0C)*/)) |
+			((j_op==0x01) &	((j_rt==0) | (j_rt==1) | (j_rt==16)| (j_rt==17))) |
 			(j_op==0x02) | (j_op==0x03) | (j_op==0x04) |
 			(j_op==0x05) | (j_op==0x06) | (j_op==0x07)
 			){
 			fetch_delay_slot();
 		}
 
+		ex_delay_slot := id_delay_slot;
+
+	//	id_cop = opcode<30>; // CP0,CP2
 	}
 
 	instruct rt_data_set par{
@@ -373,36 +373,51 @@ dbg32 = gte.dbg32;
 		mem_rd := 0;
 	}
 
+	instruct read_gte par{
+		generate read_wait.do(READ_GTE);
+	}
+
+	gte.op = gte_op;
+
 	instruct stage_EX par{
+
+		op = 0b00 || ex_opcode<31:26>;
+		rs = ex_opcode<25:21>;
+		rt = ex_opcode<20:16>;
+		immediate = ex_opcode<15:0>;
+
+		// jmp_op := <31:26>
+		target = ex_opcode<25:0>;
+
+		rd = ex_opcode<15:11>;
+		shift = ex_opcode<10:6>;
+		funct = 0b00 || ex_opcode<5:0>;
+
 //ir_sync(); // output
 
 		alt{
 			rs==0 : rs_data = 0x00000000;
-			(mem_op==0x00) & (rs==mem_rd) : par{
+			((mem_op==0x00) | (mem_op==0x01)) & (rs==mem_rd) : par{
 				rs_data = rd_data_reg;
-			//	forwarding = 1;
 			}
-			rs==mem_rt : par{
+			(mem_op!=0x00) & (mem_op!=0x01) & (rs==mem_rt) : par{
 				rs_data = rt_data_reg;
-			//	forwarding = 2;
 			}
 			else : rs_data = gpr[rs];
 		}
 
 		alt{
 			rt==0 : rt_data = 0x00000000;
-			(mem_op==0x00) & (rt==mem_rd) : par{
+			((mem_op==0x00) | (mem_op==0x01)) & (rt==mem_rd) : par{
 				rt_data = rd_data_reg;
-			//	forwarding = 4;
 			}
-			rt==mem_rt : par{
+			(mem_op!=0x00) & (mem_op!=0x01) & (rt==mem_rt) : par{
 				rt_data = rt_data_reg;
-			//	forwarding = 8;
 			}
 			else : rt_data = gpr[rt];
 		}
 
-		cpr0_rd_data = cpr0[rd];
+		gte_op := ex_opcode;
 
 		sel adrs<32>;
 
@@ -410,15 +425,15 @@ dbg32 = gte.dbg32;
 			op==0x00 : any{ // SPECIAL
 				funct==0x00 : par{ // SLL
 					// gpr[opcode.reg.rd] = gpr[opcode.reg.rt] << opcode.reg.sa;
-					rd_data_set(rt_data << reg_sa);
+					rd_data_set(rt_data << shift);
 				}
 				funct==0x02 : par{ // SRL
 					// gpr[opcode.reg.rd] = gpr[opcode.reg.rt] >> opcode.reg.sa;
-					rd_data_set(rt_data >> reg_sa);
+					rd_data_set(rt_data >> shift);
 				}
 				funct==0x03 : par{ // SRA
-					// gpr[opcode.reg.rd] = (int)gpr[opcode.reg.rt] >> opcode.reg.sa;
-					rd_data_set(sra.con(rt_data, reg_sa).dout);
+					// gpr[opcode.reg.rd] = (s32)gpr[opcode.reg.rt] >> opcode.reg.sa;
+					rd_data_set(sra.con(rt_data, shift).dout);
 				}
 				funct==0x04 : par{ // SLLV
 					// gpr[opcode.reg.rd] = gpr[opcode.reg.rt] << (gpr[opcode.reg.rs] & 0x1F);
@@ -429,24 +444,27 @@ dbg32 = gte.dbg32;
 					rd_data_set(rt_data >> rs_data<4:0>);
 				}
 				funct==0x07 : par{ // SRAV
-					// gpr[opcode.reg.rd] = (int)gpr[opcode.reg.rt] >> (gpr[opcode.reg.rs] & 0x1F);
+					// gpr[opcode.reg.rd] = (s32)gpr[opcode.reg.rt] >> (gpr[opcode.reg.rs] & 0x1F);
 					rd_data_set(sra.con(rt_data, rs_data<4:0>).dout);
 				}
 				funct==0x08 : par{ // JR
 					// delay_pc = gpr[opcode.reg.rs];
-					jump(rs_data);
+					jump(rs_data & 0xFFFFFFFC);
 					reset_rtrd();
 				}
 				funct==0x09 : par{ // JALR
 					// gpr[opcode.reg.rd] = pc + 8;
-					rd_data_set(pc);
+					rd_data_set(pc); // íxâÑÉXÉçÉbÉgÇÃéüÇÃÉAÉhÉåÉX
 					// delay_pc = gpr[opcode.reg.rs];
-					jump(rs_data);
+					jump(rs_data & 0xFFFFFFFC);
 				}
 				funct==0x0C : par{ // SYSCALL
 					// Exception(0x20);//EXC_SYS);
-					if(irq_run==3) exception(0x00000400); // IRQ
+					if(st_irq_run==3) exception(0x00000400); // IRQ
 					else exception(0x00000020);
+					reset_rtrd();
+				}
+				funct==0x0D : par{ // BREAK
 					reset_rtrd();
 				}
 				funct==0x10 : par{ // MFHI
@@ -468,23 +486,23 @@ dbg32 = gte.dbg32;
 					reset_rtrd();
 				}
 				funct==0x18 : par{ // MULT
-					// m = (signed __int64)(signed long)gpr[opcode.reg.rs] * (signed __int64)(signed long)gpr[opcode.reg.rt];
-					// lo = m & 0x0FFFFFFFF;
+					// m = (s64)(s32)gpr[opcode.reg.rs] * (s64)(s32)gpr[opcode.reg.rt];
+					// lo = (u32)m;
 					// hi = m >> 32;
 					generate mul_wait.do(1, rs_data, rt_data);
 					reset_rtrd();
 				}
 				funct==0x19 : par{ // MULTU
-					// m = (unsigned __int64)gpr[opcode.reg.rs] * (unsigned __int64)gpr[opcode.reg.rt];
-					// lo = m & 0x0FFFFFFFF;
+					// m = (u64)gpr[opcode.reg.rs] * (u64)gpr[opcode.reg.rt];
+					// lo = (u32)m;
 					// hi = m >> 32;
 					generate mul_wait.do(2, rs_data, rt_data);
 					reset_rtrd();
 				}
 				funct==0x1A : par{ // DIV
 					// if(gpr[opcode.reg.rt]!=0){
-					// 	lo = (int)gpr[opcode.reg.rs] / (int)gpr[opcode.reg.rt];
-					// 	hi = (int)gpr[opcode.reg.rs] % (int)gpr[opcode.reg.rt];
+					// 	lo = (s32)gpr[opcode.reg.rs] / (s32)gpr[opcode.reg.rt];
+					// 	hi = (s32)gpr[opcode.reg.rs] % (s32)gpr[opcode.reg.rt];
 					// }
 					sel div_n<32>, div_d<32>;
 					if(rs_data<31>) div_n = -rs_data;
@@ -539,151 +557,178 @@ dbg32 = gte.dbg32;
 					rd_data_set(^(rs_data | rt_data));
 				}
 				funct==0x2A : par{ // SLT
-					// gpr[opcode.reg.rd] = (int)gpr[opcode.reg.rs] < (int)gpr[opcode.reg.rt];
+					// gpr[opcode.reg.rd] = (s32)gpr[opcode.reg.rs] < (s32)gpr[opcode.reg.rt];
 					sa = ((33#rs_data) - (33#rt_data))<32>;
-					rd_data_set(0x0000000||0b000||sa);
+					rd_data_set(31#0b0||sa);
 				}
 				funct==0x2B : par{ // SLTU
-					// gpr[opcode.reg.rd] = gpr[opcode.reg.rs] < gpr[opcode.reg.rt];
+					// gpr[opcode.reg.rd] = (u32)gpr[opcode.reg.rs] < (u32)gpr[opcode.reg.rt];
 					sa = ((0b0 || rs_data) - (0b0 || rt_data))<32>;
-					rd_data_set(0x0000000||0b000||sa);
+					rd_data_set(31#0b0||sa);
 				}
 				else : par{
 dbg_reg := funct; halt(0x02);
 				}
 			}
-			op==0x01 : any{
+			op==0x01 : any{ // BCOND
 				rt==0 : par{ // BLTZ
-					// if((int)gpr[opcode.imm.rs] < 0){
-					//	delay_pc = pc + (((int)(signed short)opcode.imm.immediate) << 2) + 4;
+					// if((s32)gpr[opcode.imm.rs] < 0){
+					//	delay_pc = pc + (((s32)(s16)opcode.imm.immediate) << 2) + 4;
 					// }
-					data = 0x0000000||0b000||rs_data<31>;
+					data = 31#0b0||rs_data<31>;
 					if(rs_data<31>){
-						jump(pc + ((32#imm_immediate)<29:0>||0b00) - 4);
+						jump(pc + ((32#immediate)<29:0>||0b00) - 4);
 					}
 					reset_rtrd();
 				}
 				rt==1 : par{ // BGEZ
-					// if((int)gpr[opcode.imm.rs] >= 0){
-					// 	delay_pc = pc + (((int)(signed short)opcode.imm.immediate) << 2) + 4;
+					// if((s32)gpr[opcode.imm.rs] >= 0){
+					// 	delay_pc = pc + (((s32)(s16)opcode.imm.immediate) << 2) + 4;
 					// }
-					data = 0x0000000||0b000||((^rs_data<31>) | (rs_data==0));
+					data = 31#0b0||(rs_data<31>==0b0);
 					if(rs_data<31>==0b0){
-						jump(pc + ((32#imm_immediate)<29:0>||0b00) - 4);
+						jump(pc + ((32#immediate)<29:0>||0b00) - 4);
 					}
 					reset_rtrd();
 				}
-				else : halt(0x03);
+				rt==16 : par{ // BLTZAL
+					// if((s32)gpr[opcode.imm.rs] < 0){
+					//	delay_pc = pc + (((s32)(s16)opcode.imm.immediate) << 2) + 4;
+					// }
+					rd_data_reg := pc;
+					mem_rd := 31; mem_rt := 0;
+					data = 31#0b0||rs_data<31>;
+					if(rs_data<31>){
+						jump(pc + ((32#immediate)<29:0>||0b00) - 4);
+					}
+				}
+				rt==17 : par{ // BGEZAL
+					// if((s32)gpr[opcode.imm.rs] >= 0){
+					// 	delay_pc = pc + (((s32)(s16)opcode.imm.immediate) << 2) + 4;
+					// }
+					rd_data_reg := pc;
+					mem_rd := 31; mem_rt := 0;
+					data = 31#0b0||(rs_data<31>==0b0);
+					if(rs_data<31>==0b0){
+						jump(pc + ((32#immediate)<29:0>||0b00) - 4);
+					}
+				}
+				else : par{
+					reset_rtrd();
+				}
 			}
 			op==0x02 : par{ // J
 				// delay_pc = (pc & 0xF0000000) | ((opcode.jump.target<<2)&0x0FFFFFFF);
-				jump(pc<31:28>||jmp_target||0b00);
+				jump(pc<31:28>||target||0b00);
 				reset_rtrd();
 			}
 			op==0x03 : par{ // JAL
 				// gpr[31] = pc + 8;
-				rt_data_reg := pc; // IFÇ≈+4,IDÇ≈+4ÇµÇƒÇ¢ÇÈÇÃÇ≈çáÇÌÇπÇƒ+8
+				rt_data_reg := pc; // íxâÑÉXÉçÉbÉgÇÃéüÇÃÉAÉhÉåÉX
 				mem_rt := 31; mem_rd := 0;
 				// delay_pc = (pc & 0xF0000000) | ((opcode.jump.target<<2)&0x0FFFFFFF);
-				jump(pc<31:28>||jmp_target||0b00);
+				jump(pc<31:28>||target||0b00);
 			}
 			op==0x04 : par{ // BEQ
 				// if(gpr[opcode.imm.rs] == gpr[opcode.imm.rt]){
-				// 	delay_pc = pc + (((int)(signed short)opcode.imm.immediate) << 2) + 4;
+				// 	delay_pc = pc + (((s32)(s16)opcode.imm.immediate) << 2) + 4;
 				// }
 				if(rs_data==rt_data){
-					jump(pc + ((32#imm_immediate)<29:0>||0b00) - 4);
+					jump(pc + ((32#immediate)<29:0>||0b00) - 4);
 				}
 				reset_rtrd();
 			}
 			op==0x05 : par{ // BNE
 				// if(gpr[opcode.imm.rs] != gpr[opcode.imm.rt]){
-				// 	delay_pc = pc + (((int)(signed short)opcode.imm.immediate) << 2) + 4;
+				// 	delay_pc = pc + (((s32)(s16)opcode.imm.immediate) << 2) + 4;
 				// }
 				if(rs_data!=rt_data){
-					jump(pc + ((32#imm_immediate)<29:0>||0b00) - 4);
+					jump(pc + ((32#immediate)<29:0>||0b00) - 4);
 				}
 				reset_rtrd();
 			}
 			op==0x06 : par{ // BLEZ
-				// if(((int)gpr[opcode.imm.rs]) <= 0){
-				//	delay_pc = pc + (((int)(signed short)opcode.imm.immediate) << 2) + 4;
+				// if(((s32)gpr[opcode.imm.rs]) <= 0){
+				//	delay_pc = pc + (((s32)(s16)opcode.imm.immediate) << 2) + 4;
 				// }
 				data = 0x0000000||0b000||(rs_data<31> | (rs_data==0));
 			//	data = ^(0 - (33#rs_data))<32>;
 				if(rs_data<31> | (rs_data==0)){
-					jump(pc + ((32#imm_immediate)<29:0>||0b00) - 4);
+					jump(pc + ((32#immediate)<29:0>||0b00) - 4);
 				}
 				reset_rtrd();
 			}
 			op==0x07 : par{ // BGTZ
-				// if(((int)gpr[opcode.imm.rs]) > 0){
-				// 	delay_pc = pc + (((int)(signed short)opcode.imm.immediate) << 2) + 4;
+				// if(((s32)gpr[opcode.imm.rs]) > 0){
+				// 	delay_pc = pc + (((s32)(s16)opcode.imm.immediate) << 2) + 4;
 				// }
-				data = 0x0000000||0b000||((rs_data<31>==0) & (rs_data!=0));
+				data = 31#0b0||((rs_data<31>==0) & (rs_data!=0));
 				if((rs_data<31>==0b0) & (rs_data!=0)){
-					jump(pc + ((32#imm_immediate)<29:0>||0b00) - 4);
+					jump(pc + ((32#immediate)<29:0>||0b00) - 4);
 				}
 				reset_rtrd();
 			}
 			op==0x08 : par{ // ADDI
-				// gpr[opcode.imm.rt] = (int)(signed short)opcode.imm.immediate + gpr[opcode.imm.rs];
-				rt_data_set((32#imm_immediate) + rs_data);
+				// gpr[opcode.imm.rt] = (s32)(s16)opcode.imm.immediate + gpr[opcode.imm.rs];
+				rt_data_set((32#immediate) + rs_data);
 			}
 			op==0x09 : par{ // ADDIU
-				// gpr[opcode.imm.rt] = (int)(signed short)opcode.imm.immediate + gpr[opcode.imm.rs];
-				rt_data_set((32#imm_immediate) + rs_data);
+				// gpr[opcode.imm.rt] = (s32)(s16)opcode.imm.immediate + gpr[opcode.imm.rs];
+				rt_data_set((32#immediate) + rs_data);
 			}
 			op==0x0A : par{ // SLTI
-				// gpr[opcode.imm.rt] = (int)gpr[opcode.imm.rs] < (int)(signed short)opcode.imm.immediate;
-				sa = ((33#rs_data) - (33#imm_immediate))<32>;
-				rt_data_set(0x0000000||0b000||sa);
+				// gpr[opcode.imm.rt] = (s32)gpr[opcode.imm.rs] < (s32)(s16)opcode.imm.immediate;
+				sa = ((33#rs_data) - (33#immediate))<32>;
+				rt_data_set(31#0b0||sa);
 			}
 			op==0x0B : par{ // SLTIU
-				// gpr[opcode.imm.rt] = gpr[opcode.imm.rs] < (uint32)opcode.imm.immediate;
-				sa = ((0b0 || rs_data) - (0b0 || 0x0000 || imm_immediate))<32>;
-				rt_data_set(0x0000000||0b000||sa);
+				// gpr[opcode.imm.rt] = (u32)gpr[opcode.imm.rs] < (u32)(u16)opcode.imm.immediate;
+			//	sa = ((0b0||rs_data) - (17#0b0||immediate))<32>; // NG
+			//	sa = ((33#rs_data)   - (17#0b0||immediate))<32>; // NG
+				// gpr[opcode.imm.rt] = (u32)gpr[opcode.imm.rs] < (u32)(s16)opcode.imm.immediate;
+			//	sa = ((33#rs_data)   - (33#immediate))<32>; // NG
+			//	sa = ((33#rs_data)   - (0b0||32#immediate))<32>; // NG
+			//	sa = ((0b0||rs_data) - (33#immediate))<32>; // NG
+				sa = ((0b0||rs_data) - (0b0||32#immediate))<32>; // OK
+				rt_data_set(31#0b0||sa);
 			}
 			op==0x0C : par{ // ANDI
-				// gpr[opcode.imm.rt] = (uint32)opcode.imm.immediate & gpr[opcode.imm.rs];
-				rt_data_set((0x0000||imm_immediate) & rs_data);
+				// gpr[opcode.imm.rt] = (u32)(u16)opcode.imm.immediate & gpr[opcode.imm.rs];
+				rt_data_set((0x0000||immediate) & rs_data);
 			}
 			op==0x0D : par{ // ORI
-				// gpr[opcode.imm.rt] = (uint32)opcode.imm.immediate | gpr[opcode.imm.rs];
-				rt_data_set((0x0000||imm_immediate) | rs_data);
+				// gpr[opcode.imm.rt] = (u32)(u16)opcode.imm.immediate | gpr[opcode.imm.rs];
+				rt_data_set((0x0000||immediate) | rs_data);
 			}
 			op==0x0E : par{ // XORI
-				// gpr[opcode.imm.rt] = (uint32)opcode.imm.immediate ^ gpr[opcode.imm.rs];
-				rt_data_set((0x0000||imm_immediate) @ rs_data);
+				// gpr[opcode.imm.rt] = (u32)(u16)opcode.imm.immediate ^ gpr[opcode.imm.rs];
+				rt_data_set((0x0000||immediate) @ rs_data);
 			}
 			op==0x0F : par{ // LUI
-				// gpr[opcode.imm.rt] = (int)opcode.imm.immediate << 16;
-				rt_data_set(imm_immediate || 0x0000);
+				// gpr[opcode.imm.rt] = (u32)(u16)opcode.imm.immediate << 16;
+				rt_data_set(immediate || 0x0000);
 			}
 
 			op==0x10 : any{ // COP0
 				rs==0 : par{ // MFC0
 					// gpr[opcode.reg.rt] = cpr0[opcode.reg.rd];
-					rt_data_set(cpr0_rd_data);
+					rt_data_set(cpr0[rd]);
 					cop_rs := rs;
 				}
 				rs==4 : par{ // 0x04 // MTC0
 					any{
-						rd==12 : par{
-							// cpr0[opcode.reg.rd] = gpr[opcode.reg.rt];
-							cpr0_rd_data_reg := rt_data;
-						}
 						rd==13: par{
 							// cpr0[opcode.reg.rd] = gpr[opcode.reg.rt] & 0xFFFF03FF;
-							cpr0_rd_data_reg := rt_data & 0xFFFF03FF;
+							cpr0[13] := rt_data & 0xFFFF03FF;
+							// cpr0[opcode.reg.rd] = (cpr0[opcode.reg.rd] & 0x3) | ((gpr[opcode.reg.rt] & 0x300) >> 8);
+						//	cpr0[13] := 0x0000000 || 0b00 || (cpr0_rd_data<1:0> | rt_data<9:8>);
 						}
-						(rd==6) | (rd==8) | (rd==14) | (rd==15) : ; // none
 						else : par{
 							// cpr0[opcode.reg.rd] = gpr[opcode.reg.rt];
-							cpr0_rd_data_reg := rt_data;
+							cpr0[rd] := rt_data;
 						}
 					}
-					cop_rs := rs; cop_rd := rd;
+					cop_rs := rs;
 					reset_rtrd();
 				}
 				rs==16 : par{
@@ -691,6 +736,8 @@ dbg_reg := funct; halt(0x02);
 						funct==0x10 : par{ // RFE
 							// cpr0[12] = (cpr0[12] & 0xFFFFFFF0) | ((cpr0[12] & 0x3C) >> 2);
 							cpr0[12] := cpr0[12]<31:4> || cpr0[12]<5:2>;
+							in_irq := 0b0;
+							in_syscall := 0b0;
 						}
 					}
 					cop_rs := rs;
@@ -698,7 +745,10 @@ dbg_reg := funct; halt(0x02);
 				}
 			}
 
-			op==0x12 : any{ // COP2
+			op==0x12 : alt{ // COP2
+				cpr0[12]<30>==0b0 : par{ // COP2 disable
+					reset_rtrd();
+				}
 				funct==0x00 : par{ // BASIC
 					any{
 						rs==0 : par{ // MFC2 read D
@@ -727,141 +777,147 @@ dbg_reg := 0b000||rs; halt(0x05);
 					}
 					cop_rs := rs;
 				}
-				funct==0x06 : par{ // NCLIP
-					gte.NCLIP();
-					reset_rtrd();
-				}
-				funct==0x13 : par{ // NCDS
-					gte.NCDS();
-					reset_rtrd();
-				}
-				funct==0x2D : par{ // AVSZ3
-					gte.AVSZ3();
-					reset_rtrd();
-				}
-				funct==0x30 : par{ // RTPT
-					gte.RTPT();
-					reset_rtrd();
-				}
 				else : par{
+					any{
+						funct==0x01 : gte.RTPS();
+						funct==0x06 : gte.NCLIP();
+						funct==0x0C : gte.OP();
+						funct==0x10 : gte.DPCS();
+						funct==0x12 : gte.MVMVA();
+						funct==0x13 : gte.NCDS();
+						funct==0x16 : gte.NCDT();
+						funct==0x1B : gte.NCCS();
+						funct==0x1E : gte.NCS();
+						funct==0x20 : gte.NCT();
+						funct==0x28 : gte.SQR();
+						funct==0x2D : gte.AVSZ3();
+						funct==0x2E : gte.AVSZ4();
+						funct==0x30 : gte.RTPT();
+						funct==0x3D : gte.GPF();
+						funct==0x3E : gte.GPL();
+						funct==0x3F : gte.NCCT();
+						else : par{
 dbg_reg := funct; halt(0x04);
+						}
+					}
+					reset_rtrd();
 				}
 			}
 
 			op==0x20 : par{ // LB
-				// adrs = gpr[opcode.imm.rs] + (int)(signed short)opcode.imm.immediate;
-				// gpr[opcode.imm.rt] = (int)(signed char)mem.read(adrs, LOAD_BYTE);
-				adrs = rs_data + (32#imm_immediate);
+				// adrs = gpr[opcode.imm.rs] + (s32)(s16)opcode.imm.immediate;
+				// gpr[opcode.imm.rt] = (s32)(s8)mem.read(adrs, LOAD_BYTE);
+				adrs = rs_data + (32#immediate);
 				read(READ_RT, adrs, 1);
 				read_rt();
 				mem_rt := rt; mem_rd := 0;
 			}
 			op==0x21 : par{ // LH
-				// adrs = gpr[opcode.imm.rs] + (int)(signed short)opcode.imm.immediate;
-				// gpr[opcode.imm.rt] = (int)(signed short)mem.read(adrs, LOAD_HALF);
-				adrs = rs_data + (32#imm_immediate);
+				// adrs = gpr[opcode.imm.rs] + (s32)(s16)opcode.imm.immediate;
+				// gpr[opcode.imm.rt] = (s32)(s16)mem.read(adrs, LOAD_HALF);
+				adrs = rs_data + (32#immediate);
 				read(READ_RT, adrs, 2);
 				read_rt();
 				mem_rt := rt; mem_rd := 0;
 			}
 			op==0x22 : par{ // LWL
-				// adrs = gpr[opcode.imm.rs] + (int)(signed short)opcode.imm.immediate;
+				// adrs = gpr[opcode.imm.rs] + (s32)(s16)opcode.imm.immediate;
 				// val = mem.read(adrs & 0xFFFFFFFC);
-				adrs = rs_data + (32#imm_immediate);
+				adrs = rs_data + (32#immediate);
 				read(READ_RT, adrs<31:2>||0b00, 4);
 				read_rt();
-			//	rt_data_set(rt_data);
-				mem_rt := rt; mem_rd := 0;
-				rt_data_reg := rt_data;
+				rt_data_set(rt_data);
+			//	mem_rt := rt; mem_rd := 0;
+			//	rt_data_reg := rt_data;
 				mem_A := adrs;
 				// gpr[opcode.imm.rt] = reg;
 			}
 			op==0x23 : par{ // LW
-				// adrs = gpr[opcode.imm.rs] + (int)(signed short)opcode.imm.immediate;
+				// adrs = gpr[opcode.imm.rs] + (s32)(s16)opcode.imm.immediate;
 				// gpr[opcode.imm.rt] = mem.read(adrs);
-				adrs = rs_data + (32#imm_immediate);
+				adrs = rs_data + (32#immediate);
 				read(READ_RT, adrs, 4);
 				read_rt();
 				mem_rt := rt; mem_rd := 0;
 			}
 			op==0x24 : par{ // LBU
-				// adrs = gpr[opcode.imm.rs] + (int)(signed short)opcode.imm.immediate;
+				// adrs = gpr[opcode.imm.rs] + (s32)(s16)opcode.imm.immediate;
 				// gpr[opcode.imm.rt] = mem.read(adrs, LOAD_BYTE);
-				adrs = rs_data + (32#imm_immediate);
+				adrs = rs_data + (32#immediate);
 				read(READ_RT, adrs, 1);
 				read_rt();
 				mem_rt := rt; mem_rd := 0;
 			}
 			op==0x25 : par{ // LHU
-				// adrs = gpr[opcode.imm.rs] + (int)(signed short)opcode.imm.immediate;
+				// adrs = gpr[opcode.imm.rs] + (s32)(s16)opcode.imm.immediate;
 				// gpr[opcode.imm.rt] = mem.read(adrs, LOAD_HALF);
-				adrs = rs_data + (32#imm_immediate);
+				adrs = rs_data + (32#immediate);
 				read(READ_RT, adrs, 2);
 				read_rt();
 				mem_rt := rt; mem_rd := 0;
 			}
 			op==0x26 : par{ // LWR
-				// adrs = gpr[opcode.imm.rs] + (int)(signed short)opcode.imm.immediate;
+				// adrs = gpr[opcode.imm.rs] + (s32)(s16)opcode.imm.immediate;
 				// val = mem.read(adrs & 0xFFFFFFFC);
-				adrs = rs_data + (32#imm_immediate);
+				adrs = rs_data + (32#immediate);
 				read(READ_RT, adrs<31:2>||0b00, 4);
 				read_rt();
-			//	rt_data_set(rt_data);
-				mem_rt := rt; mem_rd := 0;
-				rt_data_reg := rt_data;
+				rt_data_set(rt_data);
+			//	mem_rt := rt; mem_rd := 0;
+			//	rt_data_reg := rt_data;
 				mem_A := adrs;
 				// gpr[opcode.imm.rt] = reg;
 			}
 			op==0x28 : par{ // SB
-				// adrs = gpr[opcode.imm.rs] + (int)(signed short)opcode.imm.immediate;
-				// mem.write(adrs, (uint8)gpr[opcode.imm.rt], STORE_BYTE);
-				adrs = rs_data + (32#imm_immediate);
+				// adrs = gpr[opcode.imm.rs] + (s32)(s16)opcode.imm.immediate;
+				// mem.write(adrs, (u8)gpr[opcode.imm.rt], STORE_BYTE);
+				adrs = rs_data + (32#immediate);
 				write(adrs, 0x000000||rt_data<7:0>, 1);
 				write_rt();
 				reset_rtrd();
 			}
 			op==0x29 : par{ // SH
-				// adrs = gpr[opcode.imm.rs] + (int)(signed short)opcode.imm.immediate;
-				// mem.write(adrs, (uint16)gpr[opcode.imm.rt], STORE_HALF);
-				adrs = rs_data + (32#imm_immediate);
+				// adrs = gpr[opcode.imm.rs] + (s32)(s16)opcode.imm.immediate;
+				// mem.write(adrs, (u16)gpr[opcode.imm.rt], STORE_HALF);
+				adrs = rs_data + (32#immediate);
 				write(adrs, 0x0000||rt_data<15:0>, 2);
 				write_rt();
 				reset_rtrd();
 			}
 			op==0x2A : par{ // SWL
-				// adrs = gpr[opcode.imm.rs] + (int)(signed short)opcode.imm.immediate;
-				// uint32 reg = gpr[opcode.imm.rt];
-				// uint32 val = mem.read(adrs & 0xFFFFFFFC);
-				adrs = rs_data + (32#imm_immediate);
+				// adrs = gpr[opcode.imm.rs] + (s32)(s16)opcode.imm.immediate;
+				// u32 reg = gpr[opcode.imm.rt];
+				// u32 val = mem.read(adrs & 0xFFFFFFFC);
+				adrs = rs_data + (32#immediate);
 				read(READ_RT, adrs<31:2>||0b00, 4);
 				read_rt();
-				mem_rt := 0; mem_rd := 0;
+				reset_rtrd();
 				rt_data_reg := rt_data;
 				mem_A := adrs;
 				// mem.write(adrs & 0xFFFFFFFC, val);
 			}
 			op==0x2B : par{ // SW
-				// adrs = gpr[opcode.imm.rs] + (int)(signed short)opcode.imm.immediate;
+				// adrs = gpr[opcode.imm.rs] + (s32)(s16)opcode.imm.immediate;
 				// mem.write(adrs, gpr[opcode.imm.rt]);
-				adrs = rs_data + (32#imm_immediate);
+				adrs = rs_data + (32#immediate);
 				write(adrs, rt_data, 4);
 				write_rt();
 				reset_rtrd();
 			}
 			op==0x2E : par{ // SWR
-				// adrs = gpr[opcode.imm.rs] + (int)(signed short)opcode.imm.immediate;
-				// uint32 reg = gpr[opcode.imm.rt];
-				// uint32 val = mem.read(adrs & 0xFFFFFFFC);
-				adrs = rs_data + (32#imm_immediate);
+				// adrs = gpr[opcode.imm.rs] + (s32)(s16)opcode.imm.immediate;
+				// u32 reg = gpr[opcode.imm.rt];
+				// u32 val = mem.read(adrs & 0xFFFFFFFC);
+				adrs = rs_data + (32#immediate);
 				read(READ_RT, adrs<31:2>||0b00, 4);
 				read_rt();
-				mem_rt := 0; mem_rd := 0;
+				reset_rtrd();
 				rt_data_reg := rt_data;
 				mem_A := adrs;
 				// mem.write(adrs & 0xFFFFFFFC, val);
 			}
 			op==0x32 : par{ // LWC2 mem -> d[rt]
-				adrs = rs_data + (32#imm_immediate);
+				adrs = rs_data + (32#immediate);
 				read(READ_RT, adrs, 4);
 				read_rt();
 				gte_rt := rt;
@@ -869,14 +925,14 @@ dbg_reg := funct; halt(0x04);
 			}
 			op==0x3A : par{ // SWC2 d[rt] -> mem
 				// mem.write(adrs, gte.MFC2(opcode.imm.rt));
-				adrs = rs_data + (32#imm_immediate);
+				adrs = rs_data + (32#immediate);
 				gte.MFC2(rt);
 				read_gte();
 				read_rt();
 				mem_A := adrs;
-				mem_rt := rt; mem_rd := 0;
-			//	write(adrs, gte.MFC2(rt).dout, 4);
-			//	write_rt();
+				reset_rtrd();
+				// write(adrs, gte.MFC2(rt).dout, 4);
+				// write_rt();
 			}
 			else : par{
 dbg_reg := op;
@@ -886,6 +942,7 @@ dbg_reg := op;
 
 		mem_op := op;
 		mem_funct := funct;
+		mem_bcond_rt := rt;
 
 		mem_pc := ex_pc; // test
 		mem_adrs := A; // test
@@ -898,18 +955,26 @@ dbg_reg := op;
 				(mem_funct==0x04) | (mem_funct==0x06) | (mem_funct==0x07) |
 				(mem_funct==0x09) |
 				(mem_funct==0x10) | (mem_funct==0x12) |
-				(mem_funct==0x20) | (mem_funct==0x21) | (mem_funct==0x23) |
-				(mem_funct==0x24) | (mem_funct==0x25) | (mem_funct==0x26) |
-				(mem_funct==0x27) | (mem_funct==0x2A) | (mem_funct==0x2B) : par{
+				(mem_funct==0x20) | (mem_funct==0x21) | (mem_funct==0x22) |
+				(mem_funct==0x23) | (mem_funct==0x24) | (mem_funct==0x25) |
+				(mem_funct==0x26) | (mem_funct==0x27) | (mem_funct==0x2A) |
+				(mem_funct==0x2B) : par{
 					gpr[mem_rd] := rd_data_reg;
 				}
 			}
-			mem_op==0x10 : any{
+			mem_op==0x01 : any{ // BCOND
+				(mem_bcond_rt==16) | (mem_bcond_rt==17) : par{
+					gpr[mem_rd] := rd_data_reg; // gpr[31]
+				}
+			}
+			(mem_op==0x03) |
+			(mem_op==0x08) | (mem_op==0x09) | (mem_op==0x0A) | (mem_op==0x0B) |
+			(mem_op==0x0C) | (mem_op==0x0D) | (mem_op==0x0E) | (mem_op==0x0F) : par{
+				gpr[mem_rt] := rt_data_reg;
+			}
+			mem_op==0x10 : any{ // COP0
 				cop_rs==0 : par{
 					gpr[mem_rt] := rt_data_reg;
-				}
-				cop_rs==4 : par{
-					cpr0[cop_rd] := cpr0_rd_data_reg;
 				}
 			}
 			mem_op==0x12 : any{ // GTE
@@ -919,9 +984,6 @@ dbg_reg := op;
 					}
 				}
 			}
-			(mem_op==0x03) |
-			(mem_op==0x08) | (mem_op==0x09) | (mem_op==0x0A) | (mem_op==0x0B) |
-			(mem_op==0x0C) | (mem_op==0x0D) | (mem_op==0x0E) | (mem_op==0x0F) |
 			(mem_op==0x20) | (mem_op==0x21) | (mem_op==0x22) | (mem_op==0x23) |
 			(mem_op==0x24) | (mem_op==0x25) | (mem_op==0x26) : par{
 				gpr[mem_rt] := rt_data_reg;
@@ -955,10 +1017,10 @@ dbg_reg := op;
 					A_reg<1>==0b1 : din_half = Din<31:16>;
 				}
 				Word_reg==1 : any{
-					A_reg<1:0>==0b00 : din_byte = Din<7:0>;
-					A_reg<1:0>==0b01 : din_byte = Din<15:8>;
-					A_reg<1:0>==0b10 : din_byte = Din<23:16>;
-					A_reg<1:0>==0b11 : din_byte = Din<31:24>;
+					A_reg<1:0>==0 : din_byte = Din<7:0>;
+					A_reg<1:0>==1 : din_byte = Din<15:8>;
+					A_reg<1:0>==2 : din_byte = Din<23:16>;
+					A_reg<1:0>==3 : din_byte = Din<31:24>;
 				}
 			}
 			any{
@@ -967,25 +1029,25 @@ dbg_reg := op;
 				}
 				rid_reg==READ_RT : any{
 					Word_reg==4 : any{
-						mem_op==0x22 : any{
+						mem_op==0x22 : any{ // LWL
 							mem_A<1:0>==0 : rt_data_reg := Din< 7:0> || rt_data_reg<23:0>;
 							mem_A<1:0>==1 : rt_data_reg := Din<15:0> || rt_data_reg<15:0>;
 							mem_A<1:0>==2 : rt_data_reg := Din<23:0> || rt_data_reg< 7:0>;
 							mem_A<1:0>==3 : rt_data_reg := Din;
 						}
-						mem_op==0x26 : any{
+						mem_op==0x26 : any{ // LWR
 							mem_A<1:0>==0 : rt_data_reg := Din;
 							mem_A<1:0>==1 : rt_data_reg := rt_data_reg<31:24> || Din<31: 8>;
 							mem_A<1:0>==2 : rt_data_reg := rt_data_reg<31:16> || Din<31:16>;
 							mem_A<1:0>==3 : rt_data_reg := rt_data_reg<31: 8> || Din<31:24>;
 						}
-						mem_op==0x2A : any{
+						mem_op==0x2A : any{ // SWL
 							mem_A<1:0>==0 : rt_data_reg := Din<31: 8> || rt_data_reg<31:24>;
 							mem_A<1:0>==1 : rt_data_reg := Din<31:16> || rt_data_reg<31:16>;
 							mem_A<1:0>==2 : rt_data_reg := Din<31:24> || rt_data_reg<31: 8>;
 							mem_A<1:0>==3 : ;
 						}
-						mem_op==0x2E : any{
+						mem_op==0x2E : any{ // SWR
 							mem_A<1:0>==0 : ;
 							mem_A<1:0>==1 : rt_data_reg := rt_data_reg<23:0> || Din< 7:0>;
 							mem_A<1:0>==2 : rt_data_reg := rt_data_reg<15:0> || Din<15:0>;
@@ -996,12 +1058,12 @@ dbg_reg := op;
 						}
 					}
 					Word_reg==2 : any{
-						mem_op==0x21 : rt_data_reg := 32#din_half;
-						mem_op==0x25 : rt_data_reg := 0x0000 || din_half;
+						mem_op==0x21 : rt_data_reg := 32#din_half; // LH
+						mem_op==0x25 : rt_data_reg := 0x0000 || din_half; // LHU
 					}
 					Word_reg==1 : any{
-						mem_op==0x20 : rt_data_reg := 32#din_byte;
-						mem_op==0x24 : rt_data_reg := 0x000000 || din_byte;
+						mem_op==0x20 : rt_data_reg := 32#din_byte; // LB
+						mem_op==0x24 : rt_data_reg := 0x000000 || din_byte; // LBU
 					}
 				}
 			}
@@ -1015,16 +1077,16 @@ dbg_reg := op;
 	}
 
 	stage mul_wait {
-		sel as<32>, bs<32>;
-		sel mul_dout<64>;
 		par{
 			any{
 				mulf_reg==1 : par{ // MULT
+					sel as<32>, bs<32>;
 					if(mul_a<31>) as = -mul_a;
 					else as = mul_a;
 					if(mul_b<31>) bs = -mul_b;
 					else bs = mul_b;
 					mul.con(as, bs);
+					sel mul_dout<64>;
 					if(mul_a<31> @ mul_b<31>) mul_dout = -mul.dout;
 					else mul_dout = mul.dout;
 					lo := mul_dout<31:0>;
@@ -1057,4 +1119,5 @@ dbg_reg := op;
 			finish;
 		}
 	}
+
 }

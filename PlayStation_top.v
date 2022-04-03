@@ -1,6 +1,8 @@
 // PlayStation(PSX) on FPGA .feat DE2-115
 // Copyright (c)2017 pgate1
 
+`default_nettype none
+
 module PlayStation_top
 (
 	input wire CLOCK_50, CLOCK2_50, CLOCK3_50, ENETCLK_25,
@@ -73,7 +75,7 @@ module PlayStation_top
 
 wire p_reset, g_reset;
 
-wire clk100mhz;
+wire clk50MHz, clk100MHz;
 
 wire [15:0] sram_Dout;
 wire sram_Dout_En;
@@ -89,7 +91,7 @@ wire [31:0] sdram_Dout;
 wire sdram_Dout_En;
 wire sdram_refresh_doing;
 
-wire g_reset_n, CLK_18_4;
+wire g_reset_n, clk18432;
 wire audio_RD;
 wire [31:0] audio_DATA;
 wire [6:0] audio_VOL;
@@ -100,8 +102,15 @@ wire usb_WR_En;
 
 wire sd_cmd_out, sd_cmd_en;
 
+	psx_pll psx_pll_inst (
+		.inclk0(CLOCK2_50),
+		.c0(clk50MHz), // Main 50MHz
+		.c1(DRAM_CLK), .c2(clk100MHz), // SDRAM 100MHz
+		.c3(clk18432) // Audio 18.432MHz
+	);
+
 	sys_reset RSTU (
-		.RSTn(KEY[0]), .CLK(CLOCK_50), .DOUT(p_reset)
+		.RSTn(KEY[0]), .CLK(clk50MHz), .DOUT(p_reset)
 	);
 
 	global RSTGU (
@@ -109,7 +118,7 @@ wire sd_cmd_out, sd_cmd_en;
 	);
 
 	core CU (
-		.p_reset(g_reset), .m_clock(CLOCK_50),
+		.p_reset(g_reset), .m_clock(clk50MHz),
 		.KEY(KEY), .SW(SW),
 		.LEDR(LEDR), .LEDG(LEDG),
 		.HEX0(HEX0), .HEX1(HEX1), .HEX2(HEX2), .HEX3(HEX3),
@@ -152,13 +161,10 @@ wire sd_cmd_out, sd_cmd_en;
 	assign SRAM_DQ = sram_Dout_En==1'b0 ? sram_Dout : 16'hzzzz;
 
 	assign DRAM_CKE = 1'b1;
-	sdram_pll_100 sdram_pll_inst (
-		.inclk0(CLOCK_50), .c0(DRAM_CLK), .c1(clk100mhz)
-	);
 
 	sdram_ctrl_100 sdram_ctrl_100_inst (
 		.p_reset(g_reset),
-		.m_clock(clk100mhz),
+		.m_clock(clk100MHz),
 		.CSn(DRAM_CS_N),
 		.RASn(DRAM_RAS_N),
 		.CASn(DRAM_CAS_N),
@@ -185,24 +191,19 @@ wire sd_cmd_out, sd_cmd_en;
 	assign FL_WP_N = 1'b1;
 	assign FL_DQ = 8'hzz;
 
-	assign VGA_CLK = ~CLOCK_50;
+	assign VGA_CLK = ~clk50MHz;
 	assign VGA_SYNC_N = 1'b1;
 
 	assign g_reset_n = ~g_reset;
 
 	I2C_AV_Config DACConfU (
-		.iCLK(CLOCK_50), .iRST_N(g_reset_n),
+		.iCLK(clk50MHz), .iRST_N(g_reset_n),
 		.iVOL(audio_VOL), .iSET(audio_SET),
 		.I2C_SCLK(I2C_SCLK), .I2C_SDAT(I2C_SDAT)
 	);
 
-	// make 18.4MHz
-	audio_pll audio_pll_inst (
-		.inclk0(CLOCK_50), .c0(CLK_18_4)
-	);
-
 	AUDIO_ctrl AU (
-		.iRST_N(g_reset_n), .iCLK_18_4(CLK_18_4),
+		.iRST_N(g_reset_n), .iCLK_18_4(clk18432),
 		.iDATA_RD(audio_RD), .iDATA(audio_DATA),
 		.oAUD_BCK(AUD_BCLK), .oAUD_DATA(AUD_DACDAT),
 		.oAUD_LRCK(AUD_DACLRCK), .oAUD_XCK(AUD_XCK)
@@ -223,3 +224,5 @@ wire sd_cmd_out, sd_cmd_en;
 	assign LCD_BLON = 1'b0; // 1‚Å‚àŒõ‚ç‚È‚¢
 
 endmodule
+
+`default_nettype wire
