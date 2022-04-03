@@ -223,7 +223,7 @@ circuit drawTextureRect
 			goto st00_2;
 		}
 		state st00_2 if(/*vram_ack){*/ ^vram_read_wait){
-// PSƒƒS•¶š—ñ•\¦‚Å‚ÍÅãˆÊƒrƒbƒg‚ÍŒ©‚È‚¢
+// PSãƒ­ã‚´æ–‡å­—åˆ—è¡¨ç¤ºã§ã¯æœ€ä¸Šä½ãƒ“ãƒƒãƒˆã¯è¦‹ãªã„
 			if(/*(vram_read_data_reg<15>==0b0) &*/ (vram_read_data_reg<14:0>!=0)){
 				view_on(tx<9:0>, y<8:0>);
 				tr = vram_read_data_reg< 4: 0> || 0b000;
