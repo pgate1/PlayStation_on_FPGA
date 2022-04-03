@@ -3,6 +3,8 @@
 		by pgate1
 */
 
+%i "PAD.h"
+
 circuit PAD_controller
 {
 	input io_din<16>;
@@ -15,6 +17,7 @@ circuit PAD_controller
 	instrin ReadData;
 	instrin ReadStat;
 	instrin ReadCtrl;
+	instrin ReadBaud;
 	output io_dout<16>;
 
 	input key_in<16>;
@@ -22,9 +25,9 @@ circuit PAD_controller
 	reg_ws reset;
 
 	reg_wr CtrlReg<16>, StatReg<16>, BaudReg<16>;
-	reg_wr padst<4>, parp<4>, bufcount<4>, mcdst<3>, rdwr<3>;
-	mem sbuf[16]<8>;
-	reg_wr curByte1<2>, curByte2<2>;
+	reg_wr padst<4>, parp<8>, bufcount<8>, mcdst<3>, rdwr<3>;
+	mem data_buf[256]<8>;
+	reg_wr adrL<8>, adrH<8>;
 
 	output running;
 
@@ -33,21 +36,32 @@ circuit PAD_controller
 	instrout interrupt_off;
 	instrout interrupt_out;
 
+	PAD pad1, pad2;
+
 	instrself halt(halt_sel);
 	sel halt_sel<8>;
 	reg_wr halt_code_reg<8>;
 	output halt_code<8>;
 
-//input dbg_in<16>;
-input intwaitm<4>;
+input dbg_in<16>;
+output dbg<8>;
+reg_wr dbg_reg<8>;
+output dbg16<16>;
+reg_wr dbg16_reg<16>;
 
 	stage_name WriteData_stg { task do(din_reg); }
 	stage_name interrupt_wait { task do(count_rst); }
 
 	if(reset){
-		reset := 0b0;
 		StatReg := 0x0005;
+		par(i=0;i<256;i++){
+			data_buf[i] := 0x00;
+		}
+		reset := 0b0;
 	}
+
+dbg = dbg_reg;
+dbg16 = dbg16_reg;
 
 	instruct halt halt_code_reg := halt_sel;
 	halt_code = halt_code_reg;
@@ -60,11 +74,10 @@ input intwaitm<4>;
 	}
 
 	instruct WriteMode par{
-	//	ModeReg = io_din;
+	//	ModeReg := io_din;
 	}
 
 	instruct WriteCtrl par{
-//if(WriteData_stg.do) halt(0x44);
 		sel ctrl<16>;
 		ctrl = io_din & ^0x0010/*RESET_ERR*/;
 		CtrlReg := ctrl;
@@ -79,16 +92,14 @@ input intwaitm<4>;
 	}
 
 	instruct WriteBaud par{
-//if(io_din==0x0088) halt(0xD1); ok
-		BaudReg := io_din;//<7:0>;
+		BaudReg := io_din;
 	}
 
 	instruct ReadData par{
-//if(WriteData_stg.do) halt(0x44);
 		if(StatReg<1>/*RX_RDY*/){
-			io_dout = 0x00 || sbuf[parp];
+			io_dout = 0x00 || data_buf[parp];
 			if(parp==bufcount){
-				StatReg &= ^0x0002;//RX_RDY; // Receive is not Ready now
+			//	StatReg &= ^0x0002;//RX_RDY; // Receive is not Ready now â∫Ç≈é¿çs
 				if(mcdst==5){
 					mcdst := 0;
 					if(rdwr==2){
@@ -111,21 +122,26 @@ input intwaitm<4>;
 					mcdst := 2;
 				//	StatReg |= 0x0002;//RX_RDY;
 				}
+				else StatReg &= ^0x0002;
 			}
 		}
 		else io_dout = 0x0000;
-//if(^((io_dout==0x0000) | (io_dout==0x00FF) | (io_dout==0x0041) | (io_dout==0x005A))) halt(0x74);
 	}
 
 	instruct ReadStat par{
-//if(WriteData_stg.do) halt(0x44);
 		io_dout = StatReg;
 	}
 
 	instruct ReadCtrl par{
-//if(WriteData_stg.do) halt(0x44);
 		io_dout = CtrlReg;
 	}
+
+	instruct ReadBaud par{
+		io_dout = BaudReg;
+	}
+
+	pad1.key_data = ^key_in;
+	pad2.key_data = 0xFFFF;
 
 	stage WriteData_stg {
 		first_state st1;
@@ -136,13 +152,11 @@ input intwaitm<4>;
 					generate interrupt_wait.do(0b1);
 					if(din_reg<6>){
 						padst := 2; parp := 1;
-						any{
-							(CtrlReg<13>==0b0) & (CtrlReg<1>==0b1) : par{
-								sbuf[1] := 0x41;
-							}
-							(CtrlReg<13>==0b1) & (CtrlReg<1>==0b1) : par{
-								sbuf[1] := 0x41;
-							}
+						if((CtrlReg<13>==0b0) & (CtrlReg<1>==0b1)){
+							data_buf[1] := pad1.Poll(din_reg).poll_data;
+						}
+						if((CtrlReg<13>==0b1) & (CtrlReg<1>==0b1)){
+							data_buf[1] := pad2.Poll(din_reg).poll_data;
 						}
 						goto st2;
 					}
@@ -158,39 +172,33 @@ input intwaitm<4>;
 			}
 		}
 		state st2 par{
-			if(^(/|sbuf[parp]<3:0>)){
-				bufcount := 2 + 32;
+			if(data_buf[parp]<3:0>==0x0){
+				bufcount := 0x22; // 2 + 32;
 			}
 			else{
-				bufcount := 0x2 + (sbuf[parp]<2:0>||0b0);
+				bufcount := 0x02 + (0b000||data_buf[parp]<3:0>||0b0);
 			}
 			goto st1;
 			finish;
 		}
 		state st3 par{
-			any{
-				(CtrlReg<13>==0b0) & (CtrlReg<1>==0b1) : par{ // 0x0002:
+			if((CtrlReg<13>==0b0) & (CtrlReg<1>==0b1)){ // 0x0002:
 					// cur : ç∂|â∫|âE|è„|St| 1| 1|Sl
 					// ref : Å†|Å~|Åõ|Å¢|R1|L1|R2|L2
 				//	uint8 cmd1[3] = {0x5A, 0xFF, 0xFF};
 				//	cmd1[1] = (uint8)(~key_reg);
 				//	cmd1[2] = (uint8)(~key_reg >> 8);
-					switch(curByte1){
-						case 0: sbuf[parp] := 0x5A;
-						case 1: sbuf[parp] := ^key_in<7:0>;
-						case 2: sbuf[parp] := ^key_in<15:8>;
-					}
-					if(curByte1==2) curByte1:=0; else curByte1++;
-				}
-				(CtrlReg<13>==0b1) & (CtrlReg<1>==0b1) : par{ // 0x2002:
-					//buf[parp] = cmd2[curByte2];//PAD_poll(2, data);
-					switch(curByte2){
-						case 0: sbuf[parp] := 0x5A;
-						case 1: sbuf[parp] := 0xFF;
-						case 2: sbuf[parp] := 0xFF;
-					}
-					if(curByte2==2) curByte2:=0; else curByte2++;
-				}
+				//	switch(curByte1){
+				//		case 0: data_buf[parp] := 0x5A;
+				//		case 1: data_buf[parp] := ^key_in<7:0>;
+				//		case 2: data_buf[parp] := ^key_in<15:8>;
+				//	}
+				//	if(curByte1==2) curByte1:=0; else curByte1++;
+
+				data_buf[parp] := pad1.Poll(din_reg).poll_data;
+			}
+			if((CtrlReg<13>==0b1) & (CtrlReg<1>==0b1)){ // 0x2002:
+				data_buf[parp] := pad2.Poll(din_reg).poll_data;
 			}
 			if(parp==bufcount){
 				padst := 0;
@@ -210,7 +218,7 @@ input intwaitm<4>;
 					if(rdwr!=0){
 						parp++;
 					}
-					else{ // 20200712
+					else{
 						parp := 1;
 						any{
 							din_reg==0x52 : rdwr := 1;
@@ -223,7 +231,8 @@ input intwaitm<4>;
 				}
 				mcdst==2 : par{
 					generate interrupt_wait.do(0b1);
-					sbuf[0] := 0x00;
+					adrH := din_reg;
+					data_buf[0] := 0x00;
 					parp := 0;
 					bufcount := 1;
 					mcdst := 3;
@@ -232,6 +241,8 @@ input intwaitm<4>;
 				}
 				mcdst==3 : par{
 					generate interrupt_wait.do(0b1);
+					adrL := din_reg;
+					data_buf[0] := adrH;
 					parp := 0;
 					bufcount := 1;
 					mcdst := 4;
@@ -241,6 +252,33 @@ input intwaitm<4>;
 				mcdst==4 : par{
 					generate interrupt_wait.do(0b1);
 					parp := 0;
+					any{
+						rdwr==1 : par{
+							data_buf[0] := 0x5C;
+							data_buf[1] := 0x5D;
+							data_buf[2] := adrH;
+							data_buf[3] := adrL;
+							if((CtrlReg<13>==0b0) & (CtrlReg<1>==0b1)){
+							}
+							if((CtrlReg<13>==0b1) & (CtrlReg<1>==0b1)){
+							}
+							sel checksum<8>;
+							join(i=4;i<132;i++){
+								checksum = data_buf[i] @ checksum;
+							}
+							data_buf[132] := adrH @ adrL @ checksum;
+							data_buf[133] := 0x47;
+							bufcount := 133;
+						}
+						rdwr==2 : par{
+							data_buf[0] := adrL;
+							data_buf[1] := din_reg;
+							data_buf[129] := 0x5C;
+							data_buf[130] := 0x5D;
+							data_buf[131] := 0x47;
+							bufcount := 131;
+						}
+					}
 					mcdst := 5;
 					goto st1;
 					finish;
@@ -253,7 +291,7 @@ input intwaitm<4>;
 		}
 		state st11 par{
 			if(rdwr==2){
-				/*if(parp!=128)*/ sbuf[parp+1] := din_reg;
+				if(parp<7>==0b0/*<128*/) data_buf[parp+1] := din_reg;
 			}
 			generate interrupt_wait.do(0b1);
 			goto st1;
@@ -264,15 +302,11 @@ input intwaitm<4>;
 			any{
 				din_reg==0x01 : par{
 					StatReg |= 0x0002;
-					any{
-						(CtrlReg<13>==0b0) & (CtrlReg<1>==0b1) : par{ // 0x0002
-							curByte1 := 0;
-							sbuf[0] := 0xFF;
-						}
-						(CtrlReg<13>==0b1) & (CtrlReg<1>==0b1) : par{ // 0x2002
-							curByte2 := 0;
-							sbuf[0] := 0xFF;
-						}
+					if((CtrlReg<13>==0b0) & (CtrlReg<1>==0b1)){ // 0x0002
+						data_buf[0] := pad1.StartPoll(1).poll_data;
+					}
+					if((CtrlReg<13>==0b1) & (CtrlReg<1>==0b1)){ // 0x2002
+						data_buf[0] := pad2.StartPoll(2).poll_data;
 					}
 					bufcount := 2;
 					parp := 0;
@@ -284,10 +318,10 @@ input intwaitm<4>;
 				din_reg==0x81 : par{
 					StatReg |= 2;//RX_RDY;
 					//memcpy(buf, cardh, 4);
-					sbuf[0] := 0x00;
-					sbuf[1] := 0x00;
-					sbuf[2] := 0x5A;
-					sbuf[3] := 0x5D;
+					data_buf[0] := 0x00;
+					data_buf[1] := 0x00;
+					data_buf[2] := 0x5A;
+					data_buf[3] := 0x5D;
 					parp := 0;
 					bufcount := 3;
 					mcdst := 1;
@@ -315,7 +349,7 @@ input intwaitm<4>;
 		}
 		state st2 if(run33){
 			int_wait_count++;
-			if(int_wait_count==((BaudReg<<intwaitm<0>)||0b000)){
+			if(int_wait_count==(BaudReg||0b000)){
 				StatReg |= 0x0200; //IRQ;
 				interrupt_out();
 				goto st1;

@@ -1,0 +1,83 @@
+/*
+	Pad & Memcard serial interface
+		by pgate1
+*/
+
+circuit PAD
+{
+	input pad_id<2>;
+//	instrin SetMode(pad_id, pad_mode);
+	instrin StartPoll(pad_id);
+	output poll_data<8>;
+	input value<8>;
+	instrin Poll(value);
+	input key_data<16>; // 0:‰Ÿ‚µ 1:—£‚µ
+
+	mem stat[2]<16>;
+	mem ID[2]<8>;
+	mem mode1[2];
+	mem mode2[2];
+	mem modeC[2];
+	reg_wr curPad, curByte<5>, curCmd<8>, cmdLen<5>;
+
+	reg_ws reset;
+
+	mem data_buf[32]<8> = {0};
+
+	if(reset){
+		stat[0] := 0xFFFF;
+		stat[1] := 0xFFFF;
+		ID[0] := 0x41;
+		ID[1] := 0x41;
+		mode1[0] := 0;
+		mode1[1] := 0;
+		mode2[0] := 0;
+		mode2[1] := 0;
+		modeC[0] := 0;
+		modeC[1] := 0;
+		par(i=0;i<32;i++){
+			data_buf[i] := 0x00;
+		}
+		reset := 0b0;
+	}
+
+	instruct StartPoll par{
+		curPad := (pad_id - 1)<0>;
+		curByte := 0;
+		poll_data = 0xFF;
+	}
+
+	switch(curPad){
+		case 0: stat[0] := key_data;
+		case 1: stat[1] := key_data;
+	}
+
+	instruct Poll par{
+		if(curByte==0){
+			curByte++;
+			curCmd := 0x42;//value;
+			cmdLen := 0b00010 + (ID[curPad]<3:0> || 0b0);
+			if(modeC[curPad]!=0) data_buf[1] := 0x00;
+			else data_buf[1] := 0x5A;
+			data_buf[2] := stat[curPad]<7:0>;
+			data_buf[3] := stat[curPad]<15:8>;
+
+			data_buf[4] := 0xFF;
+			data_buf[5] := 0xFF;
+			data_buf[6] := 0xFF;
+			data_buf[7] := 0xFF;
+
+			poll_data = ID[curPad];
+		}
+		else{
+			if(curByte!=cmdLen){ // curByte < cmdLen
+				poll_data = data_buf[curByte];
+				curByte++;
+			}
+			else{
+				poll_data = 0x00;
+			}
+		}
+	}
+
+}
