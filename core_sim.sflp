@@ -7,7 +7,8 @@
 %i "sram_sim.h"
 %i "sdram_sim_100.h"
 
-%i "PSX_core.h"
+%i "PlayStation_core.h"
+%i "DDS_50to33868800.h"
 %i "VGA_ctrl.h"
 %i "view_ram_ctrl.h"
 
@@ -30,12 +31,13 @@ circuit core_sim
 
 	reg_ws reset;
 
-	PSX_core psx;
+	PlayStation_core psx;
+	DDS_50to33868800 dds;
 
 	reg_wr exe_read_ok;
-	reg_wr chksum<8>;
 
-	reg_wr tA<21>; // 2MB
+	reg_wr bA<19>; // bios 512kB
+	reg_wr tA<21>; // ram 2MB
 	reg_wr d0<8>, d1<8>, d2<8>;
 
 	view_ram_ctrl view_ram;
@@ -44,12 +46,9 @@ circuit core_sim
 	sel halt_sel<8>;
 	reg_wr halt_code<8>;
 
-	stage_name flash2ram_bios { task do(); }
+	stage_name bios_flash2ram { task do(); }
 	stage_name wram_clear { task do(); }
 	stage_name sram_clear { task do(); }
-
-	stage_name spu_wait_ack { task do(); }
-	stage_name gpu_wait_ack { task do(); }
 
 	if(reset){
 		reset := 0b0;
@@ -76,38 +75,30 @@ circuit core_sim
 	}
 	instruct vga.view view_ram.read();
 	instruct vga.vblank_begin par{
+		view_ram.read_adrs_reset();
 		psx.vblank_in();
-		view_ram.adrs_reset();
-		if(^psx.gpu_chain_do) view_ram.bank_change(); // 320x240で60fpsOK
+		view_ram.bank_change(); // 320x240で60fpsOK
 	}
 
-	if(exe_read_ok & ^/|halt_code) psx.run();
+	if(exe_read_ok & (halt_code==0x00)){
+		instruct dds.run psx.run33();
+		psx.cpu_run();
+	}
 
 	// ubs.button1<12> : B,Y,Sl,St, Up,Dn,Le,Ri, A,X,L,R
 	// PS : □,×,○,△,R,L,0,0,←,↓,→,↑,St,0,0,Sl
 	psx.key_in = 0;
 
-//	psx.sw_intpl_off();
-//	if(SW<15>) psx.sw_reverb_off();
-//	if(SW<16>) 
+psx.sw_intpl_off();
+psx.sw_reverb_off();
 psx.sw_spu_off();
 //psx.sw_cache_off();
+	psx.sw_cdrom_ctrl = 0b01;//sw_17 || sw_16;
+//	if(psx.sw_cdrom_ctrl!=0b01) 
 psx.sw_kernel_run();
 //psx.dbg_in = SW<15:0>;
 
-/*
-	any{
-		soundexe_read.do : seg = 0x0000||tA<20:5>;
-		key3 : seg = chksum || psx.dbg_cpu || 0x00 || psx.halt_code;
-		key2 : seg = psx.dbg;
-		key1 : seg = 0x000000 || halt_code;//psx.dbg2;
-		else : seg = psx.pc_out;
-	}
-*/
 	pc_out = psx.pc_out;
-
-	disp_out = /|psx.disp_env;
-	//LEDR = (0b00000000000000000 || /|psx.halt_code) | psx.disp_env<23:6> | (0b00||psx.key_in);
 
 	instruct psx.WRAM_READ par{
 		sdram.read(0b000000||psx.A<20:2>);
@@ -136,81 +127,56 @@ psx.sw_kernel_run();
 	psx.Din = sdram.rdata;
 	if(sdram.ack) psx.bios_ack();
 
-	// 描画中はCPU停止の為、とりあえずGPUの方を優先する
-// GPUテストの為、とりあえずSPUをオミットする
+	reg_wr gpu_read_wait_ack, gpu_write_wait_ack, spu_wait_ack;
 	alt{
-		gpu_wait_ack.do | spu_wait_ack.do : ;
+		gpu_read_wait_ack | gpu_write_wait_ack | spu_wait_ack : ;
 
 		psx.spu_mem_read_req & ^psx.sw_spu_off : par{
 			sram.read(0b00||psx.spu_mem_A);
-			generate spu_wait_ack.do();
-		}
-
-		psx.vram_write_req : par{
-			sram.write(0b1||psx.vram_write_adrs, psx.vram_write_data, 0b11);
-			generate gpu_wait_ack.do();
+			spu_wait_ack := 0b1;
 		}
 
 		psx.vram_read_req : par{
 			sram.read(0b1||psx.vram_read_adrs);
-			generate gpu_wait_ack.do();
+			gpu_read_wait_ack := 0b1;
+		}
+
+		psx.vram_write_req : par{
+			sram.write(0b1||psx.vram_write_adrs, psx.vram_write_data, 0b11);
+			gpu_write_wait_ack := 0b1;
 		}
 
 		psx.spu_mem_write_req & ^psx.sw_spu_off : par{
 			sram.write(0b00||psx.spu_mem_A, psx.spu_mem_Din, 0b11);
-			generate spu_wait_ack.do();
+			spu_wait_ack := 0b1;
 		}
-
 	}
 	psx.spu_mem_Dout = sram.rdata;
 	psx.vram_read_data = sram.rdata;
 
 	if(psx.sw_spu_off) psx.spu_mem_ack();
 
-	stage gpu_wait_ack {
+	if(gpu_read_wait_ack){
 		if(sram.ack){
-			psx.vram_ack();
-			finish;
+			psx.vram_read_ack();
+			gpu_read_wait_ack := 0b0;
 		}
 	}
 
-	stage spu_wait_ack {
+	if(gpu_write_wait_ack){
+		if(sram.ack){
+			psx.vram_write_ack();
+			gpu_write_wait_ack := 0b0;
+		}
+	}
+
+	if(spu_wait_ack){
 		if(sram.ack){
 			psx.spu_mem_ack();
-			finish;
+			spu_wait_ack := 0b0;
 		}
 	}
-/*
-	stage flash2ram_bios {
-		reg_wr bA<19>; // 512KB
-		first_state st_open;
-		state st_open par{
-			bA := 0;
-		//	chksum := 0x00;
-			goto st_read;
-		}
-		state st_read if(flash.ack){
-			flash.read(0b0000||bA);
-			goto st_write;
-		}
-		state st_write if(flash.ack & sdram_ack){
-			switch(bA<1:0>){ // ok
-				case 0b00: d0 := flash.rdata;
-				case 0b01: d1 := flash.rdata;
-				case 0b10: d2 := flash.rdata;
-				case 0b11: sdram_write(0b10000000||bA<18:2>, flash.rdata||d2||d1||d0, 0b1111);
-			}
-			bA++;
-		//	chksum += flash.rdata;
-			if(/&bA) goto st_end;
-			else goto st_read;
-		}
-		state st_end if(sdram_ack){
-			generate wram_clear.do();
-			finish;
-		}
-	}
-*/
+
 	stage wram_clear {
 		reg_wr wA<19>;
 		first_state sst;
@@ -233,14 +199,10 @@ psx.sw_kernel_run();
 	}
 
 	stage sram_clear {
-		reg_wr sA<18>; // 256kW(512kB)
-		reg_wr vA<19>; // 512kW(1MB)
-		first_state sst;
-		state sst par{
-			sA := 0;
-			goto st1;
-		}
+		first_state st1;
 		state st1 if(sram.ack){
+			// Sound RAM clear
+			reg_wr sA<18>; // 256kW(512kB)
 			sram.write(0b00||sA, 0x0000, 0b11);
 			sA++;
 			if(/&sA){
@@ -249,6 +211,8 @@ psx.sw_kernel_run();
 			}
 		}
 		state st2 if(sram.ack){
+			// Video RAM clear
+			reg_wr vA<19>; // 512kW(1MB)
 			sram.write(0b1||vA, 0x0000, 0b11);
 			vA++;
 			if(/&vA) goto st3;
