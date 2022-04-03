@@ -5,7 +5,7 @@ circuit VGA_ctrl
 	output h_sync, v_sync;
 	output h_en, v_en;
 	output en;
-	instrout vblank_begin, hblank_begin, view;
+	instrout vblank_begin, vblank_end, /*hblank_begin,*/ view;
 	output h_count<10>, v_count<10>;
 	reg_wr h_count_reg<10>, v_count_reg<10>;
 
@@ -34,8 +34,33 @@ circuit VGA_ctrl
 		oR = 0; oG = 0; oB = 0;
 	}
 
+/*
+h_tim      -2 -1  0  1  2  3
+view_en_reg 0  0  1  1  1  1
+h_en_reg    0  0  0  1  1  1
+VGA_BLANKn  0  0  0  0  1  1
+read        -  -  r0 -  r1 -
+data        -  -  -  d0 d0 d1 d1
+VGA_RGB     -  -  -  -  d0 d0 d1 d1
+2から表示
+
+h_tim      -2 -1 640 1  2  3
+view_en_reg 1  1  0  0  0  0
+h_en_reg    1  1  1  0  0  0
+VGA_BLANKn  1  1  1  1  0  0
+read        r  -  -  -  -  -
+data        -  d  d  -  -  -
+VGA_RGB     -  -  d  d  -  -
+641まで表示
+
+0-639
+1-640
+2-641
+*/
+
 	instruct htiming par{
 		reg_wr h_tim<10>;
+		reg_wr view_en_reg;
 		any{
 			h_tim==0 : par{
 				h_sync_reg := 0b0;
@@ -44,17 +69,23 @@ circuit VGA_ctrl
 				h_sync_reg := 0b1;
 				vtiming();
 			}
+			h_tim==(96+48-1) : par{
+				view_en_reg := 0b1;
+			}
 			h_tim==(96+48) : par{
 				h_en_reg := 0b1;
 			}
+			h_tim==(96+48+640-1) : par{
+				view_en_reg := 0b0;
+			}
 			h_tim==(96+48+640) : par{
 				h_en_reg := 0b0;
-				hblank_begin();
+			//	hblank_begin();
 			}
 		}
 
-		// view(h_en_reg)でvramからreadして次のクロックで表示する
-		if(v_en_reg & h_en_reg & (h_tim<0>==0b0)) view();
+		// view(view_en_reg)でvramからreadして次のクロックで表示する
+		if(v_en_reg & view_en_reg & (h_tim<0>==0b0)) view();
 
 		if(h_tim==(800-1)) h_tim := 0;
 		else h_tim++;
@@ -74,6 +105,7 @@ circuit VGA_ctrl
 			}
 			v_tim==(2+33) : par{
 				v_en_reg := 0b1;
+				vblank_end();
 			}
 			v_tim==(2+33+480) : par{
 				v_en_reg := 0b0;

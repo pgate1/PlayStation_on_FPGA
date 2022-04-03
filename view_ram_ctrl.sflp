@@ -16,7 +16,7 @@ circuit view_ram_ctrl
 	input in_x<9>, in_y<8>, in_R<5>, in_G<5>, in_B<5>;
 	instrin write(in_x, in_y, in_R, in_G, in_B);
 	output out_R<5>, out_G<5>, out_B<5>;
-	instrin read, bank_change, adrs_reset, flip_buffer;
+	instrin read, bank_change, read_adrs_reset, flip_buffer;
 	reg_wr flip;
 
 	reg_ws reset;
@@ -29,8 +29,8 @@ circuit view_ram_ctrl
 	stage_name clear_stg { task do(); }
 
 	if(reset){
-		reset := 0b0;
 		generate clear_stg.do();
+		reset := 0b0;
 	}
 
 	if(clear_stg.do){
@@ -49,7 +49,7 @@ circuit view_ram_ctrl
 		bank := ^bank;
 	}
 
-	instruct adrs_reset par{
+	instruct read_adrs_reset par{
 		radrs_x := 0;
 		radrs_y := 0;
 	}
