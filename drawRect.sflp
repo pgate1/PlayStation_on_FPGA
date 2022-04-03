@@ -1,38 +1,45 @@
 /*
-	GPU TextureRect
+	GPU draw Rect
 		by pgate1
 */
 
-%i "inv_table.h"
-
-declare mul_u16 interface
+declare compare_s11 interface
 {
-	input a<16>, b<16>;
-	output dout<32>;
-	instrin con;
-	instr_arg con(a, b);
+	input a<11>, b<11>;
+	instrin gt, lt, gte, lte;
+	output result;
+	instr_arg gt(a, b);
+	instr_arg lt(a, b);
+	instr_arg gte(a, b);
+	instr_arg lte(a, b);
 }
 
-circuit drawTextureRect
+circuit drawRect
 {
 	input vx1<11>, vy1<11>;
 	input vx4<11>, vy4<11>;
-	input clut<16>, tpage<16>;
+	input col<24>;
+	input clut<16>, tpage<14>;
 	input vu1<8>, vv1<8>;
 	input vu4<8>, vv4<8>;
-	instrin con(vx1, vy1, vx4, vy4, clut, tpage, vu1, vv1, vu4, vv4);
+	input drawW<10>, drawH<10>;
+	instrin con(vx1, vy1, vx4, vy4, col, clut, tpage, vu1, vv1, vu4, vv4, drawW, drawH);
 
-	instrin texture_thin;
+//	instrin texture_thin;
+	instrin sw_view_half;
 
 	instrin draw;
 	output drawing;
 
-	inv_table inv_t;
+	compare_s11 cmp_w, cmp_h;
 
-	reg_wr au<16>, av<16>;
-	reg_wr pu<16>, pv<16>;
+	reg_wr pu<8>, pv<8>;
 
 	reg_wr tx<11>, u<8>;
+
+	input f_texture;
+	input f_texblend;
+	input f_semitrans;
 
 	// VIEW
 	output view_x<10>, view_y<9>;
@@ -46,7 +53,7 @@ circuit drawTextureRect
 	instrout vram_read_req;
 	instrin vram_ack;
 	input vram_read_data<16>;
-	reg_wr vram_read_data_reg<16>;
+//	reg_wr vram_read_data_reg<16>;
 
 	reg_wr halt;
 
@@ -69,101 +76,96 @@ circuit drawTextureRect
 	if(vram_read_wait & ^vram_ack) vram_read_req();
 	if(vram_ack){
 		vram_read_wait := 0b0;
-		vram_read_data_reg := vram_read_data;
+	//	vram_read_data_reg := vram_read_data;
 	}
 
 	sel tr<8>, tg<8>, tb<8>;
-	out_R = tr;
-	out_G = tg;
-	out_B = tb;
+	if(f_texture){
+		out_R = tr;
+		out_G = tg;
+		out_B = tb;
+	}
+	else{
+		out_R = col<7:0>;
+		out_G = col<15:8>;
+		out_B = col<23:16>;
+	}
 
 	stage draw_stg {
 		reg_wr x<11>, y<11>;
 		first_state st1;
-		state st1 par{
-			generate bilinear_vbase.do();
-			goto st2;
+		par{
+			if(0b0){
+				cmp_w.lt(0,0); cmp_w.gte(0,0); cmp_w.lte(0,0);
+				cmp_h.lt(0,0); cmp_h.gte(0,0); cmp_h.lte(0,0);
+			}
 		}
-		state st2 if(^bilinear_vbase.do){
+		state st1 par{
+			if((vy1<10> & vy4<10>) | (vx1<10> & vx4<10>)){ // y < 0, x < 0
+				finish;
+			}
+			else goto st3;
 			y := vy1;
-			goto st3;
+			pv := vv1;
 		}
 		state st3 par{
-			x := vx1;
-			pu := vu1 || 8#0b0;
 			alt{
-				y<10> | (texture_thin & (y<0>==0b1)) : par{ // y < 0
+				y<10> : par{ // y < 0
 					y++;
-					pv += av;
+					pv++;
 				}
-				(y==vy4) | (y==(vy4+1)) : par{ // end
-					goto st1; finish;
-//goto st5;
+				((y-vy4)<10>==0b0) // y >= ey
+				| cmp_h.gt(y, 0b0||drawH).result : par{ // y > drawH
+					goto st1;
+					finish;
 				}
-				else : par{ // y!=ey
+				else : par{ // y < ey
 					goto st4;
 				}
 			}
+			x := vx1;
+			pu := vu1;
 		}
 		state st4 if(^texdraw.do){
-			if((x!=vx4) & (x!=(vx4+1))){ // x!=ex
-				if(
-				//	(y<10>==0b0) &          // y >= 0
-				//	(y-0b00111100000)<10> & // y < 480
-					(x<10>==0b0) //&          // x >= 0
-				//	(x-0b01010000000)<10> & // x < 640
-				//	(y<0>==0b0) & (x<0>==0b0) // 320x240
-				){
-					generate texdraw.do(x, pu<15:8>);
+			if(
+			//	((vx4-x)<10>==0b1) // x > ex
+				((x-vx4)<10>==0b0) // x >= ex
+				| cmp_w.gt(x, 0b0||drawW).result // x > drawW
+			){
+				if(sw_view_half){
+					y += 2;
+					pv += 2;
 				}
-			}
-			else{ // x==ex
-				y++;
-				pv += av;
+				else{ // PSƒƒS‚Ì‚ÍƒXƒLƒbƒv‚µ‚È‚¢
+					y++;
+					pv++;
+				}
 				goto st3;
 			}
+			else{ // x < ex
+				if(
+				//	(y<10>==0b0)          // y >= 0
+				//	& (y-0b00111100000)<10> // y < 480
+					(x<10>==0b0)          // x >= 0
+				//	& (x-0b01010000000)<10> // x < 640
+				){
+					any{
+						f_texture : generate texdraw.do(x, pu);
+						else : par{
+							view_on(x<9:0>, y<8:0>);
+						}
+					}
+				}
+			}
 
-			if(/*texture_thin &*/ (x<0>==0b0)){
+			if(sw_view_half){
 				x += 2;
-				pu += au << 1;
+				pu += 2;
 			}
 			else{
 				x++;
-				pu += au;
+				pu++;
 			}
-		}
-/*
-		state st5 par{
-			reg_wr wait_count<3>;
-			wait_count++;
-			if(/&wait_count){
-				goto st1;
-				finish;
-			}
-		}
-*/
-	}
-
-	stage bilinear_vbase {
-		mul_u16 mul;
-		first_state st1;
-		state st1 par{
-			inv_t.read((vx4-vx1)<9:0>);
-			goto st_au;
-		}
-		state st_au par{
-			// (<8>||<8>)*<u16> = <32>
-			au := mul.con((vu4-vu1)||8#0b0, inv_t.dout).dout<30:15>;
-			inv_t.read((vy4-vy1)<9:0>);
-			goto st_av;
-		}
-		state st_av par{
-			// (<8>||<8>)*<u16> = <32>
-			av := mul.con((vv4-vv1)||8#0b0, inv_t.dout).dout<30:15>;
-
-			pv := vv1 || 8#0b0;
-			goto st1;
-			finish;
 		}
 	}
 
@@ -185,11 +187,11 @@ circuit drawTextureRect
 
 			tpage_col = tpage<8:7>;
 
-			v = pv<15:8>;
+			v = pv;
 		}
 		state st_init if(^vram_read_wait){
 			any{
-				tpage_col==0b00 : par{
+				tpage_col==0 : par{
 					reg_wr u_buf<6>;
 					if(u<7:2>==u_buf){
 						f_tci_buf_on := 0b1;
@@ -201,7 +203,19 @@ circuit drawTextureRect
 					u_buf := u<7:2>;
 					goto st00_1;
 				}
-				tpage_col==0b10 : par{
+				tpage_col==1 : par{
+					reg_wr u_buf<7>;
+					if(u<7:1>==u_buf){
+						f_tci_buf_on := 0b1;
+					}
+					else{
+						vram_read((0b0||v||10#0b0) + tadjust_y + ((12#0b0)||u<7:1>));
+						f_tci_buf_on := 0b0;
+					}
+					u_buf := u<7:1>;
+					goto st01_1;
+				}
+				tpage_col==2 : par{
 					vram_read((0b0||v||10#0b0) + tadjust_y + ((11#0b0)||u));
 					goto st00_2;
 				}
@@ -209,29 +223,44 @@ circuit drawTextureRect
 			}
 		}
 
-		state st00_1 if(/*vram_ack){*/ ^vram_read_wait){
+		state st00_1 if(vram_ack | f_tci_buf_on){ // ^vram_read_wait){
 			sel tci<4>;
 			reg_wr vram_read_data_buf<16>;
 			if(f_tci_buf_on){
 				tci = (vram_read_data_buf >> (u<1:0>||0b00))<3:0>;
 			}
 			else{
-				tci = (vram_read_data_reg >> (u<1:0>||0b00))<3:0>;
-				vram_read_data_buf := vram_read_data_reg;
+				tci = (vram_read_data >> (u<1:0>||0b00))<3:0>;
+				vram_read_data_buf := vram_read_data;
 			}
 			vram_read(clut_p + ((15#0b0)||tci));
 			goto st00_2;
 		}
-		state st00_2 if(/*vram_ack){*/ ^vram_read_wait){
-// PSãƒ­ã‚´æ–‡å­—åˆ—è¡¨ç¤ºã§ã¯æœ€ä¸Šä½ãƒ“ãƒƒãƒˆã¯è¦‹ãªã„
-			if(/*(vram_read_data_reg<15>==0b0) &*/ (vram_read_data_reg<14:0>!=0)){
+
+		state st01_1 if(vram_ack | f_tci_buf_on){ // ^vram_read_wait){
+			sel tci<8>;
+			reg_wr vram_read_data_buf<16>;
+			if(f_tci_buf_on){
+				tci = (vram_read_data_buf >> (u<0>||0b000))<7:0>;
+			}
+			else{
+				tci = (vram_read_data >> (u<0>||0b000))<7:0>;
+				vram_read_data_buf := vram_read_data;
+			}
+			vram_read(clut_p + ((11#0b0)||tci));
+			goto st00_2;
+		}
+
+		state st00_2 if(vram_ack){ // ^vram_read_wait){
+			if((vram_read_data<14:0>!=0) | (vram_read_data==0x8000)){
 				view_on(tx<9:0>, y<8:0>);
-				tr = vram_read_data_reg< 4: 0> || 0b000;
-				tg = vram_read_data_reg< 9: 5> || 0b000;
-				tb = vram_read_data_reg<14:10> || 0b000;
+				tr = vram_read_data< 4: 0> || 0b000;
+				tg = vram_read_data< 9: 5> || 0b000;
+				tb = vram_read_data<14:10> || 0b000;
 			}
 			goto st_init;
 			finish;
 		}
 	}
+
 }

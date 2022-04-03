@@ -1,20 +1,34 @@
 /*
-	GPU Rectangle
+	GPU FillRectangle
 		by pgate1
 */
 
-circuit drawRect
+declare compare_s11 interface
 {
-	input vx1<11>, vy1<11>, vc1<24>; // A窶彑
-	input vx2<11>, vy2<11>; // B窶彑
-	instrin con(vx1, vy1, vc1, vx2, vy2);
+	input a<11>, b<11>;
+	instrin gt, lt, gte, lte;
+	output result;
+	instr_arg gt(a, b);
+	instr_arg lt(a, b);
+	instr_arg gte(a, b);
+	instr_arg lte(a, b);
+}
+
+circuit drawFillRect
+{
+	input vx1<11>, vy1<11>, vc1<24>; // A点
+	input vx2<11>, vy2<11>; // B点
+	input drawX<10>, drawY<10>, drawW<10>, drawH<10>;
+	instrin con(vx1, vy1, vc1, vx2, vy2, drawX, drawY, drawW, drawH);
 
 	instrin draw;
 	output drawing;
 
-	sel col<15>;
+	compare_s11 cmp_ex, cmp_ey;
+	compare_s11 cmp_x, cmp_y;
+	compare_s11 cmp_w, cmp_h;
 
-	instrin sw_outview_on;
+	instrin sw_outview_on, sw_view_half;
 
 	output view_x<10>, view_y<9>;
 	instrout view_on(view_x, view_y);
@@ -47,48 +61,83 @@ circuit drawRect
 	if(vram_write_wait & ^vram_ack) vram_write_req();
 	if(vram_ack) vram_write_wait := 0b0;
 
+	sel col<15>;
 	col = vc1<23:19> || vc1<15:11> || vc1<7:3>;
-
 	out_R = col< 4: 0> || 0b000;
 	out_G = col< 9: 5> || 0b000;
-	out_B = vc1<14:10> || 0b000;
+	out_B = col<14:10> || 0b000;
 
 	stage draw_stg {
 		reg_wr y<11>, x<11>;
 		first_state st1;
+		par{
+			if(0b0){
+				cmp_ex.gt(0,0); cmp_ex.lt(0,0); cmp_ex.lte(0,0);
+				cmp_ey.gt(0,0); cmp_ey.lt(0,0); cmp_ey.lte(0,0);
+				cmp_x.gt(0,0); cmp_x.gte(0,0); cmp_x.lte(0,0);
+				cmp_y.gt(0,0); cmp_y.gte(0,0); cmp_y.lte(0,0);
+				cmp_w.lt(0,0); cmp_w.gte(0,0); cmp_w.lte(0,0);
+				cmp_h.lt(0,0); cmp_h.gte(0,0); cmp_h.lte(0,0);
+			}
+		}
 		state st1 par{
+			if((vy1<10> & vy2<10>) | (vx1<10> & vx2<10>)) finish; // y < 0, x < 0
+			else goto st2;
 			y := vy1;
-			goto st2;
 		}
 		state st2 par{
-			x := vx1;
-		//	if((y!=(vy1+vy2)) & ((0b0||y)-0b00111100000)<10>){ // y < 240
-			if((y!=(vy1+vy2)) & (y!=480)){ // y < 480
-				goto st3;
+			alt{
+				y<10> // y < 0
+				| cmp_y.lt(y, (0b0||drawY)).result // y < drawY
+				: par{
+					y++;
+				}
+				//((y-(vy1+vy2))<10>==0b0) // y >= ey
+				cmp_ey.gte(y, vy1+vy2).result // y >= ey
+				| cmp_h.gt(y, 0b0||drawH).result // y > drawH
+				: par{
+					goto st1;
+					finish;
+				}
+				else : par{ // y < ey
+					goto st3;
+				}
 			}
-			else{
-				goto st1;
-				finish;
-			}
+			if(vx1<10>) x := 0; // x < 0
+			else x := vx1;
 		}
 		state st3 if(^vram_write_wait){
-		//	if((x!=(vx1+vx2)) & ((0b0||x)-0b01010000000)<10>){ // x < 320
-			if((x!=(vx1+vx2))){
-				if(sw_outview_on){
-					if(
-					//	(x<10>==0b0) &          // x >= 0
-						((x-0b01010000000)<10>==0b0) //& // x >= 640
-					) view_on((x-640)<9:0>, y<8:0>);
-					else view_on(x<9:0>, y<8:0>);
-				}
-
-				vram_write(y<8:0>||x<9:0>, 0b0||col);
-			}
-			else{
-				y++;
+			if(
+				cmp_x.lt(x, (0b0||drawX)).result // x < drawX
+				//((x-(vx1+vx2))<10>==0b0) // x >= ex
+				| cmp_ex.gte(x, vx1+vx2).result // x >= ex
+				| cmp_w.gt(x, 0b0||drawW).result // x > drawW
+			){
+				if(sw_view_half) y += 2;
+				else y++;
 				goto st2;
 			}
-			x++;
+			else{
+				if(sw_outview_on
+				//	& (x<10>==0b0) // x >= 0
+					& ((x-0b01010000000)<10>==0b0) // x >= 640
+				) view_on((x-640)<9:0>, y<8:0>);
+				else view_on(x<9:0>, y<8:0>);
+/*
+広範囲にvram_writeするとちらつく
+	W 0x02000000
+	W 0x000A0000
+	W 0x01C60200
+60fpsに間に合わない？
+案：chain中はNMIブロックする？
+案：NMIがあったらchainを中断する？
+案：ある範囲以上なら描画しない？
+*/
+			//	vram_write(y<8:0>||x<9:0>, 0b0||col);
+			}
+
+			if(sw_view_half) x += 2;
+			else x++;
 		}
 	}
 
