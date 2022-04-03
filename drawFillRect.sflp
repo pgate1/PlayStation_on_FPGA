@@ -5,8 +5,8 @@
 
 circuit drawRect
 {
-	input vx1<11>, vy1<11>, vc1<24>; // A“_
-	input vx2<11>, vy2<11>; // B“_
+	input vx1<11>, vy1<11>, vc1<24>; // Aâ€œ_
+	input vx2<11>, vy2<11>; // Bâ€œ_
 	instrin con(vx1, vy1, vc1, vx2, vy2);
 
 	instrin draw;
