@@ -32,24 +32,20 @@ circuit Timer
 	output halt_code<8>;
 
 	if(reset){
-		reset := 0b0;
-
 		any{
 			index==0 : par{
-			//	rate := 1;
 			}
 			index==1 : par{
-			//	rate := 1;
 			}
 			index==2 : par{
-			//	rate := 1;
 			}
 			index==3 : par{
-			//	rate := 1;
 				mode := 0x0008;
-				target := 2145; // (1/60/263) / (1/33868800)
+				target := 2146; // (1/60/263) / (1/33868800)
 			}
 		}
+	//	rate := 1;
+		reset := 0b0;
 	}
 
 	any{
@@ -69,17 +65,24 @@ circuit Timer
 		io_A==0x4 : par{ // モード
 			mode := io_Din;
 			count := 0;
-			irq_state := 0;
+			irq_state := 0b0;
 		}
 		io_A==0x8 : par{ // コンペア(ターゲット)
 			target := io_Din;
 		}
-		else : halt(0x12);
+	//	else : halt(0x12);
 	}
 
 	instruct io_get any{
 		io_A==0x0 : par{ // カウント
 			io_Dout = count;
+		}
+		io_A==0x4 : par{ // モード
+			io_Dout = mode;
+			mode &= ^0x1800;
+		}
+		io_A==0x8 : par{ // コンペア(ターゲット)
+			io_Dout = target;
 		}
 	}
 
@@ -89,17 +92,17 @@ circuit Timer
 
 	//	if(count==target){
 		if(
-			((mode<3>==0b1)&(((0b0||count)-(0b0||target))<16>==0b0)) | // count >= target
-			((mode<3>==0b0)&(count==0xFFFF))
+			((mode<3>==0b1) & (((0b0||count)-(0b0||target))<16>==0b0)) | // count >= target
+			((mode<3>==0b0) & (count==0xFFFF))
 		){
 			count := 0;
 
 			if((index==0) | (index==1) | (index==2)){
 				if(mode<4>){ // RcIrqOnTarget
 					// if( (rcnts[index].mode & RcIrqRegenerate) || (!rcnts[index].irqState) ){
-					if(mode<6> | (irq_state==0)){
+					if(mode<6> | (^irq_state)){
 						irq_out();
-						irq_state := 1;
+						irq_state := 0b1;
 					}
 				}
 			}
@@ -109,10 +112,8 @@ circuit Timer
 					hSyncCount := 1;
 					irq_out();
 				}
-				else{
-					hSyncCount++;
-					hsync();
-				}
+				else hSyncCount++;
+				hsync();
 			}
 		}
 		else{
@@ -129,7 +130,7 @@ circuit Timer
 				}
 				index==1 : par{
 					if(mode<8>){
-						if(rate==2146){
+						if(rate==2146){ // 33MHz:2146
 							count++;
 							rate := 1;
 						}
@@ -138,7 +139,7 @@ circuit Timer
 					else count++;
 				}
 				index==2 : par{
-					if(^mode<0>){
+				//	if(mode<0>==0b0){
 						if(mode<9>){
 							if(rate==8){ // 33MHz:8
 								count++;
@@ -147,7 +148,7 @@ circuit Timer
 							else rate++;
 						}
 						else count++;
-					}
+				//	}
 				}
 				index==3 : par{
 					count++;

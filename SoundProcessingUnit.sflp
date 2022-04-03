@@ -113,39 +113,21 @@ dbg = dsp.dbg;
 	}
 
 	instruct io_set any{
-		io_A==0x1D80 : ; // Main Volume Left
-		io_A==0x1D82 : ; // Main Volume Right
-		io_A==0x1D84 : par{ // Reverb Output Volume Left
-			dsp.io_set(io_A, io_Din);
-		}
-		io_A==0x1D86 : par{ // Reverb Output Volume Right
-			dsp.io_set(io_A, io_Din);
-		}
-		io_A==0x1D88 : par{ // Voice ON  (0-15)
-			dsp.io_set(io_A, io_Din);
-		}
-		io_A==0x1D8A : par{ // Voice ON  (16-23)
-			dsp.io_set(io_A, io_Din);
-		}
-		io_A==0x1D8C : par{ // Voice OFF (0-15)
-			dsp.io_set(io_A, io_Din);
-		}
-		io_A==0x1D8E : par{ // Voice OFF (16-23)
-			dsp.io_set(io_A, io_Din);
-		}
+	//	io_A==0x1D80 // Main Volume Left
+	//	io_A==0x1D82 // Main Volume Right
+	//	io_A==0x1D84 // Reverb Output Volume Left
+	//	io_A==0x1D86 // Reverb Output Volume Right
+	//	io_A==0x1D88 // Voice ON  (0-15)
+	//	io_A==0x1D8A // Voice ON  (16-23)
+	//	io_A==0x1D8C // Voice OFF (0-15)
+	//	io_A==0x1D8E // Voice OFF (16-23)
 		io_A==0x1D90 : ; // Voice  0..15 Channel FM (pitch lfo) mode (R/W)
 		io_A==0x1D92 : ; // Voice 16..23 Channel FM (pitch lfo) mode (R/W)
 		io_A==0x1D94 : ; // Voice  0..15 Channel Noise mode (R/W)
 		io_A==0x1D96 : ; // Voice 16..23 Channel Noise mode (R/W)
-		io_A==0x1D98 : par{ // Voice  0..15 Channel Reverb mode (R/W)
-			dsp.io_set(io_A, io_Din);
-		}
-		io_A==0x1D9A : par{ // Voice 16..23 Channel Reverb mode (R/W)
-			dsp.io_set(io_A, io_Din);
-		}
-		io_A==0x1DA2 : par{ // Sound RAM Reverb Work Area Start Address
-			dsp.io_set(io_A, io_Din);
-		}
+	//	io_A==0x1D98 // Voice  0..15 Channel Reverb mode (R/W)
+	//	io_A==0x1D9A // Voice 16..23 Channel Reverb mode (R/W)
+	//	io_A==0x1DA2 // Sound RAM Reverb Work Area Start Address
 		io_A==0x1DA6 : par{ // Sound buffer address
 			spuAddr := io_Din || 0b000;
 		}
@@ -209,6 +191,8 @@ dbg = dsp.dbg;
 	}
 
 	instruct io_get any{
+	//	io_A==0x1D80 // Main Volume Left
+	//	io_A==0x1D82 // Main Volume Right
 		io_A==0x1D88 : par{ // Voice ON  (0-15)
 			io_Dout = 0x0000;
 		}
@@ -221,26 +205,25 @@ dbg = dsp.dbg;
 		io_A==0x1D8E : par{ // Voice OFF (16-23)
 			io_Dout = 0x0000;
 		}
-		io_A==0x1D90 : par{ // Voice 0..15 Channel FM (pitch lfo) mode (R/W)
+		io_A==0x1D90 : par{ // Voice  0..15 Channel FM (pitch lfo) mode (R/W)
 			io_Dout = 0x0000;
 		}
 		io_A==0x1D92 : par{ // Voice 16..23 Channel FM (pitch lfo) mode (R/W)
 			io_Dout = 0x0000;
 		}
-		io_A==0x1D94 : par{ // Voice 0..15 Channel Noise mode (R/W)
+		io_A==0x1D94 : par{ // Voice  0..15 Channel Noise mode (R/W)
 			io_Dout = 0x0000;
 		}
 		io_A==0x1D96 : par{ // Voice 16..23 Channel Noise mode (R/W)
 			io_Dout = 0x0000;
 		}
-		io_A==0x1D98 : par{ // Voice 0..15 Channel Reverb mode (R/W)
-			io_Dout = dsp.io_get(io_A).io_Dout;
-		}
-		io_A==0x1D9A : par{ // Voice 16..23 Channel Reverb mode (R/W)
-			io_Dout = dsp.io_get(io_A).io_Dout;
-		}
+	//	io_A==0x1D98 // Voice  0..15 Channel Reverb mode (R/W)
+	//	io_A==0x1D9A // Voice 16..23 Channel Reverb mode (R/W)
 		io_A==0x1DA6 : par{
 			io_Dout = spuAddr<18:3>;
+		}
+		io_A==0x1DA8 : par{
+			io_Dout = 0; // test
 		}
 		io_A==0x1DAA : par{ // SPU control
 			io_Dout = spuCtrl;
@@ -250,6 +233,24 @@ dbg = dsp.dbg;
 		}
 		io_A==0x1DAE : par{ // SPU status
 			io_Dout = status;
+		}
+		io_A==0x1DB0 : par{ // CD Audio Input Volume Left
+			io_Dout = 0x0000;
+		}
+		io_A==0x1DB2 : par{ // CD Audio Input Volume Right
+			io_Dout = 0x0000;
+		}
+		io_A==0x1DB4 : par{ // External Audio Input Volume Left
+			io_Dout = 0x0000;
+		}
+		io_A==0x1DB6 : par{ // External Audio Input Volume Right
+			io_Dout = 0x0000;
+		}
+		io_A==0x1DB8 : par{ // Current Main Volume Left
+			io_Dout = 0x0000; // ‚Æ‚è‚ ‚¦‚¸
+		}
+		io_A==0x1DBA : par{ // Current Main Volume Right
+			io_Dout = 0x0000; // ‚Æ‚è‚ ‚¦‚¸
 		}
 		else : par{
 			io_Dout = dsp.io_get(io_A).io_Dout;

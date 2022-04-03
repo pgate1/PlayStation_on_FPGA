@@ -1,0 +1,53 @@
+/*
+	Scratchpad
+		by pgate1
+*/
+
+circuit Scratchpad
+{
+	input A<10>, Din<32>, Word<3>;
+	instrin read(A), write(A, Din, Word);
+	output Dout<32>;
+	reg_wr Dout0_reg<8>, Dout1_reg<8>, Dout2_reg<8>, Dout3_reg<8>;
+
+	mem ram0[256]<8>, ram1[256]<8>, ram2[256]<8>, ram3[256]<8>;
+
+	sel index<8>;
+	index = A<9:2>;
+
+	instruct read par{
+		Dout0_reg := ram0[index];
+		Dout1_reg := ram1[index];
+		Dout2_reg := ram2[index];
+		Dout3_reg := ram3[index];
+	}
+	Dout = Dout3_reg || Dout2_reg || Dout1_reg || Dout0_reg;
+
+	instruct write par{
+		any{
+			Word==1 : any{
+				A<1:0>==0b00 : ram0[index] := Din<7:0>;
+				A<1:0>==0b01 : ram1[index] := Din<7:0>;
+				A<1:0>==0b10 : ram2[index] := Din<7:0>;
+				A<1:0>==0b11 : ram3[index] := Din<7:0>;
+			}
+			Word==2 : any{
+				A<1>==0b0 : par{
+					ram0[index] := Din< 7:0>;
+					ram1[index] := Din<15:8>;
+				}
+				else : par{
+					ram2[index] := Din< 7:0>;
+					ram3[index] := Din<15:8>;
+				}
+			}
+			else : par{ // Word==4
+				ram0[index] := Din< 7: 0>;
+				ram1[index] := Din<15: 8>;
+				ram2[index] := Din<23:16>;
+				ram3[index] := Din<31:24>;
+			}
+		}
+	}
+
+}
