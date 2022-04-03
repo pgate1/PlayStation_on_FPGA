@@ -1,0 +1,157 @@
+# -------------------------------------------------------------------------- #
+#
+# Copyright (C) 1991-2012 Altera Corporation
+# Your use of Altera Corporation's design tools, logic functions 
+# and other software and tools, and its AMPP partner logic 
+# functions, and any output files from any of the foregoing 
+# (including device programming or simulation files), and any 
+# associated documentation or information are expressly subject 
+# to the terms and conditions of the Altera Program License 
+# Subscription Agreement, Altera MegaCore Function License 
+# Agreement, or other applicable license agreement, including, 
+# without limitation, that your use is for the sole purpose of 
+# programming logic devices manufactured by Altera and sold by 
+# Altera or its authorized distributors.  Please refer to the 
+# applicable agreement for further details.
+#
+# -------------------------------------------------------------------------- #
+#
+# Quartus II 32-bit
+# Version 12.1 Build 243 01/31/2013 Service Pack 1.33 SJ Web Edition
+# Date created = 17:17:58  April 07, 2016
+#
+# -------------------------------------------------------------------------- #
+#
+# Notes:
+#
+# 1) The default values for assignments are stored in the file:
+#		PSX_assignment_defaults.qdf
+#    If this file doesn't exist, see file:
+#		assignment_defaults.qdf
+#
+# 2) Altera recommends that you do not modify this file. This
+#    file is updated automatically by the Quartus II software
+#    and any changes you make may be lost or overwritten.
+#
+# -------------------------------------------------------------------------- #
+
+set_global_assignment -name FAMILY "Cyclone IV E"
+set_global_assignment -name DEVICE EP4CE115F29C7
+set_global_assignment -name TOP_LEVEL_ENTITY PlayStation_top
+set_global_assignment -name ORIGINAL_QUARTUS_VERSION "12.1 SP1.33"
+set_global_assignment -name PROJECT_CREATION_TIME_DATE "17:17:58  APRIL 07, 2016"
+set_global_assignment -name LAST_QUARTUS_VERSION 13.1
+set_global_assignment -name PROJECT_OUTPUT_DIRECTORY output_files
+set_global_assignment -name MIN_CORE_JUNCTION_TEMP 0
+set_global_assignment -name MAX_CORE_JUNCTION_TEMP 85
+set_global_assignment -name DEVICE_FILTER_SPEED_GRADE 7
+set_global_assignment -name ERROR_CHECK_FREQUENCY_DIVISOR 1
+set_global_assignment -name POWER_PRESET_COOLING_SOLUTION "23 MM HEAT SINK WITH 200 LFPM AIRFLOW"
+set_global_assignment -name POWER_BOARD_THERMAL_MODEL "NONE (CONSERVATIVE)"
+set_global_assignment -name TIMEQUEST_MULTICORNER_ANALYSIS OFF
+set_global_assignment -name STRATIX_DEVICE_IO_STANDARD "2.5 V"
+
+set_global_assignment -name NUM_PARALLEL_PROCESSORS ALL
+set_global_assignment -name USE_CONFIGURATION_DEVICE ON
+set_global_assignment -name CYCLONEIII_CONFIGURATION_DEVICE EPCS64
+set_global_assignment -name CRC_ERROR_OPEN_DRAIN OFF
+set_global_assignment -name OUTPUT_IO_TIMING_NEAR_END_VMEAS "HALF VCCIO" -rise
+set_global_assignment -name OUTPUT_IO_TIMING_NEAR_END_VMEAS "HALF VCCIO" -fall
+set_global_assignment -name OUTPUT_IO_TIMING_FAR_END_VMEAS "HALF SIGNAL SWING" -rise
+set_global_assignment -name OUTPUT_IO_TIMING_FAR_END_VMEAS "HALF SIGNAL SWING" -fall
+
+source ../../../DE2-115/DE2_115_top_assignments.qsf
+
+
+
+set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
+set_global_assignment -name PARTITION_FITTER_PRESERVATION_LEVEL PLACEMENT_AND_ROUTING -section_id Top
+set_global_assignment -name PARTITION_COLOR 16764057 -section_id Top
+set_instance_assignment -name IO_MAXIMUM_TOGGLE_RATE "0 MHz" -to KEY
+set_instance_assignment -name IO_MAXIMUM_TOGGLE_RATE "0 MHz" -to SW
+set_instance_assignment -name IO_MAXIMUM_TOGGLE_RATE "0 MHz" -to HEX0
+set_instance_assignment -name IO_MAXIMUM_TOGGLE_RATE "0 MHz" -to HEX1
+set_instance_assignment -name IO_MAXIMUM_TOGGLE_RATE "0 MHz" -to HEX2
+set_instance_assignment -name IO_MAXIMUM_TOGGLE_RATE "0 MHz" -to HEX3[0]
+set_instance_assignment -name IO_MAXIMUM_TOGGLE_RATE "0 MHz" -to HEX3[1]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DRAM_ADDR[*]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DRAM_BA[*]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DRAM_DQ[*]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DRAM_DQM[*]
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DRAM_RAS_N
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DRAM_CAS_N
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DRAM_CKE
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DRAM_CLK
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DRAM_WE_N
+set_instance_assignment -name FAST_OUTPUT_REGISTER ON -to DRAM_CS_N
+set_instance_assignment -name FAST_OUTPUT_ENABLE_REGISTER ON -to DRAM_DQ[*]
+set_instance_assignment -name ALLOW_SYNCH_CTRL_USAGE OFF -to *|DRAM_*
+set_global_assignment -name FITTER_EARLY_TIMING_ESTIMATE_MODE REALISTIC
+set_global_assignment -name VERILOG_FILE "../../../DE2-115/psx_pll/psx_pll.v"
+set_global_assignment -name VERILOG_FILE ../PAD.v
+set_global_assignment -name VERILOG_FILE ../compare_s11.v
+set_global_assignment -name VERILOG_FILE ../bcd_itob.v
+set_global_assignment -name VERILOG_FILE ../bcd_btoi.v
+set_global_assignment -name VERILOG_FILE ../Scratchpad.v
+set_global_assignment -name VERILOG_FILE ../mul_u8.v
+set_global_assignment -name SDC_FILE ../PlayStation.sdc
+set_global_assignment -name VERILOG_FILE ../PlayStation_top.v
+set_global_assignment -name VERILOG_FILE ../PlayStation_core.v
+set_global_assignment -name VERILOG_FILE ../gte_LIMIT.v
+set_global_assignment -name VERILOG_FILE ../gte_DIVIDE.v
+set_global_assignment -name VERILOG_FILE ../mul_s32.v
+set_global_assignment -name VERILOG_FILE ../GeometryTransformationEngine.v
+set_global_assignment -name VERILOG_FILE ../DMA_CDR.v
+set_global_assignment -name VERILOG_FILE ../ram_8x4k.v
+set_global_assignment -name VERILOG_FILE ../mul_s26s16.v
+set_global_assignment -name VERILOG_FILE ../mul_s18s16.v
+set_global_assignment -name VERILOG_FILE ../drawRect.v
+set_global_assignment -name VERILOG_FILE ../view_ram_ctrl.v
+set_global_assignment -name VERILOG_FILE ../demo/demo.v
+set_global_assignment -name VERILOG_FILE ../mul_u9.v
+set_global_assignment -name VERILOG_FILE ../drawFillRect.v
+set_global_assignment -name VERILOG_FILE ../drawPoly.v
+set_global_assignment -name VERILOG_FILE ../Cache_IR.v
+set_global_assignment -name VERILOG_FILE "../../../DE2-115/sdram100MHz_core50MHz/sdram_ctrl_100.v"
+set_global_assignment -name VERILOG_FILE "../../../DE2-115/sdram100MHz_core50MHz/sdram_pll_100.v"
+set_global_assignment -name VERILOG_FILE ../PAD_controller.v
+set_global_assignment -name VERILOG_FILE ../CDROM_controller.v
+set_global_assignment -name VERILOG_FILE ../mul_s11.v
+set_global_assignment -name VERILOG_FILE ../inv_table.v
+set_global_assignment -name VERILOG_FILE ../ram_320x240x15.v
+set_global_assignment -name VERILOG_FILE ../VGA_ctrl.v
+set_global_assignment -name VERILOG_FILE ../DMA_GPU.v
+set_global_assignment -name VERILOG_FILE ../ram_16x32k.v
+set_global_assignment -name VERILOG_FILE ../DMA_SPU.v
+set_global_assignment -name VERILOG_FILE ../DMA_OTC.v
+set_global_assignment -name VERILOG_FILE ../GraphicProcessingUnit.v
+set_global_assignment -name VERILOG_FILE ../../../hdl/fat16.v
+set_global_assignment -name VERILOG_FILE ../dsdac10.v
+set_global_assignment -name VERILOG_FILE "../../../DE2-115/ram_8x512.v"
+set_global_assignment -name VERILOG_FILE ../reverb.v
+set_global_assignment -name VERILOG_FILE ../bsr_s24.v
+set_global_assignment -name VERILOG_FILE ../RateTableSub_rom.v
+set_global_assignment -name VERILOG_FILE ../RateTableSub_f_rom.v
+set_global_assignment -name VERILOG_FILE ../RateTableAdd_rom.v
+set_global_assignment -name VERILOG_FILE ../RateTableAdd_f_rom.v
+set_global_assignment -name VERILOG_FILE ../mul_s17.v
+set_global_assignment -name VERILOG_FILE ../ADSR.v
+set_global_assignment -name VERILOG_FILE ../mul_s16s8.v
+set_global_assignment -name VERILOG_FILE ../bsr_s32.v
+set_global_assignment -name VERILOG_FILE ../bsr_s16.v
+set_global_assignment -name VERILOG_FILE ../mul_s16.v
+set_global_assignment -name VERILOG_FILE ../DigitalSignalProcessor.v
+set_global_assignment -name VERILOG_FILE ../DDS_50to33868800.v
+set_global_assignment -name VERILOG_FILE ../Timer.v
+set_global_assignment -name VERILOG_FILE ../../../hdl/dpram_8x512.v
+set_global_assignment -name VERILOG_FILE ../../../hdl/barrel_shifter_left_32.v
+set_global_assignment -name VERILOG_FILE ../core.v
+set_global_assignment -name VERILOG_FILE "../../../DE2-115/DE2_115.v"
+set_global_assignment -name VERILOG_FILE ../SoundProcessingUnit.v
+set_global_assignment -name VERILOG_FILE ../R3000A.v
+set_global_assignment -name VERILOG_FILE ../mul_u32.v
+set_global_assignment -name VERILOG_FILE ../mul_u16.v
+set_global_assignment -name VERILOG_FILE ../dsp_ch.v
+set_global_assignment -name VERILOG_FILE ../div_u32.v
+set_global_assignment -name CDF_FILE output_files/PlayStation.cdf
+set_instance_assignment -name PARTITION_HIERARCHY root_partition -to | -section_id Top
