@@ -3,9 +3,9 @@
 		by pgate1
 */
 
-%i "drawGouraudShading.h"
+%i "drawFillRect.h"
+%i "drawPoly.h"
 %i "drawRect.h"
-%i "drawTextureRect.h"
 
 circuit GraphicProcessingUnit
 {
@@ -18,41 +18,58 @@ circuit GraphicProcessingUnit
 	instrin write_status(din);
 
 	instrin WriteData(din), ReadData;
-	instrin hsync;
+	instrin vblank_begin, vblank_end, hsync;
 
-	reg status<32> = 0x14802000;
-//	reg GpuInfo<32> = 0x00000000;
+	reg_ws reset;
+
+	reg_wr status<32>, GPUdataRet<32>;
+	reg_wr status_drawing_evenodd;  // bit 31 0=Even or Vblank, 1=Odd
+	reg_wr status_dma_direction<2>; // bit 30-29 0=Off, 1=?, 2=CPUtoGP0, 3=GPUtoCPU
+	input status_ready_recieve_dmablock; // bit 28 0=No, 1=Ready
+	reg_wr status_ready_send_vramtocpu;   // bit 27 0=No, 1=Ready
+	sel status_ready_recieve_cmd;      // bit 26 0=No, 1=Ready
+//	reg_wr status_dma_status<2>; // bit 25
+	reg_wr vblank;
+
+	input dma_direction_n<2>;
+	instrin set_dma_direction(dma_direction_n);
 
 	reg_wr DispStartX<10>, DispStartY<10>;
 	reg_wr HorDispRangeStart<12>, HorDispRangeEnd<12>;
 	reg_wr VertDispRangeStart<10>, VertDispRangeEnd<11>;
 
+	reg_wr dispWidth<10>, dispHeight<9>; // W640<10>,H480<9>
+
 	reg_wr VramPosX<16>, VramPosY<16>;
-	reg_wr drawW<10>, drawH<10>;
+	reg_wr drawX<10>, drawY<10>, drawW<10>, drawH<10>;
+	reg_wr drawOffsetX<11>, drawOffsetY<11>;
 	mem CommandBuffer[16]<32>;
 	reg_wr BufferOffset<4>;
 	reg_wr cmd_reg<8>;
 
-	output busy, drawing;
+	output busy, drawing, vram_busy;
 
 	reg_wr px1<11>, py1<11>, pc1<24>; // A点
 	reg_wr px2<11>, py2<11>, pc2<24>; // B点
 	reg_wr px3<11>, py3<11>, pc3<24>; // C点
-	reg_wr px4<11>, py4<11>; // D点
 
-	drawGouraudShading gs;
+	reg_wr pu1<8>, pv1<8>;
+	reg_wr pu2<8>, pv2<8>;
+	reg_wr pu3<8>, pv3<8>;
+
+	reg_wr clut<16>, tpage<14>;
+
+	drawFillRect fill;
+	drawPoly poly;
 	drawRect rect;
 
-	drawTextureRect texrect;
-	reg_wr pu1<8>, pv1<8>;
-	reg_wr pu4<8>, pv4<8>;
-	reg_wr clut<16>, tpage<16>;
-
-	instrin sw_outview_on;
+	instrin sw_outview_on, sw_view_half;
 
 	instrout view_on;
 	output view_x<10>, view_y<9>;
 	output view_R<8>, view_G<8>, view_B<8>;
+
+	output dispW, dispH;
 
 	// for VRAM
 	output vram_write_adrs<19>, vram_write_data<16>;
@@ -83,8 +100,7 @@ circuit GraphicProcessingUnit
 input dbg_in<16>;
 output dbg<32>;
 reg_wr dbg_reg<32>;
-reg_wr sum<32>;
-output vraming;
+output dbg_gpu<32>;
 
 	stage_name VramData_image { task read_vram(); task write_vram(io_write_data); }
 	stage_name draw_stg { task do(); }
@@ -93,74 +109,154 @@ output vraming;
 	halt_code = halt_reg;
 
 dbg = dbg_reg;
-//dbg = sum;
 
-	instruct read_status par{
-		dout = status;
-	//	if(status<22>) 
-			status := status @ 0x80000000; // test
+	if(reset){
+		reset := 0b0;
+		status := 0x14802000;
+
+		status_drawing_evenodd := 0b0;
+		status_dma_direction := 0b00;
+	//	status_ready_recieve_dmablock := 0b1; // input
+		status_ready_send_vramtocpu := 0b0; // ok
+	//	status_ready_recieve_cmd := 0b1; // sel
+
+		GPUdataRet := 0x00000400;
+		BufferOffset := 0;
+		drawX := 0;
+		drawY := 0;
+		drawW := 0;
+		drawH := 0;
+		VramPosX := 0;
+		VramPosY := 0;
+		dispWidth := 640;
+		dispHeight := 480;
+		drawOffsetX := 0;
+		drawOffsetY := 0;
+		tpage := 14#0b0;
 	}
 
 	instruct write_status par{
-	any{
-		din<31:24>==0x00 : par{
-			status := 0x14802000;
-			BufferOffset := 0;
-			VramPosX := 0;
-			VramPosY := 0;
+//if(draw_stg.do) halt(0xAA);
+
+		any{
+			din<31:24>==0x00 : par{
+				reset := 0b1;
+			}
+			din<31:24>==0x01 : par{
+				BufferOffset := 0;
+			}
+			din<31:24>==0x02 : ; // reset irq
+			din<31:24>==0x03 : par{
+				// display enable
+				status := status<31:24> || din<0> || status<22:0>;
+			}
+			din<31:24>==0x04 : par{
+				// DMA transfer mode
+				status_dma_direction := din<1:0>;
+			}
+			din<31:24>==0x05 : par{
+				DispStartX := din<9:0>;
+				DispStartY := din<21:12>;
+			}
+			din<31:24>==0x06 : par{
+				HorDispRangeStart := din<11:0>;
+				HorDispRangeEnd := din<23:12>;
+			}
+			din<31:24>==0x07 : par{
+				VertDispRangeStart := din<9:0>;
+				VertDispRangeEnd := din<20:10>;
+			}
+			din<31:24>==0x08 : par{
+				switch(din<1:0>){
+					case 0: dispWidth := 256;
+					case 1: dispWidth := 320;
+					case 2: dispWidth := 512;
+					case 3: dispWidth := 640;
+				}
+				switch(din<2>){
+					case 0: dispHeight := 240;
+					case 1: dispHeight := 480;
+				}
+				status := status<31:23> || din<5:0> || din<6> || status<15> || din<7> || status<13:0>;
+			}
+			din<31:24>==0x10 : any{
+				din<7:0>==0x07 : GPUdataRet := 2;
+			}
+			else : halt(0xA2);
 		}
-		din<31:24>==0x01 : par{
-			BufferOffset := 0;
-		}
-		din<31:24>==0x02 : ; // reset irq
-		din<31:24>==0x03 : par{
-			status := status<31:24> || din<0> || status<22:0>;
-		}
-		din<31:24>==0x04 : par{
-			status := status<31> || din<1:0> || status<28:0>;
-		}
-		din<31:24>==0x05 : par{
-			DispStartX := din<9:0>;
-			DispStartY := din<19:10>;
-		}
-		din<31:24>==0x06 : par{
-			HorDispRangeStart := din<11:0>;
-			HorDispRangeEnd := din<23:12>;
-		}
-		din<31:24>==0x07 : par{
-			VertDispRangeStart := din<9:0>;
-			VertDispRangeEnd := din<20:10>;
-		}
-		din<31:24>==0x08 : par{
-		//	status := status<31:19> || din<1:0> || din<6> || status<15:0>; // ok
-			status := status<31:23> || din<5> || status<21:20> || din<2:0> || din<6> || status<15:0>;
-		}
-		else : halt(0xE2);
-	}
 	}
 
-//	instruct StatusIdle par{
-//		status := status<31:27> || idle || status<25:0>;
-//	}
-//	draw_idle = status<26>;
+	instruct set_dma_direction par{
+	//	status_dma_direction := dma_direction_n;
+	}
 
+	dispW = (dispWidth==512) | (dispWidth==640);
+	dispH = (dispHeight==480);
+
+	instruct vblank_begin vblank := 0b1;
+	instruct vblank_end vblank := 0b0;
 	instruct hsync par{
 		// mode interlace
-	//	if(status<22>) status := status @ 0x80000000;
+		if(status<22>) status_drawing_evenodd := ^status_drawing_evenodd;
+		else status_drawing_evenodd := 0b0;
+	}
+
+	instruct read_status par{
+
+		status_ready_recieve_cmd = 0b1; // 0xA7 0x20
+	//	status_ready_recieve_cmd = ^draw_stg.do; // 0xA5 0xFF
+	//	status_ready_recieve_cmd = ^(draw_stg.do | VramData_image.write_vram); // 0xA5 0xFF
+	//	status_ready_recieve_cmd = ^busy; // 0xA5 0xFF
+	//	status_ready_recieve_cmd = (BufferOffset==0); // 0xA7 0x20
+	//	status_ready_recieve_cmd = (BufferOffset==0) & ^busy; // 0xA5 0xFF CPU停止なら動く
+
+		sel status_data_request;
+		switch(status_dma_direction){
+			case 0: status_data_request = 0b0;
+			case 1: status_data_request = ^busy; // FIFO state 0:full, 1:not full
+			case 2: status_data_request = 0b1;//status_ready_recieve_dmablock; // CPU->GP0
+			case 3: status_data_request = status_ready_send_vramtocpu; // GPU->CPU
+		}
+
+		dout =
+			(status_drawing_evenodd | vblank) || // bit 31
+			status_dma_direction || // bit 30-29
+			0b1 || //status_ready_recieve_dmablock || // bit 28
+			status_ready_send_vramtocpu || // bit 27
+			0b1 || //status_ready_recieve_cmd || // bit 26
+			0b0 || //status_data_request || // bit 25
+			0b0 || // bit 24 Interrupt Request
+			status<23> || // bit 23 Display Enable
+			status<22> || // bit 22 Vertical Interlace
+			status<21> || // bit 21 Display Area Color Depth
+			status<20> || // bit 20 Video Mode
+			status<19> || // bit 19 Vertical Resolution
+			status<18:17> || // bit 17-18 Horizontal Resolution 1
+			status<16> || // bit 16 Horizontal Resolution 2
+			tpage<11>  || // bit 15 Texture Disable
+			status<14> || // bit 14 Reverseflag
+			status<13> || // bit 13 Interlace Field
+			status<12> || // bit 12 Draw Pixels
+			status<11> || // bit 11 Set Mask-bit when drawing pixels
+			tpage<10:0>;
+
+		status := dout;
+
+	//	status_drawing_evenodd := ^status_drawing_evenodd; // test
 	}
 
 	reg_wr ReadData_ack;
 	instruct ReadData par{
-		if(status<27>){
-		//	dout = 0x00000000;
+		if(status_ready_send_vramtocpu){ // status<27>
 //if(VramData_image.write_vram) halt(0xA4); // no
 //if(WriteData) halt(0xA4); // no
 //if(vram_write_req) halt(0xA4); // no
+if(draw_stg.do) halt(0xA4);
+
 			generate VramData_image.read_vram();
 		}
 		else{
-		//	dout = 0;//GpuInfo;
-			dout_reg := 0;
+			dout_reg := GPUdataRet;
 			ReadData_ack := 0b1;
 		}
 	}
@@ -173,18 +269,22 @@ dbg = dbg_reg;
 	else dout = dout_reg; // DMA_Read_Data
 
 	instruct WriteData par{
-		sel cmd<8>;
+
+if(draw_stg.do) halt(0xA8);
+if(BufferOffset==15) halt(0xA9);
+
 		CommandBuffer[BufferOffset] := din;
+		sel cmd<8>;
 		if(BufferOffset==0){
 			cmd = din<31:24>;
 			cmd_reg := cmd;
 		}
 		else cmd = cmd_reg;
-		any{
-			cmd==0x00 : ;
-			cmd==0x01 : ;
 
-			cmd==0x02 : any{
+		any{
+			(cmd==0x00) | (cmd==0x01) : ; // none
+
+			(cmd==0x02) : any{
 				BufferOffset==2 : par{ // FillFramebufferRect
 					generate draw_stg.do();
 					BufferOffset := 0;
@@ -192,7 +292,12 @@ dbg = dbg_reg;
 				else : BufferOffset++;
 			}
 
-			(cmd==0x20) | (cmd==0x22) : any{
+			(cmd==0x03) | (cmd==0x04) | (cmd==0x05) | (cmd==0x06) | (cmd==0x07) |
+			(cmd==0x08) | (cmd==0x09) | (cmd==0x0A) | (cmd==0x0B) | (cmd==0x0C) | (cmd==0x0D) | (cmd==0x0E) | (cmd==0x0F) |
+			(cmd==0x10) | (cmd==0x11) | (cmd==0x12) | (cmd==0x13) | (cmd==0x14) | (cmd==0x15) | (cmd==0x16) | (cmd==0x17) |
+			(cmd==0x18) | (cmd==0x19) | (cmd==0x1A) | (cmd==0x1B) | (cmd==0x1C) | (cmd==0x1D) | (cmd==0x1E) | (cmd==0x1F) : ; // none
+
+			(cmd==0x20) | (cmd==0x21) | (cmd==0x22) | (cmd==0x23) : any{
 				BufferOffset==3 : par{ // Mono3PointPoly
 					generate draw_stg.do();
 					BufferOffset := 0;
@@ -200,7 +305,15 @@ dbg = dbg_reg;
 				else : BufferOffset++;
 			}
 
-			cmd==0x28 : any{ // ok
+			(cmd==0x24) | (cmd==0x25) | (cmd==0x26) | (cmd==0x27) : any{
+				BufferOffset==6 : par{ // Textured3PointPoly
+					generate draw_stg.do();
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+
+			(cmd==0x28) | (cmd==0x29) | (cmd==0x2A) | (cmd==0x2B) : any{
 				BufferOffset==4 : par{ // Mono4PointPoly
 					generate draw_stg.do();
 					BufferOffset := 0;
@@ -208,50 +321,127 @@ dbg = dbg_reg;
 				else : BufferOffset++;
 			}
 
-			(cmd==0x2C) | (cmd==0x2D) | (cmd==0x2F) : any{
-				BufferOffset==8 : par{ // Textured4PointPoly
+			(cmd==0x2C) | (cmd==0x2D) | (cmd==0x2E) | (cmd==0x2F) : any{
+				BufferOffset==8 : par{ // MonoTextured4PointPoly
 					generate draw_stg.do();
 					BufferOffset := 0;
 				}
 				else : BufferOffset++;
 			}
-			cmd==0x30 : any{ // ok
+
+			(cmd==0x30) | (cmd==0x31) | (cmd==0x32) | (cmd==0x33) : any{
 				BufferOffset==5 : par{ // Gouraud3PointPoly
 					generate draw_stg.do();
 					BufferOffset := 0;
 				}
 				else : BufferOffset++;
 			}
-			cmd==0x38 : any{ // ok
+
+			(cmd==0x34) | (cmd==0x35) | (cmd==0x36) | (cmd==0x37) : any{
+				BufferOffset==8 : par{ // GouraudTextured3PointPoly
+					generate draw_stg.do();
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+
+			(cmd==0x38) | (cmd==0x39) | (cmd==0x3A) | (cmd==0x3B) : any{
 				BufferOffset==7 : par{ // Gouraud4PointPoly
 					generate draw_stg.do();
 					BufferOffset := 0;
 				}
 				else : BufferOffset++;
 			}
-			cmd==0x65 : any{
-				BufferOffset==3 : par{ // Sprite
+
+			(cmd==0x3C) | (cmd==0x3D) | (cmd==0x3E) | (cmd==0x3F) : any{
+				BufferOffset==11 : par{ // GouraudTextured4PointPoly
 					generate draw_stg.do();
 					BufferOffset := 0;
 				}
 				else : BufferOffset++;
 			}
 
-			cmd==0x78 : any{ // rectangle ?
-				BufferOffset==1 : par{
+			(cmd==0x40) | (cmd==0x41) | (cmd==0x42) | (cmd==0x43) : any{
+				BufferOffset==2 : par{ // MonoLine
+				//	generate draw_stg.do();
 					BufferOffset := 0;
 				}
 				else : BufferOffset++;
 			}
 
-			cmd==0x80 : any{ // move image in framebuffer ?
+			(cmd==0x44) | (cmd==0x45) | (cmd==0x46) | (cmd==0x47) : ; // none
+
+			(cmd==0x48) | (cmd==0x49) | (cmd==0x4A) | (cmd==0x4B) |
+			(cmd==0x4C) | (cmd==0x4D) | (cmd==0x4E) | (cmd==0x4F) : any{
+				din==0x55555555 : par{ // MonoPolyLine
+				//	generate draw_stg.do();
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+
+			(cmd==0x50) | (cmd==0x51) | (cmd==0x52) | (cmd==0x53) : any{
+				BufferOffset==3 : par{ // ShadedLine
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+
+			(cmd==0x54) | (cmd==0x55) | (cmd==0x56) | (cmd==0x57) : ; // none
+
+			(cmd==0x58) | (cmd==0x59) | (cmd==0x5A) | (cmd==0x5B) |
+			(cmd==0x5C) | (cmd==0x5D) | (cmd==0x5E) | (cmd==0x5F) : any{
+				din==0x55555555 : par{ // ShadedPolyLine
+				//	generate draw_stg.do();
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+
+			(cmd==0x60) | (cmd==0x61) | (cmd==0x62) | (cmd==0x63) : any{
+				BufferOffset==2 : par{ // MonoRect
+					generate draw_stg.do();
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+
+			(cmd==0x64) | (cmd==0x65) | (cmd==0x66) | (cmd==0x67) : any{
+				BufferOffset==3 : par{ // TexuredRect
+					generate draw_stg.do();
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+
+			(cmd==0x68) | (cmd==0x69) | (cmd==0x6A) | (cmd==0x6B) |
+			(cmd==0x70) | (cmd==0x71) | (cmd==0x72) | (cmd==0x73) |
+			(cmd==0x78) | (cmd==0x79) | (cmd==0x7A) | (cmd==0x7B) : any{
+				BufferOffset==1 : par{ // MonoRect
+					generate draw_stg.do();
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+
+			(cmd==0x6C) | (cmd==0x6D) | (cmd==0x6E) | (cmd==0x6F) |
+			(cmd==0x74) | (cmd==0x75) | (cmd==0x76) | (cmd==0x77) |
+			(cmd==0x7C) | (cmd==0x7D) | (cmd==0x7E) | (cmd==0x7F) : any{
+				BufferOffset==2 : par{ // TexturedRect
+					generate draw_stg.do();
+					BufferOffset := 0;
+				}
+				else : BufferOffset++;
+			}
+
+			(cmd==0x80) : any{ // move image in framebuffer ?
 				BufferOffset==3 : par{
 					BufferOffset := 0;
 				}
 				else : BufferOffset++;
 			}
 
-			cmd==0xA0 : any{ // WriteVRAM
+			(cmd==0xA0) : any{ // WriteVRAM
 				BufferOffset==3 : par{
 //if(VramData_image.read_vram) halt(0xA3); // no
 //if(ReadData) halt(0xA3); // no
@@ -265,10 +455,10 @@ dbg = dbg_reg;
 				}
 			}
 
-			cmd==0xC0 : any{ // ReadVRAM
+			(cmd==0xC0) : any{ // ReadVRAM
 				BufferOffset==2 : par{
-					status |= 0x08000000;
-					BufferOffset := 0; // 20190208追加
+					status_ready_send_vramtocpu := 0b1;
+					BufferOffset := 0;
 				}
 				else : par{
 					VramPosX := 0;
@@ -277,20 +467,24 @@ dbg = dbg_reg;
 				}
 			}
 
-			cmd==0xE1 : par{
-				status := status<31:11> || din<10:0>;
-				tpage := din<15:0>;
+			(cmd==0xE1) : par{
+			//	status := status<31:11> || din<10:0>;
+				tpage := din<13:0>;
 			}
-			cmd==0xE2 : ;
-			cmd==0xE3 : ;
-			cmd==0xE4 : par{
-//  H:480 W:640
-// 01111000001010000000:78280
+			(cmd==0xE2) : ;
+			(cmd==0xE3) : par{
+				drawX := din<9:0>;
+				drawY := din<19:10>;
+			}
+			(cmd==0xE4) : par{
 				drawW := din<9:0>;
 				drawH := din<19:10>;
 			}
-			cmd==0xE5 : ;
-			cmd==0xE6 : par{
+			(cmd==0xE5) : par{
+				drawOffsetX := din<10:0>;
+				drawOffsetY := din<21:11>;
+			}
+			(cmd==0xE6) : par{
 				status := status<31:13> || din<1:0> || status<10:0>;
 			}
 
@@ -299,34 +493,105 @@ dbg_reg := 0x000000||cmd;
 				halt(0xA5);
 			}
 		}
-
-		status |= 0x04000000;
 	}
+
+	sel cmd<8>;
+	cmd = cmd_reg;
+
+dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 
 	instruct sw_outview_on par{
-		gs.sw_outview_on();
-		rect.sw_outview_on();
+		fill.sw_outview_on();
+		poly.sw_outview_on();
 	}
 
-	instruct texture_thin texrect.texture_thin();
+	instruct sw_view_half par{
+		fill.sw_view_half();
+		poly.sw_view_half();
+		rect.sw_view_half();
+	}
 
-gs.dbg_in = dbg_in;
-	sel f_dither;
-	f_dither = tpage<9>;// & (cmd_reg<7:4>==0x3);
-	gs.con(px1, py1, pc1, px2, py2, pc2, px3, py3, pc3, drawW, drawH, f_dither);
-	rect.con(px1, py1, pc1, px2, py2);
-	texrect.con(px1, py1, px4, py4, clut, tpage, pu1, pv1, pu4, pv4);
+//	instruct texture_thin rect.texture_thin();
+
+poly.dbg_in = dbg_in;
+
+	// for width 320 of メタルギアソリッド
+	sel drawoffset_x<11>;
+	if((dispWidth==320) & ((drawOffsetX-320)<10>==0b0) & ^sw_view_half){ // drawOffsetX >= 320
+		drawoffset_x = drawOffsetX - 320;
+	}
+	else drawoffset_x = drawOffsetX;
+
+	// for height 240 of アインハンダー
+	sel drawoffset_y<11>;
+	if((dispHeight==240) & ((drawOffsetY-240)<10>==0b0) & ^sw_view_half){ // drawOffsetY >= 240
+		drawoffset_y = drawOffsetY - 240;
+	}
+	else drawoffset_y = drawOffsetY;
+
+	fill.con(
+		px1, py1, pc1,
+		px2, py2, drawX, drawY, drawW, drawH);
+
+	poly.con(
+		px1+drawoffset_x, py1+drawoffset_y, pc1, pu1, pv1,
+		px2+drawoffset_x, py2+drawoffset_y, pc2, pu2, pv2,
+		px3+drawoffset_x, py3+drawoffset_y, pc3, pu3, pv3,
+		clut, tpage, drawX, drawY, drawW, drawH);
+	poly.f_dither = tpage<9>;
+	poly.f_texture = 
+		(cmd==0x24) | (cmd==0x25) | (cmd==0x26) | (cmd==0x27) | // 0b0010_01--
+		(cmd==0x2C) | (cmd==0x2D) | (cmd==0x2E) | (cmd==0x2F) | // 0b0010_11--
+		(cmd==0x34) | (cmd==0x35) | (cmd==0x36) | (cmd==0x37) | // 0b0011_01--
+		(cmd==0x3C) | (cmd==0x3D) | (cmd==0x3E) | (cmd==0x3F);  // 0b0011_11--
+
+	poly.f_texblend =
+		(cmd==0x24) | (cmd==0x26) | (cmd==0x2C) | (cmd==0x2E) |
+		(cmd==0x34) | (cmd==0x36) | (cmd==0x3C) | (cmd==0x3E);
+	poly.f_semitrans =
+		(cmd==0x22) | (cmd==0x2A) | (cmd==0x26) | (cmd==0x27) | (cmd==0x2E) | (cmd==0x2F) |
+		(cmd==0x32) | (cmd==0x3A) | (cmd==0x36) | ((cmd==0x37)) | (cmd==0x3E) | ((cmd==0x3F));
+
+	rect.con(
+		px1+drawoffset_x, py1+drawoffset_y,
+		px2+drawoffset_x, py2+drawoffset_y,
+		pc1, clut, tpage, pu1, pv1, pu2, pv2, drawW, drawH);
+	rect.f_texture =
+		(cmd==0x64) | (cmd==0x65) | (cmd==0x66) | (cmd==0x67) |
+		(cmd==0x6C) | (cmd==0x6D) | (cmd==0x6E) | (cmd==0x6F) |
+		(cmd==0x74) | (cmd==0x75) | (cmd==0x76) | (cmd==0x77) |
+		(cmd==0x7C) | (cmd==0x7D) | (cmd==0x7E) | (cmd==0x7F);
+	rect.f_texblend =
+		(cmd==0x64) | (cmd==0x66) | (cmd==0x6C) | (cmd==0x6E) |
+		(cmd==0x74) | (cmd==0x76) | (cmd==0x7C) | (cmd==0x7E);
+	rect.f_semitrans =
+		(cmd==0x62) | (cmd==0x6A) | (cmd==0x66) | (cmd==0x67) | (cmd==0x6E) | (cmd==0x6F) |
+		(cmd==0x72) | (cmd==0x7A) | (cmd==0x76) | (cmd==0x77) | (cmd==0x7E) | (cmd==0x7F);
 
 	busy = (halt_code!=0x00) | (draw_stg.do | VramData_image.write_vram | VramData_image.read_vram);
-	drawing = draw_stg.do;
 
-	instruct gs.view_on par{
+//	reg_wr draw_busy_count<4>;
+//	if(^draw_stg.do){
+//		if(draw_busy_count!=0) draw_busy_count--;
+//	}
+	drawing = draw_stg.do;// | (draw_busy_count!=0x0);
+
+	instruct fill.view_on par{
 		view_on();
-		view_x = gs.view_x;
-		view_y = gs.view_y;
-		view_R = gs.out_R;
-		view_G = gs.out_G;
-		view_B = gs.out_B;
+		view_x = fill.view_x;
+		view_y = fill.view_y;
+		view_R = fill.out_R;
+		view_G = fill.out_G;
+		view_B = fill.out_B;
+	}
+
+	instruct poly.view_on par{
+		view_on();
+		view_x = poly.view_x;
+		view_y = poly.view_y;
+		view_R = poly.out_R;
+		view_G = poly.out_G;
+		view_B = poly.out_B;
 	}
 
 	instruct rect.view_on par{
@@ -338,56 +603,36 @@ gs.dbg_in = dbg_in;
 		view_B = rect.out_B;
 	}
 
-	instruct texrect.view_on par{
-		view_on();
-		view_x = texrect.view_x;
-		view_y = texrect.view_y;
-		view_R = texrect.out_R;
-		view_G = texrect.out_G;
-		view_B = texrect.out_B;
+	instruct fill.vram_write_req par{
+		vram_write_req(fill.vram_write_adrs, fill.vram_write_data);
+	}
+	instruct poly.vram_write_req par{
+		vram_write_req(poly.vram_adrs, poly.vram_write_data);
+	}
+	instruct poly.vram_read_req par{
+		vram_read_req(poly.vram_adrs);
+	}
+	instruct rect.vram_read_req par{
+		vram_read_req(rect.vram_read_adrs);
 	}
 
-	instruct gs.vram_write_req par{
-//if(VramData_image.read_vram | ReadData | vram_read_req) halt(0xA1); // no
-		vram_write_req(gs.vram_write_adrs, gs.vram_write_data);
-	}
-	instruct rect.vram_write_req par{
-//if(VramData_image.read_vram | ReadData | vram_read_req) halt(0xA2); // no
-		vram_write_req(rect.vram_write_adrs, rect.vram_write_data);
-	}
-	instruct texrect.vram_read_req par{
-		vram_read_req(texrect.vram_read_adrs);
-//if(VramData_image.write_vram) halt(0xA2); // no
-//if(WriteData) halt(0xA3); // no
-//if(vram_write_req) halt(0xA4); // no
-	}
-
-//if(gs.vram_write_req & texrect.vram_read_req) halt(0xA6);
-//if(rect.vram_write_req & texrect.vram_read_req) halt(0xA7);
-//if(gs.vram_write_req & vram_write) halt(0xA8);
-//if(gs.vram_write_req & vram_read_req) halt(0xA9); // no
-//if(rect.vram_write_req & vram_write) halt(0xAA);
-//if(rect.vram_write_req & vram_read_req) halt(0xAB); // no
-//if(texrect.vram_read_req & vram_write_req) halt(0xAC); // no
-//if(texrect.vram_read_req & vram_read) halt(0xAD);
-//if(vram_write & vram_read) halt(0xAE); // no
 //if(vram_write_req & vram_read_req) halt(0xAF); // これ
-//if(VramData_image.write_vram & VramData_image.read_vram) halt(0xA1); // no
 //if(VramData_image.write_vram & vram_read_req) halt(0xA2); // これ
 //if(VramData_image.read_vram & vram_write_req) halt(0xA3); // これ
 // とりあえずread_adrsとwrite_adrsを分けてノイズを消した
 
 	instruct vram_write_ack par{
-		gs.vram_ack();
-		rect.vram_ack();
+		poly.vram_ack();
+		fill.vram_ack();
 	}
 	instruct vram_read_ack par{
-		texrect.vram_ack();
+		poly.vram_ack();
+		rect.vram_ack();
 	}
-	texrect.vram_read_data = vram_read_data;
+	poly.vram_read_data = vram_read_data;
+	rect.vram_read_data = vram_read_data;
 
 	instruct vram_write par{
-//if(vram_read_req) halt(0xA1); // no
 		vram_write_req(io_vram_write_adrs, io_vram_din);
 		io_vram_write_adrs_reg := io_vram_write_adrs;
 		io_vram_din_reg := io_vram_din;
@@ -398,7 +643,6 @@ gs.dbg_in = dbg_in;
 		vram_write_wait := 0b0;
 	}
 	instruct vram_read par{
-//if(vram_write_req) halt(0xA2); // no
 		vram_read_req(io_vram_read_adrs);
 		io_vram_read_adrs_reg := io_vram_read_adrs;
 		vram_read_wait := 0b1;
@@ -409,10 +653,10 @@ gs.dbg_in = dbg_in;
 		vram_read_data_reg := vram_read_data;
 	}
 
-vraming = VramData_image.write_vram | VramData_image.read_vram;
+	vram_busy = VramData_image.write_vram | VramData_image.read_vram;
 
 	stage VramData_image {
-		reg_wr pix, curPixel<19>;
+		reg_wr pix, curPixel<19>, f_write_end, f_read_end;
 		first_state st_pix;
 		state st_pix if((
 			(VramData_image.read_vram & (^vram_read_wait)) | 
@@ -425,12 +669,18 @@ vraming = VramData_image.write_vram | VramData_image.read_vram;
 			vram_height = CommandBuffer[2]<31:16>;
 
 			if(VramData_image.write_vram){
-//if(vram_read_req) halt(0xA6); // no
 				vram_write(vram_p + curPixel, io_write_data<15:0>);
 				io_write_data := io_write_data >> 16;
+/*
+view_on();
+view_x = CommandBuffer[1]<9:0> + VramPosX<9:0>;
+view_y = CommandBuffer[1]<24:16> + VramPosY<8:0>;
+view_R = io_write_data<4:0> || 0b111;
+view_G = io_write_data<9:5> || 0b111;
+view_B = io_write_data<14:10> || 0b111;
+*/
 			}
 			if(VramData_image.read_vram){
-//if(vram_write_req) halt(0xA7); // no
 				vram_read(vram_p + curPixel);
 			}
 			goto st_wait;
@@ -441,7 +691,12 @@ vraming = VramData_image.write_vram | VramData_image.read_vram;
 					BufferOffset := 0;
 					VramPosY := 0;
 					curPixel := 0;
-					if(VramData_image.read_vram) status &= ^0x08000000; // image send end
+					if(VramData_image.write_vram) f_write_end := 0b1;
+					if(VramData_image.read_vram){
+						// image send end
+						status_ready_send_vramtocpu := 0b0;
+						f_read_end := 0b1;
+					}
 				}
 				else{
 					curPixel += 0b0000000010000000001 - (0b000||vram_width); // +1024+1
@@ -459,25 +714,40 @@ vraming = VramData_image.write_vram | VramData_image.read_vram;
 			){
 
 			if(VramData_image.write_vram){
+				if(f_write_end){
+					f_write_end := 0b0;
+					pix := 0b0;
+				//	BufferOffset := 0;
+					finish;
+				}
+				else{
+					if(pix==0b1) finish;
+					pix := ^pix;
+				}
 				goto st_pix;
-				if(pix==0b1) finish;
 			}
 
-			if(VramData_image.read_vram) any{
-				pix==0b0 : par{
-					dout_reg := dout_reg<31:16> || vram_read_data_reg;
-					goto st_pix;
+			if(VramData_image.read_vram){
+				any{
+					pix==0b0 : par{
+						dout_reg := dout_reg<31:16> || vram_read_data_reg;
+						goto st_pix;
+					}
+					pix==0b1 : par{
+						dout_reg := vram_read_data_reg || dout_reg<15:0>;
+						goto st_rack;
+					}
 				}
-				pix==0b1 : par{
-					dout_reg := vram_read_data_reg || dout_reg<15:0>;
-					goto st_rack;
-				}
+				pix := ^pix;
 			}
-
-			pix := ^pix;
 		}
 		state st_rack par{
 			read_ack(); // for ReadData vram2wmem
+			if(f_read_end){
+				f_read_end := 0b0;
+			//	status_ready_send_vramtocpu := 0b0;
+			//	BufferOffset := 0;
+			}
 			goto st_pix;
 			finish;
 		}
@@ -487,101 +757,243 @@ vraming = VramData_image.write_vram | VramData_image.read_vram;
 		first_state st1;
 		state st1 par{
 			any{
-				cmd_reg==0x02 : par{ // FillFramebufferRect
+				cmd==0x02 : par{
+					// FillFramebufferRect
 					px1 := CommandBuffer[1]<10:0>;
 					py1 := CommandBuffer[1]<26:16>;
 					pc1 := CommandBuffer[0]<23:0>;
 					px2 := CommandBuffer[2]<10:0>;
 					py2 := CommandBuffer[2]<26:16>;
+					fill.draw();
+					goto stend;
+				}
+				(cmd==0x20) | (cmd==0x21) | (cmd==0x22) | (cmd==0x23) : par{
+					// Mono3PointPoly
+					px1 := CommandBuffer[1]<10:0>;
+					py1 := CommandBuffer[1]<26:16>;
+					pc1 := CommandBuffer[0]<23:0>;
+					px2 := CommandBuffer[2]<10:0>;
+					py2 := CommandBuffer[2]<26:16>;
+					pc2 := CommandBuffer[0]<23:0>;
+					px3 := CommandBuffer[3]<10:0>;
+					py3 := CommandBuffer[3]<26:16>;
+					pc3 := CommandBuffer[0]<23:0>;
+					poly.draw();
+					goto stend;
+				}
+				(cmd==0x24) | (cmd==0x25) | (cmd==0x26) | (cmd==0x27) : par{
+					// Textured3PointPoly
+					px1 := CommandBuffer[1]<10:0>;
+					py1 := CommandBuffer[1]<26:16>;
+					pc1 := CommandBuffer[0]<23:0>;
+					pu1 := CommandBuffer[2]<7:0>;
+					pv1 := CommandBuffer[2]<15:8>;
+					px2 := CommandBuffer[3]<10:0>;
+					py2 := CommandBuffer[3]<26:16>;
+					pc2 := CommandBuffer[0]<23:0>;
+					pu2 := CommandBuffer[4]<7:0>;
+					pv2 := CommandBuffer[4]<15:8>;
+					px3 := CommandBuffer[5]<10:0>;
+					py3 := CommandBuffer[5]<26:16>;
+					pc3 := CommandBuffer[0]<23:0>;
+					pu3 := CommandBuffer[6]<7:0>;
+					pv3 := CommandBuffer[6]<15:8>;
+					clut := CommandBuffer[2]<31:16>;
+					tpage := CommandBuffer[4]<29:16>;
+					status := status<31:9> || CommandBuffer[4]<24:16>;
+					poly.draw();
+					goto stend;
+				}
+				(cmd==0x28) | (cmd==0x29) | (cmd==0x2A) | (cmd==0x2B) : par{
+					// Mono4PointPoly
+					px1 := CommandBuffer[1]<10:0>;
+					py1 := CommandBuffer[1]<26:16>;
+					pc1 := CommandBuffer[0]<23:0>;
+					px2 := CommandBuffer[2]<10:0>;
+					py2 := CommandBuffer[2]<26:16>;
+					pc2 := CommandBuffer[0]<23:0>;
+					px3 := CommandBuffer[3]<10:0>;
+					py3 := CommandBuffer[3]<26:16>;
+					pc3 := CommandBuffer[0]<23:0>;
+					poly.draw();
+					goto st2;
+				}
+				(cmd==0x2C) | (cmd==0x2D) | (cmd==0x2E) | (cmd==0x2F) : par{
+					// MonoTextured4PointPoly
+					px1 := CommandBuffer[1]<10:0>;
+					py1 := CommandBuffer[1]<26:16>;
+					px2 := CommandBuffer[3]<10:0>;
+					py2 := CommandBuffer[3]<26:16>;
+					px3 := CommandBuffer[5]<10:0>;
+					py3 := CommandBuffer[5]<26:16>;
+					pu1 := CommandBuffer[2]<7:0>;
+					pv1 := CommandBuffer[2]<15:8>;
+					pu2 := CommandBuffer[4]<7:0>;
+					pv2 := CommandBuffer[4]<15:8>;
+					pu3 := CommandBuffer[6]<7:0>;
+					pv3 := CommandBuffer[6]<15:8>;
+					clut := CommandBuffer[2]<31:16>;
+					tpage := CommandBuffer[4]<29:16>;
+					status := status<31:9> || CommandBuffer[4]<24:16>;
+					pc1 := CommandBuffer[0]<23:0>;
+					pc2 := CommandBuffer[0]<23:0>;
+					pc3 := CommandBuffer[0]<23:0>;
+					poly.draw();
+					goto st2;
+				}
+				(cmd==0x30) | (cmd==0x31) | (cmd==0x32) | (cmd==0x33) : par{
+					// Gouraud3PointPoly
+					px1 := CommandBuffer[1]<10:0>;
+					py1 := CommandBuffer[1]<26:16>;
+					pc1 := CommandBuffer[0]<23:0>;
+					px2 := CommandBuffer[3]<10:0>;
+					py2 := CommandBuffer[3]<26:16>;
+					pc2 := CommandBuffer[2]<23:0>;
+					px3 := CommandBuffer[5]<10:0>;
+					py3 := CommandBuffer[5]<26:16>;
+					pc3 := CommandBuffer[4]<23:0>;
+					poly.draw();
+					goto stend;
+				}
+				(cmd==0x34) | (cmd==0x35) | (cmd==0x36) | (cmd==0x37) : par{
+					// GouraudTextured3PointPoly
+					px1 := CommandBuffer[1]<10:0>;
+					py1 := CommandBuffer[1]<26:16>;
+					pc1 := CommandBuffer[0]<23:0>;
+					pu1 := CommandBuffer[2]<7:0>;
+					pv1 := CommandBuffer[2]<15:8>;
+					px2 := CommandBuffer[4]<10:0>;
+					py2 := CommandBuffer[4]<26:16>;
+					pc2 := CommandBuffer[3]<23:0>;
+					pu2 := CommandBuffer[5]<7:0>;
+					pv2 := CommandBuffer[5]<15:8>;
+					px3 := CommandBuffer[7]<10:0>;
+					py3 := CommandBuffer[7]<26:16>;
+					pc3 := CommandBuffer[6]<23:0>;
+					pu3 := CommandBuffer[8]<7:0>;
+					pv3 := CommandBuffer[8]<15:8>;
+					clut := CommandBuffer[2]<31:16>;
+					tpage := CommandBuffer[5]<29:16>;
+					status := status<31:9> || CommandBuffer[5]<24:16>;
+					poly.draw();
+					goto stend;
+				}
+				(cmd==0x38) | (cmd==0x39) | (cmd==0x3A) | (cmd==0x3B) : par{
+					// Gouraud4PointPoly
+					px1 := CommandBuffer[1]<10:0>;
+					py1 := CommandBuffer[1]<26:16>;
+					pc1 := CommandBuffer[0]<23:0>;
+					px2 := CommandBuffer[3]<10:0>;
+					py2 := CommandBuffer[3]<26:16>;
+					pc2 := CommandBuffer[2]<23:0>;
+					px3 := CommandBuffer[5]<10:0>;
+					py3 := CommandBuffer[5]<26:16>;
+					pc3 := CommandBuffer[4]<23:0>;
+					poly.draw();
+					goto st2;
+				}
+				(cmd==0x3C) | (cmd==0x3D) | (cmd==0x3E) | (cmd==0x3F) : par{
+					// GouraudTextured4PointPoly
+					pc1 := CommandBuffer[0]<23:0>;
+					px1 := CommandBuffer[1]<10:0>;
+					py1 := CommandBuffer[1]<26:16>;
+					pu1 := CommandBuffer[2]<7:0>;
+					pv1 := CommandBuffer[2]<15:8>;
+					clut := CommandBuffer[2]<31:16>;
+					pc2 := CommandBuffer[3]<23:0>;
+					px2 := CommandBuffer[4]<10:0>;
+					py2 := CommandBuffer[4]<26:16>;
+					pu2 := CommandBuffer[5]<7:0>;
+					pv2 := CommandBuffer[5]<15:8>;
+					tpage := CommandBuffer[5]<29:16>;
+					status := status<31:9> || CommandBuffer[5]<24:16>;
+					pc3 := CommandBuffer[6]<23:0>;
+					px3 := CommandBuffer[7]<10:0>;
+					py3 := CommandBuffer[7]<26:16>;
+					pu3 := CommandBuffer[8]<7:0>;
+					pv3 := CommandBuffer[8]<15:8>;
+					poly.draw();
+					goto st2;
+				}
+				(cmd==0x60) | (cmd==0x61) | (cmd==0x62) | (cmd==0x63) | // 3
+				(cmd==0x68) | (cmd==0x69) | (cmd==0x6A) | (cmd==0x6B) | // 2
+				(cmd==0x70) | (cmd==0x71) | (cmd==0x72) | (cmd==0x73) | // 2
+				(cmd==0x78) | (cmd==0x79) | (cmd==0x7A) | (cmd==0x7B) : par{ // 2
+					// MonoRect
+					pc1 := CommandBuffer[0]<23:0>;
+					px1 := CommandBuffer[1]<10:0>;
+					py1 := CommandBuffer[1]<26:16>;
+					sel w<11>, h<11>;
+					any{
+						(cmd==0x60) | (cmd==0x61) | (cmd==0x62) | (cmd==0x63) : par{
+							w = 0b0 || CommandBuffer[2]<9:0>;
+							h = 0b00 || CommandBuffer[2]<24:16>;
+						}
+						(cmd==0x68) | (cmd==0x69) | (cmd==0x6A) | (cmd==0x6B) : par{
+							w = 1;
+							h = 1;
+						}
+						(cmd==0x70) | (cmd==0x71) | (cmd==0x72) | (cmd==0x73) : par{
+							w = 8;
+							h = 8;
+						}
+						(cmd==0x78) | (cmd==0x79) | (cmd==0x7A) | (cmd==0x7B) : par{
+							w = 16;
+							h = 16;
+						}
+					}
+					px2 := CommandBuffer[1]<10:0> + w;
+					py2 := CommandBuffer[1]<26:16> + h;
 					rect.draw();
 					goto stend;
 				}
-				(cmd_reg==0x20) | (cmd_reg==0x22) : par{ // Mono3PointPoly
-					px1 := CommandBuffer[1]<10:0>;
-					py1 := CommandBuffer[1]<26:16>;
+				(cmd==0x64) | (cmd==0x65) | (cmd==0x66) | (cmd==0x67) | // 4
+				(cmd==0x6C) | (cmd==0x6D) | (cmd==0x6E) | (cmd==0x6F) | // 3
+				(cmd==0x74) | (cmd==0x75) | (cmd==0x76) | (cmd==0x77) | // 3
+				(cmd==0x7C) | (cmd==0x7D) | (cmd==0x7E) | (cmd==0x7F) : par{ // 3
+					// TexturedRect
 					pc1 := CommandBuffer[0]<23:0>;
-					px2 := CommandBuffer[2]<10:0>;
-					py2 := CommandBuffer[2]<26:16>;
-					pc2 := CommandBuffer[0]<23:0>;
-					px3 := CommandBuffer[3]<10:0>;
-					py3 := CommandBuffer[3]<26:16>;
-					pc3 := CommandBuffer[0]<23:0>;
-					gs.draw();
-					goto stend;
-				}
-				cmd_reg==0x28 : par{ // Mono4PointPoly
 					px1 := CommandBuffer[1]<10:0>;
 					py1 := CommandBuffer[1]<26:16>;
-					pc1 := CommandBuffer[0]<23:0>;
-					px2 := CommandBuffer[2]<10:0>;
-					py2 := CommandBuffer[2]<26:16>;
-					pc2 := CommandBuffer[0]<23:0>;
-					px3 := CommandBuffer[3]<10:0>;
-					py3 := CommandBuffer[3]<26:16>;
-					pc3 := CommandBuffer[0]<23:0>;
-					gs.draw();
-					goto st2;
-				}
-				(cmd_reg==0x2C) | (cmd_reg==0x2D) | (cmd_reg==0x2F) : par{ // Textured4PointPoly
-					px1 := CommandBuffer[1]<10:0>;
-					py1 := CommandBuffer[1]<26:16>;
-					px4 := CommandBuffer[7]<10:0>;
-					py4 := CommandBuffer[7]<26:16>;
 					pu1 := CommandBuffer[2]<7:0>;
 					pv1 := CommandBuffer[2]<15:8>;
-					pu4 := CommandBuffer[8]<7:0>;
-					pv4 := CommandBuffer[8]<15:8>;
+					sel w<11>, h<11>;
+					any{
+						(cmd==0x64) | (cmd==0x65) | (cmd==0x66) | (cmd==0x67) : par{
+							w = 0b0 || CommandBuffer[3]<9:0>;
+							h = 0b00 || CommandBuffer[3]<24:16>;
+						}
+						(cmd==0x6C) | (cmd==0x6D) | (cmd==0x6E) | (cmd==0x6F) : par{
+							w = 1;
+							h = 1;
+						}
+						(cmd==0x74) | (cmd==0x75) | (cmd==0x76) | (cmd==0x77) : par{
+							w = 8;
+							h = 8;
+						}
+						(cmd==0x7C) | (cmd==0x7D) | (cmd==0x7E) | (cmd==0x7F) : par{
+							w = 16;
+							h = 16;
+						}
+					}
+					px2 := CommandBuffer[1]<10:0> + w;
+					py2 := CommandBuffer[1]<26:16> + h;
+					pu2 := CommandBuffer[2]<7:0> + w<7:0>;
+					pv2 := CommandBuffer[2]<15:8> + h<7:0>;
 					clut := CommandBuffer[2]<31:16>;
-					tpage := CommandBuffer[4]<31:16>;
-					status := status<31:9> || CommandBuffer[4]<24:16>;
-					texrect.draw();
+					rect.draw();
 					goto stend;
 				}
-				cmd_reg==0x30 : par{ // Gouraud3PointPoly
-					px1 := CommandBuffer[1]<10:0>;
-					py1 := CommandBuffer[1]<26:16>;
-					pc1 := CommandBuffer[0]<23:0>;
-					px2 := CommandBuffer[3]<10:0>;
-					py2 := CommandBuffer[3]<26:16>;
-					pc2 := CommandBuffer[2]<23:0>;
-					px3 := CommandBuffer[5]<10:0>;
-					py3 := CommandBuffer[5]<26:16>;
-					pc3 := CommandBuffer[4]<23:0>;
-					gs.draw();
-					goto stend;
-				}
-				cmd_reg==0x38 : par{ // Gouraud4PointPoly
-					px1 := CommandBuffer[1]<10:0>;
-					py1 := CommandBuffer[1]<26:16>;
-					pc1 := CommandBuffer[0]<23:0>;
-					px2 := CommandBuffer[3]<10:0>;
-					py2 := CommandBuffer[3]<26:16>;
-					pc2 := CommandBuffer[2]<23:0>;
-					px3 := CommandBuffer[5]<10:0>;
-					py3 := CommandBuffer[5]<26:16>;
-					pc3 := CommandBuffer[4]<23:0>;
-					gs.draw();
-					goto st2;
-				}
-				cmd_reg==0x65 : par{ // Sprite
-					px1 := CommandBuffer[1]<10:0>;
-					py1 := CommandBuffer[1]<26:16>;
-					px4 := CommandBuffer[1]<10:0> + CommandBuffer[3]<10:0>;
-					py4 := CommandBuffer[1]<26:16> + CommandBuffer[3]<26:16>;
-					pu1 := CommandBuffer[2]<7:0>;
-					pv1 := CommandBuffer[2]<15:8>;
-					pu4 := CommandBuffer[2]<7:0> + CommandBuffer[3]<7:0>;
-					pv4 := CommandBuffer[2]<15:8> + CommandBuffer[3]<23:16>;
-					clut := CommandBuffer[2]<31:16>;
-				//	tpage := CommandBuffer[4]<31:16>;
-					texrect.draw();
-					goto stend;
+				else : par{
+dbg_reg := 0x000000||cmd;
+					halt(0xA6);
 				}
 			}
 		}
-		state st2 if(^gs.drawing){
+		state st2 if(^poly.drawing){
 			any{
-				cmd_reg==0x28 : par{ // Mono4PointPoly
+				(cmd==0x28) | (cmd==0x29) | (cmd==0x2A) | (cmd==0x2B) : par{
+					// Mono4PointPoly
 					px1 := CommandBuffer[2]<10:0>;
 					py1 := CommandBuffer[2]<26:16>;
 					pc1 := CommandBuffer[0]<23:0>;
@@ -591,25 +1003,28 @@ vraming = VramData_image.write_vram | VramData_image.read_vram;
 					px3 := CommandBuffer[4]<10:0>;
 					py3 := CommandBuffer[4]<26:16>;
 					pc3 := CommandBuffer[0]<23:0>;
-					gs.draw();
+					poly.draw();
 					goto stend;
 				}
-/*
-				(cmd_reg==0x2C) | (cmd_reg==0x2D) | (cmd_reg==0x2F) : par{ // Textured4PointPoly
+				(cmd==0x2C) | (cmd==0x2D) | (cmd==0x2E) | (cmd==0x2F) : par{
+					// Textured4PointPoly
 					px1 := CommandBuffer[3]<10:0>;
 					py1 := CommandBuffer[3]<26:16>;
-					pc1 := CommandBuffer[0]<23:0>;
+					pu1 := CommandBuffer[4]<7:0>;
+					pv1 := CommandBuffer[4]<15:8>;
 					px2 := CommandBuffer[5]<10:0>;
 					py2 := CommandBuffer[5]<26:16>;
-					pc2 := CommandBuffer[0]<23:0>;
+					pu2 := CommandBuffer[6]<7:0>;
+					pv2 := CommandBuffer[6]<15:8>;
 					px3 := CommandBuffer[7]<10:0>;
 					py3 := CommandBuffer[7]<26:16>;
-					pc3 := CommandBuffer[0]<23:0>;
-					gs.draw();
+					pu3 := CommandBuffer[8]<7:0>;
+					pv3 := CommandBuffer[8]<15:8>;
+					poly.draw();
 					goto stend;
 				}
-*/
-				cmd_reg==0x38 : par{ // Gouraud4PointPoly
+				(cmd==0x38) | (cmd==0x39) | (cmd==0x3A) | (cmd==0x3B) : par{
+					// Gouraud4PointPoly
 					px1 := CommandBuffer[3]<10:0>;
 					py1 := CommandBuffer[3]<26:16>;
 					pc1 := CommandBuffer[2]<23:0>;
@@ -619,20 +1034,40 @@ vraming = VramData_image.write_vram | VramData_image.read_vram;
 					px3 := CommandBuffer[7]<10:0>;
 					py3 := CommandBuffer[7]<26:16>;
 					pc3 := CommandBuffer[6]<23:0>;
-					gs.draw();
+					poly.draw();
 					goto stend;
+				}
+				(cmd==0x3C) | (cmd==0x3D) | (cmd==0x3E) | (cmd==0x3F) : par{
+					// GouraudTextured4PointPoly
+					pc1 := CommandBuffer[3]<23:0>;
+					px1 := CommandBuffer[4]<10:0>;
+					py1 := CommandBuffer[4]<26:16>;
+					pu1 := CommandBuffer[5]<7:0>;
+					pv1 := CommandBuffer[5]<15:8>;
+					pc2 := CommandBuffer[6]<23:0>;
+					px2 := CommandBuffer[7]<10:0>;
+					py2 := CommandBuffer[7]<26:16>;
+					pu2 := CommandBuffer[8]<7:0>;
+					pv2 := CommandBuffer[8]<15:8>;
+					pc3 := CommandBuffer[9]<23:0>;
+					px3 := CommandBuffer[10]<10:0>;
+					py3 := CommandBuffer[10]<26:16>;
+					pu3 := CommandBuffer[11]<7:0>;
+					pv3 := CommandBuffer[11]<15:8>;
+					poly.draw();
+					goto stend;
+				}
+				else : par{
+dbg_reg := 0x000000||cmd;
+					halt(0xA7);
 				}
 			}
 		}
 		state stend par{
-			if((^gs.drawing) & (^rect.drawing) & (^texrect.drawing)){
-				reg_wr end_wait<2>;
-				end_wait++;
-				if(/&end_wait){
-					status |= 0x04000000;
-					goto st1;
-					finish;
-				}
+			if((^fill.drawing) & (^poly.drawing) & (^rect.drawing)){
+			//	BufferOffset := 0;
+				goto st1;
+				finish;
 			}
 		}
 	}

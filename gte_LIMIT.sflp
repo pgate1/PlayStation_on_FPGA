@@ -17,6 +17,18 @@ circuit gte_LIMIT
 	instrin limB3(limB3_val, limB3_lim);
 	output limB3_ret<16>;
 
+	input limC1_val<32>;
+	instrin limC1(limC1_val);
+	output limC1_ret<8>;
+
+	input limC2_val<32>;
+	instrin limC2(limC2_val);
+	output limC2_ret<8>;
+
+	input limC3_val<32>;
+	instrin limC3(limC3_val);
+	output limC3_ret<8>;
+
 	input limD_val<32>;
 	instrin limD(limD_val);
 	output limD_ret<16>;
@@ -42,11 +54,13 @@ static inline s64 LIM(s64 value, s64 max, s64 min, u32 f) {
 */
 	instruct limB1 par{
 		any{
-			(limB1_val<31>==0b0) & (limB1_val<15:14>==0b10) : par{ // value > 0x00007FFF
+		//	(limB1_val<31>==0b0) & (limB1_val<30:15>!=0x0000) : par{ // value > 0x00007FFF
+			(limB1_val<31>==0b0) & (/|limB1_val<30:15>) : par{ // value > 0x00007FFF
 				set_FLAG(0x01000000);
 				limB1_ret = 0x7FFF;
 			}
-			(limB1_lim==0b0) & (limB1_val<31>==0b1) & (limB1_val<15:14>==0b01) : par{ // value < 0xFFFF8000
+		//	(limB1_lim==0b0) & (limB1_val<31>==0b1) & (limB1_val<30:15>!=0xFFFF) : par{ // value < 0xFFFF8000
+			(limB1_lim==0b0) & (limB1_val<31>==0b1) & (^/&limB1_val<30:15>) : par{ // value < 0xFFFF8000
 				set_FLAG(0x01000000);
 				limB1_ret = 0x8000;
 			}
@@ -60,11 +74,13 @@ static inline s64 LIM(s64 value, s64 max, s64 min, u32 f) {
 
 	instruct limB2 par{
 		any{
-			(limB2_val<31>==0b0) & (limB2_val<15:14>==0b10) : par{ // value > 0x00007FFF
+		//	(limB2_val<31>==0b0) & (limB2_val<30:15>!=0x0000) : par{ // value > 0x00007FFF
+			(limB2_val<31>==0b0) & (/|limB2_val<30:15>) : par{ // value > 0x00007FFF
 				set_FLAG(0x00800000);
 				limB2_ret = 0x7FFF;
 			}
-			(limB2_lim==0b0) & (limB2_val<31>==0b1) & (limB2_val<15:14>==0b01) : par{ // value < 0xFFFF8000
+		//	(limB2_lim==0b0) & (limB2_val<31>==0b1) & (limB2_val<30:15>!=0xFFFF) : par{ // value < 0xFFFF8000
+			(limB2_lim==0b0) & (limB2_val<31>==0b1) & (^/&limB2_val<30:15>) : par{ // value < 0xFFFF8000
 				set_FLAG(0x00800000);
 				limB2_ret = 0x8000;
 			}
@@ -78,11 +94,13 @@ static inline s64 LIM(s64 value, s64 max, s64 min, u32 f) {
 
 	instruct limB3 par{
 		any{
-			(limB3_val<31>==0b0) & (limB3_val<15:14>==0b10) : par{ // value > 0x00007FFF
+		//	(limB3_val<31>==0b0) & (limB3_val<30:15>!=0x0000) : par{ // value > 0x00007FFF
+			(limB3_val<31>==0b0) & (/|limB3_val<30:15>) : par{ // value > 0x00007FFF
 				set_FLAG(0x00400000);
 				limB3_ret = 0x7FFF;
 			}
-			(limB3_lim==0b0) & (limB3_val<31>==0b1) & (limB3_val<15:14>==0b01) : par{ // value < 0xFFFF8000
+		//	(limB3_lim==0b0) & (limB3_val<31>==0b1) & (limB3_val<30:15>!=0xFFFF) : par{ // value < 0xFFFF8000
+			(limB3_lim==0b0) & (limB3_val<31>==0b1) & (^/&limB3_val<30:15>) : par{ // value < 0xFFFF8000
 				set_FLAG(0x00400000);
 				limB3_ret = 0x8000;
 			}
@@ -93,25 +111,49 @@ static inline s64 LIM(s64 value, s64 max, s64 min, u32 f) {
 			else : limB3_ret = limB3_val<15:0>;
 		}
 	}
-/*
-	instruct limB3 par{
-		any{
-			(limB3_val<31>==0b0) & (limB3_val<30:15>!=0x0000) : par{ // value > 0x00007FFF
-				set_FLAG(0x00400000);
-				limB3_ret = 0x00007FFF;
+
+	// #define limC1(a) LIM((a), 0x00ff, 0x0000, (1 << 21))
+	instruct limC1 par{
+		any{ // ok
+			(limC1_val<31>==0b0) & (limC1_val<30:8>!=0) : par{ // value > 0x00FF
+				set_FLAG(0x00200000);
+				limC1_ret = 0xFF;
 			}
-			(limB3_lim==0b0) & (limB3_val<31>==0b1) & (limB3_val<30:15>!=0xFFFF) : par{ // value < 0xFFFF8000
-				set_FLAG(0x00400000);
-				limB3_ret = 0xFFFF8000;
+			limC1_val<31>==0b1 : par{ // value < 0x0000
+				set_FLAG(0x00200000);
+				limC1_ret = 0x00;
 			}
-			(limB3_lim==0b1) & (limB3_val<31>==0b1) : par{ // value < 0x00000000
-				set_FLAG(0x00400000);
-				limB3_ret = 0x00000000;
-			}
-			else : limB3_ret = limB3_val;
+			else : limC1_ret = limC1_val<7:0>;
 		}
 	}
-*/
+	// #define limC2(a) LIM((a), 0x00ff, 0x0000, (1 << 20))
+	instruct limC2 par{
+		any{ // ok
+			(limC2_val<31>==0b0) & (limC2_val<30:8>!=0) : par{ // value > 0x00FF
+				set_FLAG(0x00100000);
+				limC2_ret = 0xFF;
+			}
+			limC2_val<31>==0b1 : par{ // value < 0x0000
+				set_FLAG(0x00100000);
+				limC2_ret = 0x00;
+			}
+			else : limC2_ret = limC2_val<7:0>;
+		}
+	}
+	// #define limC3(a) LIM((a), 0x00ff, 0x0000, (1 << 19))
+	instruct limC3 par{
+		any{ // ok
+			(limC3_val<31>==0b0) & (limC3_val<30:8>!=0) : par{ // value > 0x00FF
+				set_FLAG(0x00080000);
+				limC3_ret = 0xFF;
+			}
+			limC3_val<31>==0b1 : par{ // value < 0x0000
+				set_FLAG(0x00080000);
+				limC3_ret = 0x00;
+			}
+			else : limC3_ret = limC3_val<7:0>;
+		}
+	}
 
 	// #define limD(a) LIM((a), 0xffff, 0x0000, (1 << 18))
 	instruct limD par{
