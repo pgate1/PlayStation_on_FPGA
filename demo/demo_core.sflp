@@ -5,7 +5,7 @@
 
 %i "sin_table.h"
 %i "cos_table.h"
-//%i "mul_s10.h"
+
 declare mul_s10 interface
 {
 	input a<10>, b<10>;
@@ -56,9 +56,19 @@ circuit demo_core
 
 	mem zs[4]<2> = {0};
 
-	// background 103items
+	// background 103 items
+	reg items<7> = 127;//103;
 	mem back_data[128]<32> = {
-		0xE4078280, // 表示範囲
+		0xE4078280, // 表示範囲 0111100000_1010000000 480x640
+
+		// 表示範囲テストFill
+	//	0x02FFFFFF, 0x0000_0000, 0x01DF_027F, // 白枠
+	//	0x02000000, 0x0002_0002, 0x01DB_027B  // 黒中
+
+		// 表示範囲テストPoly
+	//	0x28FFFFFF, 0x0000_0000, 0x0000_027F, 0x01DF_0000, 0x01DF_027F, // 白枠
+	//	0x28000000, 0x0002_0002, 0x0002_027D, 0x01DD_0002, 0x01DD_027D  // 黒中
+
 		0xE1000200, // ディザ有効
 		0x28200000, 0x00000000, 0x00000280, 0x01E00000, 0x01E00280,
 		0x30FF8080, 0x00F00140, 0x00200000, 0x015E024B, 0x00200000, 0x00F00262,
@@ -77,6 +87,7 @@ circuit demo_core
 		0x30FF8080, 0x00F00140, 0x00200000, 0x0022020C, 0x00200000, 0xFFE401AE,
 		0x30FF8080, 0x00F00140, 0x00200000, 0x0081024B, 0x00200000, 0x0022020C,
 		0x30FF8080, 0x00F00140, 0x00200000, 0x00F00262, 0x00200000, 0x0081024B
+
 	};
 
 	stage_name rotate { task do(); }
@@ -243,7 +254,7 @@ circuit demo_core
 		state st2 if(^drawing){
 			gpu_write_req(back_data[back_index]);
 			back_index++;
-			if(back_index==102){ // 103 items
+			if(back_index==(items-1)){
 				goto st1;
 				generate send_gpu_prim.do();
 				finish;
