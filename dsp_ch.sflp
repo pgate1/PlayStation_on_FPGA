@@ -23,7 +23,7 @@ declare mul_s16s8 interface
 
 %i "ADSR.h"
 %i "bsr_s24.h"
-
+/*
 declare gauss_rom
 {
 	input adrs<10>;
@@ -31,7 +31,7 @@ declare gauss_rom
 	instrin read;
 	instr_arg read(adrs);
 }
-
+*/
 %i "dsdac10.h"
 
 %d READ_HEAD  0b0
@@ -55,7 +55,7 @@ circuit dsp_ch
 	reg_wr vol_L<15>, vol_R<15>;
 	reg_wr pitch<14>, pitch_count<15>;
 
-	reg_wr ADSL_reg<16>, SRrate<16>;
+	reg_wr ADS_reg<16>, SR_reg<16>;
 	reg_wr brr_start_adrs<16>, brr_loop_adrs<16>;
 
 	instrout read_req;
@@ -100,6 +100,8 @@ circuit dsp_ch
 	dsdac10 ddac;
 	output disp_env;
 
+instrin env_omit;
+
 	instrself halt(hlt);
 	sel hlt<8>;
 	reg_wr h_code_reg<8>;
@@ -116,15 +118,15 @@ output dbg<32>;
 	if(read_wait.do) read_req();
 	vA = vA_reg;
 
-	env.AttackModeExp = ADSL_reg<15>;
-	env.AttackRate    = ADSL_reg<14:8>;
-	env.DecayRate     = ADSL_reg<7:4>;
-	env.SustainLevel  = ADSL_reg<3:0>;
-	env.SustainModeExp  = SRrate<15>;
-	env.SustainIncrease = SRrate<14>==0;
-	env.SustainRate     = SRrate<12:6>;
-	env.ReleaseModeExp  = SRrate<5>;
-	env.ReleaseRate     = SRrate<4:0>;
+	env.AttackModeExp = ADS_reg<15>;
+	env.AttackRate    = ADS_reg<14:8>;
+	env.DecayRate     = ADS_reg<7:4>;
+	env.SustainLevel  = ADS_reg<3:0>;
+	env.SustainModeExp  = SR_reg<15>;
+	env.SustainIncrease = SR_reg<14>==0;
+	env.SustainRate     = SR_reg<12:6>;
+	env.ReleaseModeExp  = SR_reg<5>;
+	env.ReleaseRate     = SR_reg<4:0>;
 	env.iSilent = iSilent;
 
 	if(sw_intpl_off) wave_data = decode_data;
@@ -133,7 +135,8 @@ output dbg<32>;
 //wave_data = decode_data;
 
 	// エンベロープ
-	envelope = env.Env<14:5>;
+	if(env_omit) envelope = 0;
+	else envelope = env.Env<14:5>;
 	// s16 * u10 = s26 -10 = s16
 	decenv_reg := env_mul.con(wave_data, 0b000000||envelope).dout<25:10>;
 
@@ -164,19 +167,22 @@ dbg = 0;//brr_loop_adrs<<3;
 		io_A==0x2 : vol_R := io_Din<14:0>; // Volume Right
 		io_A==0x4 : pitch := io_Din<13:0>; // Pitch
 		io_A==0x6 : brr_start_adrs := io_Din; // Startaddress of Sound
-		io_A==0x8 : ADSL_reg := io_Din; // Attack/Decay/Sustain level
-		io_A==0xA : SRrate := io_Din; // Sustain rate, Release Rate
+		io_A==0x8 : ADS_reg := io_Din; // Attack/Decay/Sustain level
+		io_A==0xA : SR_reg := io_Din; // Sustain rate, Release Rate
 		io_A==0xC : ; // Current ADSR volume
 		io_A==0xE : brr_loop_adrs := io_Din; // Loop address
 		else : halt(0x33);
 	}
 
 	instruct io_get any{
-		io_A==0x8 : io_Dout = ADSL_reg;
-		io_A==0xA : io_Dout = SRrate;
+		io_A==0x8 : io_Dout = ADS_reg;
+		io_A==0xA : io_Dout = SR_reg;
 		io_A==0xC : par{ // Current ADSR volume
 			if(bNew) io_Dout = 1;
-			else io_Dout = 0b0 || env.Env;
+			else{
+				if(env_omit) io_Dout = 0;
+				else io_Dout = 0b0 || env.Env;
+			}
 		}
 		else : halt(0x34);
 	}
