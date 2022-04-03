@@ -1,16 +1,16 @@
-Fitter Status : Successful - Wed Mar 17 23:14:40 2021
-Quartus II 64-Bit Version : 12.1 Build 243 01/31/2013 SP 1.33 SJ Web Edition
+Fitter Status : Successful - Sat Apr 02 15:07:03 2022
+Quartus II 64-Bit Version : 13.1.4 Build 182 03/12/2014 SJ Web Edition
 Revision Name : PlayStation
 Top-level Entity Name : PlayStation_top
 Family : Cyclone IV E
 Device : EP4CE115F29C7
 Timing Models : Final
-Total logic elements : 63,891 / 114,480 ( 56 % )
-    Total combinational functions : 60,080 / 114,480 ( 52 % )
-    Dedicated logic registers : 22,004 / 114,480 ( 19 % )
-Total registers : 22090
+Total logic elements : 73,305 / 114,480 ( 64 % )
+    Total combinational functions : 69,884 / 114,480 ( 61 % )
+    Dedicated logic registers : 23,908 / 114,480 ( 21 % )
+Total registers : 23994
 Total pins : 340 / 529 ( 64 % )
 Total virtual pins : 0
-Total memory bits : 3,187,328 / 3,981,312 ( 80 % )
-Embedded Multiplier 9-bit elements : 315 / 532 ( 59 % )
-Total PLLs : 2 / 4 ( 50 % )
+Total memory bits : 2,542,464 / 3,981,312 ( 64 % )
+Embedded Multiplier 9-bit elements : 416 / 532 ( 78 % )
+Total PLLs : 1 / 4 ( 25 % )
