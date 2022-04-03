@@ -39,7 +39,7 @@ circuit DMA_SPU
 	reg_wr bcr<32>;
 
 	stage_name run { task do(); }
-//	stage_name int_wait { task do(count_rst); }
+	stage_name int_wait { task do(count_rst); }
 
 	running = run.do;
 
@@ -104,13 +104,13 @@ circuit DMA_SPU
 		}
 		state st6 par{
 // とりあえずsound再生にはウェイトはいらないようだ
-			interrupt();
-		//	generate int_wait.do();
+		//	interrupt();
+			generate int_wait.do(0b1);
 			goto st1;
 			finish;
 		}
 	}
-/*
+
 	stage int_wait {
 		reg_wr int_wait_count<8>;
 		first_state st1;
@@ -129,5 +129,5 @@ circuit DMA_SPU
 			if(count_rst) goto st1;
 		}
 	}
-*/
+
 }

@@ -15,7 +15,7 @@ circuit DMA_CDR
 {
 	input DmaMADR_3<32>, DmaBCR_3<32>, DmaCHCR_3<32>;
 
-	output A<21>, Dout<8>;
+	output A<21>, Dout<32>;
 	instrout wram_write(A, Dout);
 
 	instrout dma_read_req();
@@ -37,8 +37,6 @@ sel h_code<8>;
 reg_wr halt_code_reg<8>;
 output halt_code<8>;
 
-mul_u16 dbg_mul;
-input intwaitm<4>;
 output dbg32<32>;
 reg_wr dbg32_reg<32>;
 
@@ -50,7 +48,7 @@ reg_wr dbg32_reg<32>;
 
 dbg32 = dbg32_reg;
 
-	running = Execute | run_dma.do;
+	running = /*Execute |*/ run_dma.do;
 
 	instruct Execute par{
 //if(int_wait.do) halt(0xB3);
@@ -60,7 +58,8 @@ dbg32 = dbg32_reg;
 	dma_size = DmaBCR_3<15:0> || 0b00;
 
 	stage run_dma {
-		reg_wr madr<21>, dma_count<18>, dma_data<8>;
+		reg_wr madr<21>, dma_count<18>;
+		mem dma_data[4]<8>;
 		first_state st1;
 		state st1 par{
 			any{
@@ -74,16 +73,17 @@ dbg32 = dbg32_reg;
 		state st2 par{
 //if(dma_size!=2048) halt(0xB5);
 			dma_read_req();
-			dma_count++;
 			goto st2w;
 		}
 		state st2w par{
-			dma_data := dma_read_data;
+			any(i=0;i<4;i++){
+				dma_count<1:0>==i : dma_data[i] := dma_read_data;
+			}
+			dma_count++;
 			goto st3;
 		}
 		state st3 if(wram_ack){
-//dbg32_reg += 0x000000||dma_data; // ok
-			wram_write(madr, dma_data);
+			if(madr<1:0>==3) wram_write(madr, dma_data[3]||dma_data[2]||dma_data[1]||dma_data[0]);
 			madr++;
 			goto st3w;
 		}
@@ -92,15 +92,12 @@ dbg32 = dbg32_reg;
 			else goto st2;
 		}
 		state st4 par{
-			goto st5;
-		}
-		state st5 par{
 			sel wait_count<16>;
 			any{
-				DmaCHCR_3==0x11000000 : wait_count = dma_size<17:2>;
-				DmaCHCR_3==0x11400100 : wait_count = 0b00 || dma_size<17:4>;
+				DmaCHCR_3==0x11000000 : wait_count = 8;// dma_size<17:2>;
+				DmaCHCR_3==0x11400100 : wait_count = 2;// 0b00 || dma_size<17:4>;
 			}
-			generate int_wait.do(dbg_mul.con(wait_count, 0x000||/*intwaitm*/0x2).dout, 0b1); // 0x2
+			generate int_wait.do(0x0000||wait_count, 0b1);
 			goto st1;
 			finish;
 		}
