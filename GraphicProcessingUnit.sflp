@@ -22,21 +22,29 @@ circuit GraphicProcessingUnit
 
 	reg_ws reset;
 
-	reg_wr status<32>, GPUdataRet<32>;
-	reg_wr status_drawing_evenodd;  // bit 31 0=Even or Vblank, 1=Odd
+	reg_wr GPUdataRet<32>;
+
+	reg_wr status_mask_bits<2>; // bit 12:11
+	reg_wr status_reverse_flag; // bit 14
+	reg_wr status_horizontal_resolution2; // bit 16
+	reg_wr status_horizontal_resolution1<2>; // bit 18:17
+	reg_wr status_vertical_resolution; // bit 19
+	reg_wr status_video_mode; // bit 20
+	reg_wr status_color_depth; // bit 21
+	reg_wr status_interlace; // bit 22
+	reg_ws status_display_disable; // bit 23
+//	sel status_data_request; // bit 25
+//	sel status_ready_recieve_cmd; // bit 26 0=No, 1=Ready
+	reg_wr status_ready_send_vramtocpu; // bit 27 0=No, 1=Ready
+	input busy_recieve_dmablock; // bit 28 0=No, 1=busy
 	reg_wr status_dma_direction<2>; // bit 30-29 0=Off, 1=?, 2=CPUtoGP0, 3=GPUtoCPU
-	input status_ready_recieve_dmablock; // bit 28 0=No, 1=Ready
-	reg_wr status_ready_send_vramtocpu;   // bit 27 0=No, 1=Ready
-	sel status_ready_recieve_cmd;      // bit 26 0=No, 1=Ready
-//	reg_wr status_dma_status<2>; // bit 25
+	reg_wr status_drawing_evenodd; // bit 31 0=Even or Vblank, 1=Odd
+
 	reg_wr vblank;
 
-	input dma_direction_n<2>;
-	instrin set_dma_direction(dma_direction_n);
-
-	reg_wr DispStartX<10>, DispStartY<10>;
-	reg_wr HorDispRangeStart<12>, HorDispRangeEnd<12>;
-	reg_wr VertDispRangeStart<10>, VertDispRangeEnd<11>;
+	reg_wr DispStartX<10>, DispStartY<9>;
+//	reg_wr HorDispRangeStart<12>, HorDispRangeEnd<12>;
+//	reg_wr VertDispRangeStart<10>, VertDispRangeEnd<10>;
 
 	reg_wr dispWidth<10>, dispHeight<9>; // W640<10>,H480<9>
 
@@ -46,6 +54,7 @@ circuit GraphicProcessingUnit
 	mem CommandBuffer[16]<32>;
 	reg_wr BufferOffset<4>;
 	reg_wr cmd_reg<8>;
+	reg_wr reg_E2<32>;
 
 	output busy, drawing, vram_busy;
 
@@ -68,6 +77,7 @@ circuit GraphicProcessingUnit
 	instrout view_on;
 	output view_x<10>, view_y<9>;
 	output view_R<8>, view_G<8>, view_B<8>;
+	instrout fill_view_on;
 
 	output dispW, dispH;
 
@@ -90,7 +100,8 @@ circuit GraphicProcessingUnit
 	instrself vram_read(io_vram_read_adrs);
 	reg_wr vram_read_wait, vram_write_wait;
 
-	instrin texture_thin;
+	instrin texture_full;
+	instrout display_flip, draw_notdisp_side;
 
 	instrself halt(halt_sel);
 	sel halt_sel<8>;
@@ -112,13 +123,21 @@ dbg = dbg_reg;
 
 	if(reset){
 		reset := 0b0;
-		status := 0x14802000;
+	//	status := 0x14802000;
 
 		status_drawing_evenodd := 0b0;
 		status_dma_direction := 0b00;
-	//	status_ready_recieve_dmablock := 0b1; // input
 		status_ready_send_vramtocpu := 0b0; // ok
 	//	status_ready_recieve_cmd := 0b1; // sel
+		status_display_disable := 0b1;
+		status_interlace := 0b0;
+		status_color_depth := 0b0;
+		status_video_mode := 0b0;
+		status_vertical_resolution := 0b0;
+		status_horizontal_resolution1 := 0b00;
+		status_horizontal_resolution2 := 0b0;
+		status_reverse_flag := 0b0;
+		status_mask_bits := 0b00;
 
 		GPUdataRet := 0x00000400;
 		BufferOffset := 0;
@@ -133,6 +152,8 @@ dbg = dbg_reg;
 		drawOffsetX := 0;
 		drawOffsetY := 0;
 		tpage := 14#0b0;
+
+		vblank := 0b1;
 	}
 
 	instruct write_status par{
@@ -148,7 +169,7 @@ dbg = dbg_reg;
 			din<31:24>==0x02 : ; // reset irq
 			din<31:24>==0x03 : par{
 				// display enable
-				status := status<31:24> || din<0> || status<22:0>;
+				status_display_disable :=  din<0>;
 			}
 			din<31:24>==0x04 : par{
 				// DMA transfer mode
@@ -156,15 +177,16 @@ dbg = dbg_reg;
 			}
 			din<31:24>==0x05 : par{
 				DispStartX := din<9:0>;
-				DispStartY := din<21:12>;
+				DispStartY := din<18:10>;
+				display_flip();
 			}
 			din<31:24>==0x06 : par{
-				HorDispRangeStart := din<11:0>;
-				HorDispRangeEnd := din<23:12>;
+			//	HorDispRangeStart := din<11:0>;
+			//	HorDispRangeEnd := din<23:12>;
 			}
 			din<31:24>==0x07 : par{
-				VertDispRangeStart := din<9:0>;
-				VertDispRangeEnd := din<20:10>;
+			//	VertDispRangeStart := din<9:0>;
+			//	VertDispRangeEnd := din<19:10>;
 			}
 			din<31:24>==0x08 : par{
 				switch(din<1:0>){
@@ -177,72 +199,82 @@ dbg = dbg_reg;
 					case 0: dispHeight := 240;
 					case 1: dispHeight := 480;
 				}
-				status := status<31:23> || din<5:0> || din<6> || status<15> || din<7> || status<13:0>;
+				status_horizontal_resolution1 := din<1:0>;
+				status_vertical_resolution := din<2>;
+				status_video_mode := din<3>;
+				status_color_depth := din<4>;
+				status_interlace := din<5>;
+				status_horizontal_resolution2 := din<6>;
+				status_reverse_flag := din<7>;
 			}
 			din<31:24>==0x10 : any{
-				din<7:0>==0x07 : GPUdataRet := 2;
+				din<3:0>==0x2 : GPUdataRet := reg_E2;
+				din<3:0>==0x3 : GPUdataRet := 12#0b0 || drawY || drawX;
+				din<3:0>==0x4 : GPUdataRet := 12#0b0 || drawH || drawW;
+				din<3:0>==0x5 : GPUdataRet := 10#0b0 || drawOffsetY || drawOffsetX;
+				din<3:0>==0x7 : GPUdataRet := 2; // GPU Version
+				din<3:0>==0x8 : GPUdataRet := 0;
+				else : par{
+dbg_reg := 0x0000000 || din<3:0>;
+					halt(0xA1);
+				}
 			}
 			else : halt(0xA2);
 		}
 	}
 
-	instruct set_dma_direction par{
-	//	status_dma_direction := dma_direction_n;
-	}
-
 	dispW = (dispWidth==512) | (dispWidth==640);
 	dispH = (dispHeight==480);
 
-	instruct vblank_begin vblank := 0b1;
+	instruct vblank_begin par{
+		vblank := 0b1;
+	}
 	instruct vblank_end vblank := 0b0;
+/*
 	instruct hsync par{
 		// mode interlace
 		if(status<22>) status_drawing_evenodd := ^status_drawing_evenodd;
 		else status_drawing_evenodd := 0b0;
 	}
-
+*/
 	instruct read_status par{
 
-		status_ready_recieve_cmd = 0b1; // 0xA7 0x20
-	//	status_ready_recieve_cmd = ^draw_stg.do; // 0xA5 0xFF
-	//	status_ready_recieve_cmd = ^(draw_stg.do | VramData_image.write_vram); // 0xA5 0xFF
-	//	status_ready_recieve_cmd = ^busy; // 0xA5 0xFF
-	//	status_ready_recieve_cmd = (BufferOffset==0); // 0xA7 0x20
-	//	status_ready_recieve_cmd = (BufferOffset==0) & ^busy; // 0xA5 0xFF CPU停止なら動く
+		sel status_ready_recieve_cmd; // bit 26 0=No, 1=Ready
+	//	status_ready_recieve_cmd = 0b1;
+		status_ready_recieve_cmd = ^busy;
 
 		sel status_data_request;
 		switch(status_dma_direction){
 			case 0: status_data_request = 0b0;
-			case 1: status_data_request = ^busy; // FIFO state 0:full, 1:not full
-			case 2: status_data_request = 0b1;//status_ready_recieve_dmablock; // CPU->GP0
+			case 1: status_data_request = BufferOffset==0;//busy_recieve_dmablock; // FIFO state 0:full, 1:not full
+			case 2: status_data_request = BufferOffset==0;//busy_recieve_dmablock; // CPU->GP0
 			case 3: status_data_request = status_ready_send_vramtocpu; // GPU->CPU
 		}
 
 		dout =
-			(status_drawing_evenodd | vblank) || // bit 31
+			(status_drawing_evenodd /*& ^vblank*/) || // bit 31
 			status_dma_direction || // bit 30-29
-			0b1 || //status_ready_recieve_dmablock || // bit 28
+			(BufferOffset==0) || // busy_recieve_dmablock || // bit 28
 			status_ready_send_vramtocpu || // bit 27
-			0b1 || //status_ready_recieve_cmd || // bit 26
-			0b0 || //status_data_request || // bit 25
+			(status_ready_recieve_cmd & (^status_data_request | ^busy_recieve_dmablock)) || // bit 26
+			status_data_request || // bit 25
 			0b0 || // bit 24 Interrupt Request
-			status<23> || // bit 23 Display Enable
-			status<22> || // bit 22 Vertical Interlace
-			status<21> || // bit 21 Display Area Color Depth
-			status<20> || // bit 20 Video Mode
-			status<19> || // bit 19 Vertical Resolution
-			status<18:17> || // bit 17-18 Horizontal Resolution 1
-			status<16> || // bit 16 Horizontal Resolution 2
+			status_display_disable || // bit 23 Display Enable
+			status_interlace || // bit 22 Vertical Interlace
+			status_color_depth || // bit 21 Display Area Color Depth
+			status_video_mode || // bit 20 Video Mode
+			status_vertical_resolution || // bit 19 Vertical Resolution
+			status_horizontal_resolution1 || // bit 17-18 Horizontal Resolution 1
+			status_horizontal_resolution2 || // bit 16 Horizontal Resolution 2
 			tpage<11>  || // bit 15 Texture Disable
-			status<14> || // bit 14 Reverseflag
-			status<13> || // bit 13 Interlace Field
-			status<12> || // bit 12 Draw Pixels
-			status<11> || // bit 11 Set Mask-bit when drawing pixels
+			status_reverse_flag || // bit 14 Reverseflag
+			0b1 || // bit 13 Interlace Field
+			status_mask_bits || // bit 12:11 Set Mask-bit when drawing pixels
 			tpage<10:0>;
 
-		status := dout;
-
-	//	status_drawing_evenodd := ^status_drawing_evenodd; // test
+		reg_wr count<2>;
+		count++;
+		if(/&count) status_drawing_evenodd := ^status_drawing_evenodd; // test
 	}
 
 	reg_wr ReadData_ack;
@@ -468,10 +500,11 @@ if(BufferOffset==15) halt(0xA9);
 			}
 
 			(cmd==0xE1) : par{
-			//	status := status<31:11> || din<10:0>;
 				tpage := din<13:0>;
 			}
-			(cmd==0xE2) : ;
+			(cmd==0xE2) : par{
+				reg_E2 := din;
+			}
 			(cmd==0xE3) : par{
 				drawX := din<9:0>;
 				drawY := din<19:10>;
@@ -484,8 +517,8 @@ if(BufferOffset==15) halt(0xA9);
 				drawOffsetX := din<10:0>;
 				drawOffsetY := din<21:11>;
 			}
-			(cmd==0xE6) : par{
-				status := status<31:13> || din<1:0> || status<10:0>;
+			(cmd==0xE6) : par{ // Mask Bit Setting
+				status_mask_bits := din<1:0>;
 			}
 
 			else : par{
@@ -504,39 +537,25 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 		fill.sw_outview_on();
 		poly.sw_outview_on();
 	}
-
+/*
 	instruct sw_view_half par{
 		fill.sw_view_half();
 		poly.sw_view_half();
 		rect.sw_view_half();
 	}
+*/
+	instruct texture_full /*if(poly.f_texture)*/ poly.texture_full();
 
-//	instruct texture_thin rect.texture_thin();
-
-poly.dbg_in = dbg_in;
-
-	// for width 320 of メタルギアソリッド
-	sel drawoffset_x<11>;
-	if((dispWidth==320) & ((drawOffsetX-320)<10>==0b0) & ^sw_view_half){ // drawOffsetX >= 320
-		drawoffset_x = drawOffsetX - 320;
-	}
-	else drawoffset_x = drawOffsetX;
-
-	// for height 240 of アインハンダー
-	sel drawoffset_y<11>;
-	if((dispHeight==240) & ((drawOffsetY-240)<10>==0b0) & ^sw_view_half){ // drawOffsetY >= 240
-		drawoffset_y = drawOffsetY - 240;
-	}
-	else drawoffset_y = drawOffsetY;
+//poly.dbg_in = dbg_in;
 
 	fill.con(
 		px1, py1, pc1,
 		px2, py2, drawX, drawY, drawW, drawH);
 
 	poly.con(
-		px1+drawoffset_x, py1+drawoffset_y, pc1, pu1, pv1,
-		px2+drawoffset_x, py2+drawoffset_y, pc2, pu2, pv2,
-		px3+drawoffset_x, py3+drawoffset_y, pc3, pu3, pv3,
+		px1+drawOffsetX, py1+drawOffsetY, pc1, pu1, pv1,
+		px2+drawOffsetX, py2+drawOffsetY, pc2, pu2, pv2,
+		px3+drawOffsetX, py3+drawOffsetY, pc3, pu3, pv3,
 		clut, tpage, drawX, drawY, drawW, drawH);
 	poly.f_dither = tpage<9>;
 	poly.f_texture = 
@@ -553,9 +572,9 @@ poly.dbg_in = dbg_in;
 		(cmd==0x32) | (cmd==0x3A) | (cmd==0x36) | ((cmd==0x37)) | (cmd==0x3E) | ((cmd==0x3F));
 
 	rect.con(
-		px1+drawoffset_x, py1+drawoffset_y,
-		px2+drawoffset_x, py2+drawoffset_y,
-		pc1, clut, tpage, pu1, pv1, pu2, pv2, drawW, drawH);
+		px1+drawOffsetX, py1+drawOffsetY,
+		px2+drawOffsetX, py2+drawOffsetY,
+		pc1, clut, tpage, pu1, pv1, pu2, pv2, drawX, drawY, drawW, drawH);
 	rect.f_texture =
 		(cmd==0x64) | (cmd==0x65) | (cmd==0x66) | (cmd==0x67) |
 		(cmd==0x6C) | (cmd==0x6D) | (cmd==0x6E) | (cmd==0x6F) |
@@ -568,27 +587,52 @@ poly.dbg_in = dbg_in;
 		(cmd==0x62) | (cmd==0x6A) | (cmd==0x66) | (cmd==0x67) | (cmd==0x6E) | (cmd==0x6F) |
 		(cmd==0x72) | (cmd==0x7A) | (cmd==0x76) | (cmd==0x77) | (cmd==0x7E) | (cmd==0x7F);
 
+	drawing = draw_stg.do;
+	vram_busy = VramData_image.write_vram | VramData_image.read_vram;
 	busy = (halt_code!=0x00) | (draw_stg.do | VramData_image.write_vram | VramData_image.read_vram);
 
-//	reg_wr draw_busy_count<4>;
-//	if(^draw_stg.do){
-//		if(draw_busy_count!=0) draw_busy_count--;
-//	}
-	drawing = draw_stg.do;// | (draw_busy_count!=0x0);
+	sel view_offset_x<10>;
+	any{
+		// for width 320 of メタルギアソリッド
+		(dispWidth==320) & ((drawOffsetX-320)<10>==0b0) & ^sw_view_half : par{ // drawOffsetX >= 320
+			view_offset_x = -320;
+		}
+		// for width 256 of PSXNICCC
+		(dispWidth==256) & ((drawOffsetX-256)<10>==0b0) & ^sw_view_half : par{ // drawOffsetX >= 256
+			view_offset_x = -256;
+		}
+		else : view_offset_x = 0;
+	}
+
+	sel view_offset_y<9>;
+	any{
+		// for height 240 of アインハンダー
+		(dispHeight==240) & ((drawOffsetY-240)<10>==0b0) & ^sw_view_half : par{ // drawOffsetY >= 240
+			view_offset_y = -240;
+		}
+		else : view_offset_y = 0;
+	}
+
+	// drawとdispが異なるなら
+	if((dispHeight==240) & (drawOffsetY!=(0b00||DispStartY))){
+		draw_notdisp_side();
+	}
+
 
 	instruct fill.view_on par{
 		view_on();
-		view_x = fill.view_x;
-		view_y = fill.view_y;
+		view_x = fill.view_x + view_offset_x;
+		view_y = fill.view_y + view_offset_y;
 		view_R = fill.out_R;
 		view_G = fill.out_G;
 		view_B = fill.out_B;
+		fill_view_on();
 	}
 
 	instruct poly.view_on par{
 		view_on();
-		view_x = poly.view_x;
-		view_y = poly.view_y;
+		view_x = poly.view_x + view_offset_x;
+		view_y = poly.view_y + view_offset_y;
 		view_R = poly.out_R;
 		view_G = poly.out_G;
 		view_B = poly.out_B;
@@ -596,8 +640,8 @@ poly.dbg_in = dbg_in;
 
 	instruct rect.view_on par{
 		view_on();
-		view_x = rect.view_x;
-		view_y = rect.view_y;
+		view_x = rect.view_x + view_offset_x;
+		view_y = rect.view_y + view_offset_y;
 		view_R = rect.out_R;
 		view_G = rect.out_G;
 		view_B = rect.out_B;
@@ -653,7 +697,6 @@ poly.dbg_in = dbg_in;
 		vram_read_data_reg := vram_read_data;
 	}
 
-	vram_busy = VramData_image.write_vram | VramData_image.read_vram;
 
 	stage VramData_image {
 		reg_wr pix, curPixel<19>, f_write_end, f_read_end;
@@ -672,6 +715,7 @@ poly.dbg_in = dbg_in;
 				vram_write(vram_p + curPixel, io_write_data<15:0>);
 				io_write_data := io_write_data >> 16;
 /*
+// test.exeの時
 view_on();
 view_x = CommandBuffer[1]<9:0> + VramPosX<9:0>;
 view_y = CommandBuffer[1]<24:16> + VramPosY<8:0>;
@@ -762,8 +806,8 @@ view_B = io_write_data<14:10> || 0b111;
 					px1 := CommandBuffer[1]<10:0>;
 					py1 := CommandBuffer[1]<26:16>;
 					pc1 := CommandBuffer[0]<23:0>;
-					px2 := CommandBuffer[2]<10:0>;
-					py2 := CommandBuffer[2]<26:16>;
+					px2 := 0b0 || CommandBuffer[2]<9:0>;
+					py2 := 0b00 || CommandBuffer[2]<24:16>;
 					fill.draw();
 					goto stend;
 				}
@@ -800,7 +844,6 @@ view_B = io_write_data<14:10> || 0b111;
 					pv3 := CommandBuffer[6]<15:8>;
 					clut := CommandBuffer[2]<31:16>;
 					tpage := CommandBuffer[4]<29:16>;
-					status := status<31:9> || CommandBuffer[4]<24:16>;
 					poly.draw();
 					goto stend;
 				}
@@ -834,7 +877,6 @@ view_B = io_write_data<14:10> || 0b111;
 					pv3 := CommandBuffer[6]<15:8>;
 					clut := CommandBuffer[2]<31:16>;
 					tpage := CommandBuffer[4]<29:16>;
-					status := status<31:9> || CommandBuffer[4]<24:16>;
 					pc1 := CommandBuffer[0]<23:0>;
 					pc2 := CommandBuffer[0]<23:0>;
 					pc3 := CommandBuffer[0]<23:0>;
@@ -874,7 +916,6 @@ view_B = io_write_data<14:10> || 0b111;
 					pv3 := CommandBuffer[8]<15:8>;
 					clut := CommandBuffer[2]<31:16>;
 					tpage := CommandBuffer[5]<29:16>;
-					status := status<31:9> || CommandBuffer[5]<24:16>;
 					poly.draw();
 					goto stend;
 				}
@@ -906,7 +947,6 @@ view_B = io_write_data<14:10> || 0b111;
 					pu2 := CommandBuffer[5]<7:0>;
 					pv2 := CommandBuffer[5]<15:8>;
 					tpage := CommandBuffer[5]<29:16>;
-					status := status<31:9> || CommandBuffer[5]<24:16>;
 					pc3 := CommandBuffer[6]<23:0>;
 					px3 := CommandBuffer[7]<10:0>;
 					py3 := CommandBuffer[7]<26:16>;

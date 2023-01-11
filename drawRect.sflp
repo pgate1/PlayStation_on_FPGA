@@ -22,10 +22,9 @@ circuit drawRect
 	input clut<16>, tpage<14>;
 	input vu1<8>, vv1<8>;
 	input vu4<8>, vv4<8>;
-	input drawW<10>, drawH<10>;
-	instrin con(vx1, vy1, vx4, vy4, col, clut, tpage, vu1, vv1, vu4, vv4, drawW, drawH);
+	input drawX<10>, drawY<10>, drawW<10>, drawH<10>;
+	instrin con(vx1, vy1, vx4, vy4, col, clut, tpage, vu1, vv1, vu4, vv4, drawX, drawY, drawW, drawH);
 
-//	instrin texture_thin;
 	instrin sw_view_half;
 
 	instrin draw;
@@ -110,7 +109,9 @@ circuit drawRect
 		}
 		state st3 par{
 			alt{
-				y<10> : par{ // y < 0
+				y<10> // y < 0
+				| ((y-(0b0||drawY))<10>==0b1) // y < drawY
+				: par{
 					y++;
 					pv++;
 				}
@@ -136,7 +137,7 @@ circuit drawRect
 					y += 2;
 					pv += 2;
 				}
-				else{ // PSロゴの時はスキップしない
+				else{
 					y++;
 					pv++;
 				}
@@ -148,6 +149,7 @@ circuit drawRect
 				//	& (y-0b00111100000)<10> // y < 480
 					(x<10>==0b0)          // x >= 0
 				//	& (x-0b01010000000)<10> // x < 640
+					& ((x-(0b0||drawX))<10>==0b0) // x >= drawX
 				){
 					any{
 						f_texture : generate texdraw.do(x, pu);

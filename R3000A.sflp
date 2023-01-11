@@ -783,6 +783,7 @@ dbg_reg := 0b000||rs; halt(0x05);
 						funct==0x06 : gte.NCLIP();
 						funct==0x0C : gte.OP();
 						funct==0x10 : gte.DPCS();
+						funct==0x11 : gte.INTPL();
 						funct==0x12 : gte.MVMVA();
 						funct==0x13 : gte.NCDS();
 						funct==0x16 : gte.NCDT();

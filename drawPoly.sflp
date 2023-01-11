@@ -12,6 +12,8 @@
 
 %i "inv_table.h"
 
+%i "drawpoly_cache.h"
+
 declare mul_s26s16 interface
 {
 	input a<26>, b<16>;
@@ -114,6 +116,8 @@ circuit drawPoly
 	instrin vram_ack;
 	input vram_read_data<16>;
 //	reg_wr vram_read_data_reg<16>;
+
+	drawpoly_cache tcache;
 
 input dbg_in<16>;
 output dbg<32>;
@@ -345,6 +349,7 @@ dbg = dbg_reg;
 				//((x-ex)<10>==0b0) // x >= ex
 				cmp_ex.gte(x, ex).result // x >= ex
 				| cmp_w.gt(x, 0b0||drawW).result // x > drawW
+				| (sx<10> & ex<10>)
 			){
 				y++;
 				generate bilinear_hbase.do();
@@ -357,6 +362,7 @@ dbg = dbg_reg;
 				){
 					any{
 						f_texture : par{
+						//	tcache.check(vv<16:9>||vu<16:9>);
 							generate texdraw.do();
 						}
 /*
@@ -365,7 +371,12 @@ dbg = dbg_reg;
 						}
 */
 						else : par{
-							view_on(x<9:0>, y<8:0>);
+							if((x-0b01010000000)<10>){ // x < 640
+								view_on(x<9:0>, y<8:0>);
+							}
+							else{
+								vram_write(y<8:0>||x<9:0>, 0b0||vb<CMULS+7:CMULS+3>||vg<CMULS+7:CMULS+3>||vr<CMULS+7:CMULS+3>);
+							}
 							delta_add();
 						}
 					}
@@ -379,13 +390,6 @@ dbg = dbg_reg;
 					& (x<10>==0b0) // x >= 0
 					& ((x-0b01010000000)<10>==0b0) // x >= 640
 				) view_on((x-640)<9:0>, y<8:0>);
-
-				if(
-					(x<10>==0b0) & // x >= 0
-					((x-0b01010000000)<10>==0b0) // x >= 640 for èÄîıÉ|ÉäÉSÉì
-				){
-					vram_write(y<8:0>||x<9:0>, 0b0||vb<CMULS+7:CMULS+3>||vg<CMULS+7:CMULS+3>||vr<CMULS+7:CMULS+3>);
-				}
 */
 			}
 
@@ -395,7 +399,6 @@ dbg = dbg_reg;
 	stage texdraw {
 		sel clut_p<19>, tadjust_y<19>, tpage_col<2>;
 		sel u<8>, v<8>;
-		reg_wr f_tci_buf_on;
 		first_state st_init;
 		par{
 			sel clut_x<10>, clut_y<9>;
@@ -416,35 +419,28 @@ dbg = dbg_reg;
 		state st_init if(^vram_read_wait){
 			any{
 				tpage_col==0 : par{
-					reg_wr u_buf<6>;
-					if(0b0){//u<7:2>==u_buf){
-						f_tci_buf_on := 0b1;
-					}
+					if(tcache.hit) goto st00_2;
 					else{
 						vram_read((0b0||v||10#0b0) + tadjust_y + ((13#0b0)||u<7:2>));
-						f_tci_buf_on := 0b0;
+						goto st00_1;
 					}
-					u_buf := u<7:2>;
-					goto st00_1;
 				}
 				tpage_col==1 : par{
-					reg_wr u_buf<7>;
-					if(0b0){//u<7:1>==u_buf){
-						f_tci_buf_on := 0b1;
-					}
+					if(tcache.hit) goto st00_2;
 					else{
 						vram_read((0b0||v||10#0b0) + tadjust_y + ((12#0b0)||u<7:1>));
-						f_tci_buf_on := 0b0;
+						goto st01_1;
 					}
-					u_buf := u<7:1>;
-					goto st01_1;
 				}
 				tpage_col==2 : par{
-					vram_read((0b0||v||10#0b0) + tadjust_y + ((11#0b0)||u));
-					goto st00_2;
+					if(tcache.hit) goto st00_2;
+					else{
+						vram_read((0b0||v||10#0b0) + tadjust_y + ((11#0b0)||u));
+						goto st00_2;
+					}
 				}
 				else : par{
-					delta_add();
+				//	delta_add();
 					finish;
 				}
 			}
@@ -452,37 +448,32 @@ dbg = dbg_reg;
 
 		state st00_1 if(vram_ack){ //^vram_read_wait){
 			sel tci<4>;
-			reg_wr vram_read_data_buf<16>;
-			if(f_tci_buf_on){
-				tci = (vram_read_data_buf >> (u<1:0>||0b00))<3:0>;
-			}
-			else{
-				tci = (vram_read_data >> (u<1:0>||0b00))<3:0>;
-				vram_read_data_buf := vram_read_data;
-			}
+			tci = (vram_read_data >> (u<1:0>||0b00))<3:0>;
 			vram_read(clut_p + ((15#0b0)||tci));
 			goto st00_2;
 		}
 		state st01_1 if(vram_ack){ // ^vram_read_wait){
 			sel tci<8>;
-			reg_wr vram_read_data_buf<16>;
-			if(f_tci_buf_on){
-				tci = (vram_read_data_buf >> (u<0>||0b000))<7:0>;
-			}
-			else{
-				tci = (vram_read_data >> (u<0>||0b000))<7:0>;
-				vram_read_data_buf := vram_read_data;
-			}
+			tci = (vram_read_data >> (u<0>||0b000))<7:0>;
 			vram_read(clut_p + ((11#0b0)||tci));
 			goto st00_2;
 		}
-		state st00_2 if(vram_ack){ // ^vram_read_wait){
-			if((vram_read_data<14:0>!=0) | (vram_read_data==0x8000)){
-				view_on(x<9:0>, y<8:0>);
-				tr = vram_read_data< 4: 0> || 0b000;
-				tg = vram_read_data< 9: 5> || 0b000;
-				tb = vram_read_data<14:10> || 0b000;
+
+		state st00_2 if(vram_ack | tcache.hit){ // ^vram_read_wait){
+			sel data<16>;
+			if(tcache.hit) data = tcache.dout;
+			else{
+				data = vram_read_data;
+			//	tcache.update(v||u, vram_read_data);
 			}
+
+			if((data<14:0>!=0) | (data==0x8000)){
+				view_on(x<9:0>, y<8:0>);
+				tr = data< 4: 0> || 0b000;
+				tg = data< 9: 5> || 0b000;
+				tb = data<14:10> || 0b000;
+			}
+
 			delta_add();
 			goto st_init;
 			finish;

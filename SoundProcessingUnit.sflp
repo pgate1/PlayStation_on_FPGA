@@ -27,7 +27,7 @@ circuit SoundProcessingUnit
 	DigitalSignalProcessor dsp;
 	instrout mem_read_req(mem_A);
 	input mem_Dout<16>;
-	instrin sw_intpl_off, sw_reverb_off;
+	instrin sw_spu_off, sw_intpl_off, sw_reverb_off, sw_spuenv_off;
 
 	instrin run33; // 33.8688MHz
 
@@ -98,6 +98,7 @@ output dbg<32>;
 
 	instruct sw_intpl_off dsp.sw_intpl_off();
 	instruct sw_reverb_off dsp.sw_reverb_off();
+	instruct sw_spuenv_off dsp.sw_spuenv_off();
 
 	voice_out_L = dsp.voice_out_L;
 	voice_out_R = dsp.voice_out_R;
@@ -132,7 +133,7 @@ dbg = dsp.dbg;
 			spuAddr := io_Din || 0b000;
 		}
 		io_A==0x1DA8 : par{ // Sound RAM Data Transfer Fifo
-			io_write_req := 0b1;
+			if(^sw_spu_off) io_write_req := 0b1;
 			io_write_Din := io_Din;
 		}
 		io_A==0x1DAA : par{ // SPU control

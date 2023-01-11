@@ -42,7 +42,6 @@ circuit DMA_GPU
 	instrin gpu_vram_ack;
 
 	output gpu_status_ready_recieve_dmablock;
-	instrout reset_dma_direction;
 
 	instrin run33;
 	reg_wr int_wait_max<32>, count_rst;
@@ -136,7 +135,6 @@ dbg = dbg_reg;
 		state st4 if(^gpu_busy){
 			if(^run_chain.do){
 //if(dma_size<31>) halt(0x45);
-				reset_dma_direction();
 				generate int_wait.do(4/*dma_size*/, 0b1);
 			}
 			goto st1;
@@ -168,7 +166,6 @@ dbg = dbg_reg;
 			if((next_addr!=0xFFFFFF) & (next_addr<20:2>!=0)) goto st2;
 			else{
 //if(trans_size<31>) halt(0x46);
-				reset_dma_direction();
 				generate int_wait.do(4/*trans_size*/, 0b1);
 				goto st1;
 				finish;
@@ -206,7 +203,6 @@ dbg = dbg_reg;
 		}
 		state st4 if(^gpu_busy){
 //if(dma_size<31>) halt(0x47);
-			reset_dma_direction();
 			generate int_wait.do(4/*dma_size*/, 0b1);
 			goto st1;
 			finish;

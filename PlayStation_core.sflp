@@ -89,7 +89,9 @@ circuit PlayStation_core
 	instrout view_on;
 	output view_x<10>, view_y<9>;
 	output view_R<8>, view_G<8>, view_B<8>;
+	instrout fill_view_on;
 	output dispW, dispH;
+	instrout display_flip, draw_notdisp_side;
 
 	output vram_write_adrs<19>, vram_read_adrs<19>, vram_write_data<16>;
 	instrout vram_write_req(vram_write_adrs, vram_write_data);
@@ -100,7 +102,7 @@ circuit PlayStation_core
 	instrin sw_kernel_run;
 	instrin vblank_begin, vblank_end;
 	instrin sw_cache_off;
-	instrin sw_spu_off;
+	instrin sw_spu_off, sw_spuenv_off;
 	instrin stop;
 	instrin sw_view_half;
 
@@ -117,10 +119,12 @@ circuit PlayStation_core
 
 	input sw_cdrom_ctrl<2>;
 
+	instrout kernel_ok;
+
 	instrself halt(h_code);
 	sel h_code<8>;
 	reg_wr halt_code_reg<8>;
-	output halt_code<8>;
+	output halt_code<8>, halt_part<9>;
 
 	output pc_out<32>, opcode_out<32>;
 
@@ -183,6 +187,15 @@ dbg32 = cdr.dbg32;//dbg32_reg;dma_CDR.dbg32;cpu.dbg32;
 			}
 		}
 	}
+
+	if(sw_cdrom_ctrl==0b01){
+		reg_wr exe_running;
+		if(cpu_read.do & (cpu_A==0x80030000) & ^exe_running){
+			exe_running := 0b1;
+			kernel_ok();
+		}
+	}
+
 //cpu.iwait_max = dbg_in<7:0>;
 
 	any{
@@ -231,12 +244,21 @@ if(spu.halt_code!=0) dbg_reg := spu.dbg;
 	if(sw_spu_off){
 		voice_L = 0;
 		voice_R = 0;
+		spu.sw_spu_off();
+		spu.sw_reverb_off();
 	}
 	else{
 		voice_L = spu.voice_out_L;
 		voice_R = spu.voice_out_R;
 	}
-	disp_env = spu.disp_env;
+
+	if(sw_spuenv_off){
+		disp_env = 0;
+		spu.sw_spuenv_off();
+	}
+	else{
+		disp_env = spu.disp_env;
+	}
 
 #ifdef DEMO
 	demo.voice_L = voice_L;
@@ -254,18 +276,17 @@ if(spu.halt_code!=0) dbg_reg := spu.dbg;
 	else{
 		dma_GPU.Din = Din;
 	}
-	instruct dma_GPU.gpu_dma_write_req gpu.WriteData(dma_GPU.Dout);
-	dma_GPU.gpu_busy = gpu.busy;
+	instruct dma_GPU.gpu_dma_write_req if(gpu.halt_code==0x00) gpu.WriteData(dma_GPU.Dout);
+	dma_GPU.gpu_busy = gpu.busy | (gpu.halt_code!=0);
 //	dma_GPU.gpu_drawing = gpu.drawing;
 	instruct dma_GPU.gpu_dma_read_req gpu.ReadData();
-//	gpu.status_ready_recieve_dmablock = dma_GPU.gpu_status_ready_recieve_dmablock;
+	gpu.busy_recieve_dmablock = dma_GPU.running;
 	instruct dma_GPU.wram_write par{
 		WRAM_WRITE(dma_GPU.A, dma_GPU.Dout, 4);
 		// クリアするとホーム画面に移行しない？
 	//	ir_cache.flag_clear(dma_GPU.A);
 	//	generate ir_cache_flag_clear.do(dma_GPU.A);
 	}
-//	instruct dma_GPU.reset_dma_direction gpu.set_dma_direction(0b00);
 	instruct dma_GPU.interrupt par{
 		// gpuInterrupt()
 		DmaCHCR_2 &= ^0x01000000;
@@ -320,7 +341,7 @@ dma_running = dma_GPU.running;
 	dma_OTC.DmaBCR_6 = DmaBCR_6;
 	instruct dma_OTC.wram_write par{
 		WRAM_WRITE(dma_OTC.A, dma_OTC.D, 4);
-	//	ir_cache.flag_clear(dma_OTC.A); クリアしないっぽい？
+	//	ir_cache.flag_clear(dma_OTC.A); クリアしない
 	}
 	instruct wram_ack dma_OTC.wram_ack();
 	instruct dma_OTC.interrupt par{
@@ -370,6 +391,8 @@ dbg_pad = pad.dbg;
 	opcode_out = cpu.opcode_out;
 	halt_code = halt_code_reg | cpu.halt_code | spu.halt_code | gpu.halt_code
 				| dma_CDR.halt_code | dma_GPU.halt_code | dma_OTC.halt_code | cdr.halt_code | pad.halt_code;
+	halt_part = /|halt_code_reg || /|cpu.halt_code || /|spu.halt_code || /|gpu.halt_code
+				|| /|dma_CDR.halt_code || /|dma_GPU.halt_code || /|dma_OTC.halt_code || /|cdr.halt_code || /|pad.halt_code;
 
 	instruct halt halt_code_reg := h_code;
 dbg_cpu = cpu.dbg;
@@ -395,29 +418,27 @@ vraming = gpu.vram_busy;
 		halt_code!=0x00 : ;
 		sw_kernel_run : par{
 
-			instruct run33 par{ // 33.8688MHz
+			if(run33){ // 33.8688MHz
 				spu.run33();
+			}
+
+			if(cpu.run){
 				par(i=0;i<4;i++){
 					timer[i].run33();
 				}
 			}
 
-		//	if(^dma_OTC.running){
+			if(cpu.run){
 				dma_GPU.run33();
-		//	}
-
-			dma_CDR.run33();
-
-			dma_SPU.run33();
-
-		//	if(^dma_GPU.running){
+				dma_CDR.run33();
+				dma_SPU.run33();
 				dma_OTC.run33();
-		//	}
+			}
 
-		//	if((^dma_GPU.running) & (^dma_OTC.running)){
-				cdr.run33();
-				if(cpu.run) pad.run33();
-		//	}
+			if(cpu.run) cdr.run33();
+			if(cpu.run){ // CPUに合わせてキー入力できるようになった
+				pad.run33();
+			}
 
 		}
 		else : par{ // サウンド再生
@@ -448,6 +469,7 @@ vraming = gpu.vram_busy;
 //	instruct timer_3.irq_out par{
 //		if(^sw_kernel_run) IREG |= 0x00 || timer_3.irq_code;
 //	}
+
 	instruct vblank_begin par{
 	//	if(sw_kernel_run){
 			//if(^dma_GPU.running) 
@@ -463,16 +485,21 @@ vraming = gpu.vram_busy;
 
 	reg_wr cdr_dma_count<4>, f_texture_full;
 //	if(cdr_dma_count==8) f_texture_full := 0b1;
-//	if(^f_texture_full) gpu.texture_thin();
-//gpu.dbg_in = dbg_in;
+//	if(f_texture_full) 
+gpu.texture_full();
+//if(cdr_dma_count!=0) dbg_reg := 0x0000000||cdr_dma_count;
+
+gpu.dbg_in = dbg_in;
 	instruct gpu.view_on view_on();
 	view_x = gpu.view_x;
 	view_y = gpu.view_y;
 	view_R = gpu.view_R;
 	view_G = gpu.view_G;
 	view_B = gpu.view_B;
+	instruct gpu.fill_view_on fill_view_on();
 	dispW = gpu.dispW;
 	dispH = gpu.dispH;
+	instruct gpu.draw_notdisp_side draw_notdisp_side();
 if(gpu.halt_code!=0) dbg_reg := gpu.dbg;
 
 	instruct sw_outview_on gpu.sw_outview_on();
@@ -487,7 +514,8 @@ if(gpu.halt_code!=0) dbg_reg := gpu.dbg;
 	instruct vram_write_ack gpu.vram_write_ack();
 	instruct vram_read_ack gpu.vram_read_ack();
 	gpu.vram_read_data = vram_read_data;
-dbg_gpu = gpu.dbg_gpu;
+	instruct gpu.display_flip display_flip();
+dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 
 	// ir_readの時に起動
 	stage ir_cache_check {
@@ -582,8 +610,9 @@ dbg_gpu = gpu.dbg_gpu;
 						cpu_A<15:0>==0x1824 : io_reg := 0; // MDEC Status Register (R)
 
 						cpu_A<15:10>==0b000111 : par{ // 0x1C00-1E00
-							if(sw_spu_off) io_reg := 0x00000000;
-							else io_reg := spu.io_get(cpu_A<15:0>).io_Dout || spu.io_Dout;
+						//	if(sw_spu_off) io_reg := 0x00000000; // OFFでもBIOSは通る
+						//	else 
+							io_reg := spu.io_get(cpu_A<15:0>).io_Dout || spu.io_Dout;
 						}
 
 						else : par{
@@ -713,15 +742,12 @@ dbg_gpu = gpu.dbg_gpu;
 						if(DmaDPCR<11>) any{
 							cpu_Dout==0x01000200 : par{
 								dma_GPU.Execute_vram2mem();
-							//	gpu.set_dma_direction(0b11);
 							}
 							cpu_Dout==0x01000201 : par{
 								dma_GPU.Execute_mem2vram();
-							//	gpu.set_dma_direction(0b10);
 							}
 							cpu_Dout==0x01000401 : par{
 								dma_GPU.Execute_chain();
-							//	gpu.set_dma_direction(0b10);
 							}
 						}
 //if(dma_GPU.Execute_mem2vram & dma_GPU.Execute_chain) halt(0x2F);
@@ -782,6 +808,7 @@ dbg_gpu = gpu.dbg_gpu;
 					cpu_A<15:0>==0x1820 : ; // MDEC Command/Parameter Register (W)
 					cpu_A<15:0>==0x1824 : ; // MDEC Control/Reset Register (W)
 					cpu_A<15:10>==0b000111 : par{ // 0x1F80_1C00-1E00
+					//	if(^sw_spu_off) 
 						spu.io_set(cpu_A<15:0>, cpu_Dout<15:0>);
 					}
 					cpu_A<15:0>==0x2041 : ; // ディップスイッチ?

@@ -64,7 +64,7 @@ dbg32 = dbg32_reg;
 		state st1 par{
 			any{
 				(DmaMADR_3<31:28>==0x8) | (DmaMADR_3<31:28>==0xA) : ;
-				else : halt(0xA4);
+				else : halt(0xB4);
 			}
 			madr := DmaMADR_3<20:0>;
 			dma_count := 0;

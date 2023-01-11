@@ -100,12 +100,12 @@ circuit dsp_ch
 	dsdac10 ddac;
 	output disp_env;
 
-instrin env_omit;
+	instrin sw_spuenv_off;
 
 	instrself halt(hlt);
 	sel hlt<8>;
 	reg_wr h_code_reg<8>;
-	output halt_out;
+	output halt_out, halt_code<8>;
 
 output dbg<32>;
 
@@ -114,6 +114,8 @@ output dbg<32>;
 	stage_name read_wait { task do(rid_reg, vA_reg); }
 	stage_name interpolate_line { task do(); }
 	stage_name interpolate_gauss { task do(); }
+
+halt_code = h_code_reg;
 
 	if(read_wait.do) read_req();
 	vA = vA_reg;
@@ -135,7 +137,7 @@ output dbg<32>;
 //wave_data = decode_data;
 
 	// エンベロープ
-	if(env_omit) envelope = 0;
+	if(sw_spuenv_off) envelope = 0;
 	else envelope = env.Env<14:5>;
 	// s16 * u10 = s26 -10 = s16
 	decenv_reg := env_mul.con(wave_data, 0b000000||envelope).dout<25:10>;
@@ -180,7 +182,7 @@ dbg = 0;//brr_loop_adrs<<3;
 		io_A==0xC : par{ // Current ADSR volume
 			if(bNew) io_Dout = 1;
 			else{
-				if(env_omit) io_Dout = 0;
+				if(sw_spuenv_off) io_Dout = 0;
 				else io_Dout = 0b0 || env.Env;
 			}
 		}
@@ -197,8 +199,9 @@ dbg = 0;//brr_loop_adrs<<3;
 	}
 
 	instruct key_on par{
-		voice_off := 0;
 		bNew := 1;
+	if(^sw_spuenv_off){
+		voice_off := 0;
 		f_loop := 0;
 		f_copy_loop := 0;
 		f_keep := 1;
@@ -221,19 +224,22 @@ dbg = 0;//brr_loop_adrs<<3;
 		spos := 0;
 		gpos := 0;
 	}
+	}
 
 	instruct key_off par{
 		bNew := 0;
-		env.key_off();
+		if(^sw_spuenv_off) env.key_off();
 	}
 
-	instruct env.env_on par{
-		bNew := 0;
-	}
+	if(^sw_spuenv_off){
+		instruct env.env_on par{
+			bNew := 0;
+		}
 
-	instruct env.env_off par{
-		voice_off := 1;
-		bNew := 0;
+		instruct env.env_off par{
+			voice_off := 1;
+			bNew := 0;
+		}
 	}
 
 	instruct pitch_run par{

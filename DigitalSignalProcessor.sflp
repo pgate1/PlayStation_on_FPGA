@@ -33,7 +33,7 @@ circuit DigitalSignalProcessor
 
 	reg_wr doing<8>;
 
-	instrin sw_intpl_off, sw_reverb_off;
+	instrin sw_intpl_off, sw_reverb_off, sw_spuenv_off;
 
 	reg_wr main_volume_L<16>, main_volume_R<16>;
 
@@ -52,19 +52,11 @@ circuit DigitalSignalProcessor
 output dbg<32>;
 reg_wr dbg_reg<32>;
 
-if(0b0){
-par(i=0;i<24;i++){
-ch[i].env_omit();
-}
-}
-/*
-// 一時エンベロープテーブルをオミット
-ch_14.env_omit();
-ch_15.env_omit();
-ch_16.env_omit();
-ch_17.env_omit();
-*/
 dbg = dbg_reg;
+
+	instruct sw_spuenv_off par(i=0;i<24;i++){
+		ch[i].sw_spuenv_off();
+	}
 
 	par(i=0;i<24;i++){
 		ch[i].CtrlIRQ = CtrlIRQ;

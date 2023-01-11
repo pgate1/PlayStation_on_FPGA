@@ -61,8 +61,8 @@ circuit drawFillRect
 	if(vram_write_wait & ^vram_ack) vram_write_req();
 	if(vram_ack) vram_write_wait := 0b0;
 
-	sel col<15>;
-	col = vc1<23:19> || vc1<15:11> || vc1<7:3>;
+	sel col<16>;
+	col = 0b0 || vc1<23:19> || vc1<15:11> || vc1<7:3>;
 	out_R = col< 4: 0> || 0b000;
 	out_G = col< 9: 5> || 0b000;
 	out_B = col<14:10> || 0b000;
@@ -122,7 +122,14 @@ circuit drawFillRect
 				//	& (x<10>==0b0) // x >= 0
 					& ((x-0b01010000000)<10>==0b0) // x >= 640
 				) view_on((x-640)<9:0>, y<8:0>);
-				else view_on(x<9:0>, y<8:0>);
+				else{
+					if((x-0b01010000000)<10>){ // x < 640
+						view_on(x<9:0>, y<8:0>);
+					}
+					else{
+						vram_write(y<8:0>||x<9:0>, col);
+					}
+				}
 /*
 çLîÕàÕÇ…vram_writeÇ∑ÇÈÇ∆ÇøÇÁÇ¬Ç≠
 	W 0x02000000

@@ -622,6 +622,13 @@ if(Irq_==0x0109) count++;
 						Result[i] := Transfer_head[i];
 					}
 				}
+				Irq_==18 : par{
+					AddIrqQueue(0x0112/*CdlReadT*/, 0x1F39200);
+					start_rotating := 0b1;
+				}
+				Irq_==0x0112 : par{
+					Stat := 2;//Complete;
+				}
 				Irq_==19 : par{
 					SetResultSize(3);
 					sel tn0<8>, tn1<8>;
