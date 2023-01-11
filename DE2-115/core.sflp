@@ -4,21 +4,29 @@
 	Copyright (c)2016 pgate1
 */
 
-%i "../../DE2-115/seg7_ctrl.h"
-%i "../../DE2-115/chatmask.h"
-%i "../../DE2-115/sram_ctrl.h"
-%i "../../DE2-115/flashmem_ctrl.h"
-%i "../../DE2-115/sdcard_ctrl_sdmode.h"
-%i "../../hdl/fat16.h"
-%i "../../DE2-115/dac_ctrl.h"
-%i "../../DE2-115/ISP1362_ctrl.h"
-%i "../../DE2-115/lcd_ctrl.h"
+%i "../../../DE2-115/seg7_ctrl.h"
+%i "../../../DE2-115/chatmask.h"
+%i "../../../DE2-115/sram_ctrl.h"
+%i "../../../DE2-115/flashmem_ctrl.h"
+%i "../../../DE2-115/sdcard_ctrl_sdmode.h"
+%i "../../../hdl/fat16.h"
+%i "../../../DE2-115/dac_ctrl.h"
+%i "../../../DE2-115/ISP1362_ctrl.h"
+%i "../../../DE2-115/lcd_ctrl.h"
 
-%i "PlayStation_core.h"
-%i "DDS_50to33868800.h"
-%i "VGA_ctrl.h"
-%i "view_ram_ctrl.h"
-%i "gamma_correction.h"
+%i "../PlayStation_core.h"
+%i "../DDS_50to33868800.h"
+%i "../VGA_ctrl.h"
+%i "../view_ram_ctrl.h"
+%i "../gamma_correction.h"
+
+declare bcd_itob interface
+{
+	input bin<8>;
+	output bcd<8>;
+	instrin con;
+	instr_arg con(bin);
+}
 
 circuit core
 {
@@ -92,15 +100,18 @@ circuit core
 	view_ram_ctrl view_ram;
 //	gamma_correction gammaR, gammaG, gammaB;
 
+	bcd_itob fps;
+
 	instrself halt(halt_sel);
 	sel halt_sel<8>;
 	reg_wr halt_code<8>;
 
+//stage_name kernel_sum { task do(); }
 	stage_name psximg_read { task do(); }
 	stage_name bios_flash2ram { task do(); }
 //	stage_name bios_sdcard2ram { task do(); }
 	stage_name wram_clear { task do(); }
-	stage_name kernel_flash2ram { task do(); }
+//	stage_name kernel_flash2ram { task do(); }
 	stage_name psxexe_read { task do(); }
 	stage_name sram_clear { task do(); }
 
@@ -156,7 +167,7 @@ circuit core
 		fat.sdata = sdcard.rdata;
 		instruct fat.sread sdcard.read(fat.sadrs);
 	}
-
+/*
 	par{
 		reg_wr out_L_reg<32>, out_R_reg<32>;
 
@@ -187,7 +198,7 @@ circuit core
 		dac.RD = audio_RD;
 		audio_DATA = dac.Dout;
 	}
-
+*/
 	// USB
 	USB_ADDR = usb.A;
 	USB_Dout = usb.Dout;
@@ -214,13 +225,17 @@ circuit core
 		vga.iR = 0xFF; vga.iG = 0xFF; vga.iB = 0xFF;
 	}
 */
+
 	par{ // サウンドエフェクト
+		reg_wr level_L_t<11>, level_L<11>;
+		reg_wr level_R_t<11>, level_R<11>;
+/*
 		sel voice_L<11>;
 		any{
 			psx.voice_L<20>==0b0 : voice_L = psx.voice_L<18:8>;
 			psx.voice_L<20>==0b1 : voice_L = (^psx.voice_L + 1)<18:8>;
 		}
-		reg_wr level_L_t<11>, level_L<11>;
+
 		any{
 			vga.h_count==0   : level_L_t := voice_L;
 			vga.h_count==400 : level_L_t += voice_L;
@@ -232,13 +247,13 @@ circuit core
 			psx.voice_R<20>==0b0 : voice_R = psx.voice_R<18:8>;
 			psx.voice_R<20>==0b1 : voice_R = (^psx.voice_R + 1)<18:8>;
 		}
-		reg_wr level_R_t<11>, level_R<11>;
+
 		any{
 			vga.h_count==0   : level_R_t := voice_R;
 			vga.h_count==400 : level_R_t += voice_R;
 			vga.h_count==640 : level_R := 0b01010000000 - level_R_t; // 640 - level
 		}
-
+*/
 		if((^psx.sw_kernel_run) &
 			(((0b0||vga.h_count)-level_L)<10> | (((0b0||vga.h_count)-level_R)<10>==0b0))
 		){
@@ -272,12 +287,21 @@ circuit core
 	if(/&boot_count) pass_1sec := 0b1;
 	else boot_count++;
 
+	reg_wr count_1sec<26>, count_frame<8>, count_frame_reg<8>;
+	if(count_1sec==50000000){
+		count_frame_reg := count_frame;
+		count_frame := 0;
+		count_1sec := 0;
+	}
+	else count_1sec++;
+	fps.bin = count_frame_reg;
+
 	instruct psx.view_on par{
 		sel psx_view_x<9>, psx_view_y<8>;
 
-		if(psx.dispW | psx.sw_view_half) psx_view_x = psx.view_x<9:1>; // 640->320
+		if(psx.dispW /*| psx.sw_view_half*/) psx_view_x = psx.view_x<9:1>; // 640->320
 		else psx_view_x = psx.view_x<8:0>; // 320->320
-		if(psx.dispH | psx.sw_view_half) psx_view_y = psx.view_y<8:1>; // 480->240
+		if(psx.dispH /*| psx.sw_view_half*/) psx_view_y = psx.view_y<8:1>; // 480->240
 		else psx_view_y = psx.view_y<7:0>; // 240->240
 
 		view_ram.write(psx_view_x, psx_view_y,
@@ -291,31 +315,37 @@ circuit core
 			psx_run_ok := 0b1;
 			vblank_wait := 0b1;
 		}
-	//	reg_wr flip; flip := ^flip; // 640x480 30fps
-		if(/*flip &*/ /*(^psx.drawing) &*/ (^psx.stop)){
+		if(/*(^psx.drawing) &*/ (^psx.stop)){
 			if(psx_run_ok) psx.vblank_begin();
-			view_ram.bank_change();
+			//reg_wr flip; flip := ^flip; // 30fps
+		//	if(flip | ^psx.sw_kernel_run) view_ram.bank_change();
 		}
 	}
 	instruct vga.vblank_end psx.vblank_end();
+//	if(psx.sw_kernel_run) view_ram.frame_rate = 1;
+//	else view_ram.frame_rate = 0;
+	instruct psx.display_flip view_ram.bank_change();
+//	instruct psx.fill_view_on view_ram.fill_view_on();
+	instruct psx.draw_notdisp_side view_ram.draw_notdisp_side();
 
-	if(psx_run_ok & (halt_code==0x00) & (^psx.stop)){
+	if(exe_read_ok & psx_run_ok & (halt_code==0x00) & (^psx.stop)){
 		instruct dds.run psx.run33();
 		psx.cpu_run();
 	}
 
 	// ubs.button1<12> : L2,R2, B,Y,Sl,St, Up,Dn,Le,Ri, A,X,L,R
 	// PS : □,×,○,△,R,L,R2,L2,←,↓,→,↑,St,0,0,Sl
-	psx.key_in = (0b00 || key1 || 0b00000_0 || key2 || 0b0 || key3 || 0b0000) |
+	psx.key_in = (0b00 || key1 || 0b0_0000_0 || key2 || 0b0 || key3 || 0b0000) |
 		(usb.button1<10> || usb.button1<11> || usb.button1<3> || usb.button1<2> ||
 		usb.button1<0> || usb.button1<1> || usb.button1<13> || usb.button1<12> ||
 		usb.button1<5> || usb.button1<6> || usb.button1<4> || usb.button1<7> ||
 		usb.button1<8> || 0b00 || usb.button1<9>);
 
-//if(SW<15>) psx.sw_cache_off();
+if(SW<15>) psx.sw_cache_off();
 //psx.sw_intpl_off();
 psx.sw_reverb_off();
-//psx.sw_spu_off();
+//psx.sw_spu_off(); // アインハンダーカウントダウンのためにSPU必要
+psx.sw_spuenv_off();
 	reg_wr sw_16; sw_16 := SW<16>;
 //psx.sw_outview_on();
 	reg_wr sw_17; sw_17 := SW<17>;
@@ -338,11 +368,11 @@ reg_wr dbg_file_sum<32>;
 		key3 : seg = chksum || psx.dbg_cpu || 0x00 || psx.halt_code;
 		key2 : seg = psx.dbg;
 		key1 : seg = psx.dbg_gpu;// || 0x00 || halt_code;//psx.dbg2;
-		else : seg = psx.pc_out;
+		else : seg = psx.pc_out<31:8> || fps.bcd;
 	}
 
-	LEDR = (0b0000000000000000 || /|halt_code || /|psx.halt_code) | psx.disp_env<23:6> | (0b00||psx.key_in);
-	LEDG = psxexe_read.do || psx.disp_env<5:0> || psx.dma_running || psx.drawing;
+	LEDR = (0b0000000000000000 || /|halt_code || /|psx.halt_code) /*| psx.disp_env<23:6>*/ | (0b00||psx.key_in);
+	LEDG = psxexe_read.do || /*psx.disp_env<5:0>*/0b000000 || psx.dma_running || psx.drawing;
 
 	instruct psx.WRAM_READ par{
 		sdram_read(0b000000||psx.A<20:2>);
@@ -382,11 +412,6 @@ reg_wr dbg_file_sum<32>;
 	alt{
 		gpu_read_wait_ack | gpu_write_wait_ack | spu_wait_ack : ;
 
-		psx.spu_mem_read_req & ^psx.sw_spu_off : par{
-			sram.read(0b00||psx.spu_mem_A);
-			spu_wait_ack := 0b1;
-		}
-
 		psx.vram_read_req : par{
 			sram.read(0b1||psx.vram_read_adrs);
 			gpu_read_wait_ack := 0b1;
@@ -397,15 +422,21 @@ reg_wr dbg_file_sum<32>;
 			gpu_write_wait_ack := 0b1;
 		}
 
-		psx.spu_mem_write_req & ^psx.sw_spu_off : par{
+		psx.spu_mem_read_req /*& ^psx.sw_spu_off*/ : par{
+			sram.read(0b00||psx.spu_mem_A);
+			spu_wait_ack := 0b1;
+		}
+
+		psx.spu_mem_write_req /*& ^psx.sw_spu_off*/ : par{
 			sram.write(0b00||psx.spu_mem_A, psx.spu_mem_Din, 0b11);
 			spu_wait_ack := 0b1;
 		}
+
 	}
 	psx.spu_mem_Dout = sram.rdata;
 	psx.vram_read_data = sram.rdata;
 
-	if(psx.sw_spu_off) psx.spu_mem_ack();
+//	if(psx.sw_spu_off) psx.spu_mem_ack();
 
 	if(gpu_read_wait_ack){
 		if(sram.ack){
@@ -428,6 +459,29 @@ reg_wr dbg_file_sum<32>;
 		}
 	}
 
+	instruct psx.kernel_ok par{
+		exe_read_ok := 0b0;
+		generate psxexe_read.do();
+	//	generate kernel_sum.do();
+	}
+/*
+	stage kernel_sum {
+		reg_wr kA<16>;
+		first_state st1;
+		state st1 if(sdram_ack){
+			sdram_read(0);
+			kA := 4;
+			goto st2;
+		}
+		state st2 if(sdram_ack){
+			chksum += sdram_rdata<31:24> + sdram_rdata<23:16> + sdram_rdata<15:8> + sdram_rdata<7:0>;
+			sdram_read(0b00000000000||kA<15:2>);
+			kA += 4;
+			if(kA==0) goto st3;
+		}
+		state st3 ;
+	}
+*/
 	stage psximg_read {
 		reg_wr sector_begin<32>, sector_num<32>;
 		reg_wr psxexe_read_error;
@@ -479,27 +533,19 @@ reg_wr dbg_file_sum<32>;
 		}
 		state st_sn4 if(sdcard.ack){
 			sector_num := sdcard.rdata || sector_num<23:0>;
-
-//dbg_file_read_count:=-1;
-			goto st_fileread;
+			goto st_read;
 		}
 
-		state st_fileread if(psx.file_read){
-//dbg_file_read_count++;
+		state st_read if(psx.file_read & sdcard.ack){
 			psxexe_read_error := 0b0;
+
 			sdcard.read((sector_begin<<9) + psx.file_adrs);
-			goto st_filedata;
+			goto st_data;
 		}
-		state st_filedata if(sdcard.ack){
+		state st_data if(sdcard.ack){
 			psx.file_data = sdcard.rdata;
 			psx.file_ack();
-			if(psx.file_read){
-				psxexe_read_error := 0b0;
-				sdcard.read((sector_begin<<9) + psx.file_adrs);
-			}
-			else{
-				goto st_fileread;
-			}
+			goto st_read;
 		}
 	}
 
@@ -574,17 +620,17 @@ reg_wr dbg_file_sum<32>;
 			if(/&wA) goto st2;
 		}
 		state st2 if(sdram_ack){
-			if(psx.sw_kernel_run){ // for BIOS
+		//	if(psx.sw_kernel_run){ // for BIOS
 				generate sram_clear.do();
 				generate psximg_read.do();
-			}
-			else{ // for PSX-EXE
-				generate kernel_flash2ram.do();
-			}
+		//	}
+		//	else{ // for PSX-EXE
+		//		generate kernel_flash2ram.do();
+		//	}
 			finish;
 		}
 	}
-
+/*
 	stage kernel_flash2ram {
 		reg_wr kA<16>; // 64kB
 		first_state st_open;
@@ -612,7 +658,7 @@ reg_wr dbg_file_sum<32>;
 			finish;
 		}
 	}
-
+*/
 	stage psxexe_read {
 		reg_wr text_end<21>; // 2MB
 		first_state st_open;

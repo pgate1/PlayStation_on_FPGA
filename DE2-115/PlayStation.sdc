@@ -1,4 +1,4 @@
-create_clock -name inclk50 -period 50MHz [get_ports {CLOCK2_50}]
+create_clock -name inclk50 -period 50MHz [get_ports {CLOCK_50}]
 
 set clk50            {psx_pll_inst|altpll_component|auto_generated|pll1|clk[0]}
 set clk_sdram_device {psx_pll_inst|altpll_component|auto_generated|pll1|clk[1]}

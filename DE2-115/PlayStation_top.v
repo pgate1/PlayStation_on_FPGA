@@ -103,7 +103,7 @@ wire usb_WR_En;
 wire sd_cmd_out, sd_cmd_en;
 
 	psx_pll psx_pll_inst (
-		.inclk0(CLOCK2_50),
+		.inclk0(CLOCK_50),
 		.c0(clk50MHz), // Main 50MHz
 		.c1(DRAM_CLK), .c2(clk100MHz), // SDRAM 100MHz
 		.c3(clk18432) // Audio 18.432MHz
