@@ -29,7 +29,7 @@ circuit GeometryTransformationEngine
 	output dout<32>;
 	reg_wr dout_reg<32>;
 
-	instrin RTPS, RTPT, MVMVA, DPCS, DPCT, SQR, NCS, NCT, NCDS, NCDT, NCCS, NCCT, NCLIP, AVSZ3, AVSZ4, OP, GPF, GPL;
+	instrin RTPS, RTPT, MVMVA, DPCS, DPCT, INTPL, SQR, NCS, NCT, NCDS, NCDT, NCCS, NCCT, NCLIP, AVSZ3, AVSZ4, OP, GPF, GPL;
 
 	reg_wr rt_value<32>, rd_reg<5>;
 	output running;
@@ -544,7 +544,6 @@ dbg = dbg_reg;
 		mul_s32 rtp_mulq;
 		gte_LIMIT lim_RTP;
 		first_state st_init;
-
 		par{
 			instruct lim_RTP.set_FLAG set_FLAG(lim_RTP.FLAG);
 			if(0b0){
@@ -553,7 +552,6 @@ dbg = dbg_reg;
 				lim_RTP.limC3(0);
 			}
 		}
-
 		state st_init par{
 			reset_FLAG();
 			if(RTP_stg.rtpt) set_SZ0(SZ3);
@@ -699,7 +697,6 @@ dbg = dbg_reg;
 		        mvmva_smul_mac3_1, mvmva_smul_mac3_2, mvmva_smul_mac3_3;
 		gte_LIMIT lim_MVMVA;
 		first_state st_init;
-
 		par{
 			//shift = 12 * GTE_SF(op);
 			//mx = GTE_MX(op);
@@ -718,7 +715,6 @@ dbg = dbg_reg;
 				lim_MVMVA.limD(0);
 			}
 		}
-
 		state st_init par{
 			reset_FLAG();
 			mvmva_vx := get_VX(0b000||mvmva_v).VX;
@@ -873,7 +869,6 @@ dbg = dbg_reg;
 		mul_s16 intpl_smul_mac1, intpl_smul_mac2, intpl_smul_mac3;
 		gte_LIMIT lim_INTPL;
 		first_state st_init;
-
 		par{
 			// int lm = GTE_LM(op);
 			intpl_lm = op<10>;
@@ -883,7 +878,6 @@ dbg = dbg_reg;
 				lim_INTPL.limD(0);
 			}
 		}
-
 		state st_init par{
 			reset_FLAG();
 			goto st_mac;
@@ -969,7 +963,6 @@ dbg = dbg_reg;
 		mul_s16 sqr_smul_mac1, sqr_smul_mac2, sqr_smul_mac3;
 		gte_LIMIT lim_SQR;
 		first_state st_init;
-
 		par{
 			// int shift = 12 * GTE_SF(op);
 			sqr_shift = 0b01100 & 5#op<19>;
@@ -984,7 +977,6 @@ dbg = dbg_reg;
 				lim_SQR.limD(0);
 			}
 		}
-
 		state st_init par{
 			reset_FLAG();
 			goto st_mac1;
@@ -1034,14 +1026,12 @@ dbg = dbg_reg;
 		        nc_smul_mac3_1, nc_smul_mac3_2, nc_smul_mac3_3;
 		gte_LIMIT lim_NC;
 		first_state st_init;
-
 		par{
 			instruct lim_NC.set_FLAG set_FLAG(lim_NC.FLAG);
 			if(0b0){
 				lim_NC.limD(0);
 			}
 		}
-
 		state st_init par{
 			reset_FLAG();
 			nc_v := 0;
@@ -1180,14 +1170,12 @@ dbg = dbg_reg;
 		reg_wr ncd_mul_lim_reg<16>;
 		gte_LIMIT lim_NCD;
 		first_state st_init;
-
 		par{
 			instruct lim_NCD.set_FLAG set_FLAG(lim_NCD.FLAG);
 			if(0b0){
 				lim_NCD.limD(0);
 			}
 		}
-
 		state st_init par{
 			reset_FLAG();
 			ncd_v := 0;
@@ -1378,21 +1366,18 @@ dbg = dbg_reg;
 		        ncc_smul_mac3_1, ncc_smul_mac3_2, ncc_smul_mac3_3;
 		gte_LIMIT lim_NCC;
 		first_state st_init;
-
 		par{
 			instruct lim_NCC.set_FLAG set_FLAG(lim_NCC.FLAG);
 			if(0b0){
 				lim_NCC.limD(0);
 			}
 		}
-
 		state st_init par{
 			reset_FLAG();
 			ncc_v := 0;
 			ncc_st := 0;
 			goto st_vset;
 		}
-
 		state st_vset par{
 			ncc_vx := get_VX(ncc_v).VX;
 			ncc_vy := get_VY(ncc_v).VY;
@@ -1402,6 +1387,7 @@ dbg = dbg_reg;
 
 		state st_mac1_1 par{
 			// MAC1 = A1((((s64)L11 * VX0) + (L12 * VY0) + (L13 * VZ0)) >> 12);
+			// d[25] = (s_c[8]L * s_d[0]L) + (s_c[8]H * s_d[0]H) + (s_c[9]L * s_d[1]L)
 			sel mac1_t<32>;
 			mac1_t = 32#(
 				ncc_smul_mac1_1.con(L11, ncc_vx).dout +
@@ -1435,6 +1421,7 @@ dbg = dbg_reg;
 
 		state st_mac1_2 par{
 			// MAC1 = A1((((s64)RBK << 12) + (LR1 * IR1) + (LR2 * IR2) + (LR3 * IR3)) >> 12);
+			// d[25] = (s_c[13]<32>||0x000) + (s_c[16]L * s_d[9]L) + (s_c[16]H * s_d[10]L) + (s_c[17]L * s_d[11]L)
 			sel mac1_t<32>;
 			mac1_t = (
 				(RBK || 0x000) +
@@ -1471,6 +1458,7 @@ dbg = dbg_reg;
 
 		state st_mac_3 par{
 			// MAC1 = A1(((s64)R * IR1) >> 8);
+			// d[25] = (d[6]<8>bl * s_d[9]L) >> 8
 			sel mac1_t<32>;
 			mac1_t = 32#ncc_smul_mac1_1.con(0x00||R, IR1).dout<31:8>;
 			//A1(t1);
@@ -1491,8 +1479,10 @@ dbg = dbg_reg;
 		}
 		state st_rgb par{
 			// RGB0 = RGB1;
+			// d[20] = d[21]
 			set_RGB0(RGB1);
 			// RGB1 = RGB2;
+			// d[21] = d[22]
 			set_RGB1(RGB2);
 /*
 			// CODE2 = CODE;
@@ -1528,6 +1518,7 @@ v st
 */
 		state st_ir par{
 			// IR1 = limB1(MAC1, 1);
+			// s_d[9]L = 
 			set_IR1(lim_NCC.limB1(MAC1, 0b1).limB1_ret);
 			// IR2 = limB2(MAC2, 1);
 			set_IR2(lim_NCC.limB2(MAC2, 0b1).limB2_ret);
@@ -1577,7 +1568,6 @@ v st
 		mul_s16 avsz3_smul;
 		gte_LIMIT lim_AVSZ3;
 		first_state st_init;
-
 		par{
 			instruct lim_AVSZ3.set_FLAG set_FLAG(lim_AVSZ3.FLAG);
 			if(0b0){
@@ -1589,7 +1579,6 @@ v st
 				lim_AVSZ3.limC3(0);
 			}
 		}
-
 		state st_init par{
 			reset_FLAG();
 			sz3_add := SZ1 + SZ2 + SZ3;
@@ -1611,7 +1600,6 @@ v st
 		mul_s32 avsz4_smul;
 		gte_LIMIT lim_AVSZ4;
 		first_state st_init;
-
 		par{
 			instruct lim_AVSZ4.set_FLAG set_FLAG(lim_AVSZ4.FLAG);
 			if(0b0){
@@ -1623,7 +1611,6 @@ v st
 				lim_AVSZ4.limC3(0);
 			}
 		}
-
 		state st_init par{
 			reset_FLAG();
 			sz4_sum := (0b00||SZ0) + (0b00||SZ1) + (0b00||SZ2) + (0b00||SZ3); // [16][17][18][19]<16>
@@ -1648,13 +1635,11 @@ v st
 		        op_smul_mac3_1, op_smul_mac3_2;
 		gte_LIMIT lim_OP;
 		first_state st_init;
-
 		par{
 			// int shift = 12 * GTE_SF(op);
 		//	op_shift = 0b01100 & 5#op<19>;
 			// int lm = GTE_LM(op);
 			op_lm = op<10>;
-
 			instruct lim_OP.set_FLAG set_FLAG(lim_OP.FLAG);
 			if(0b0){
 				lim_OP.limC1(0);
@@ -1663,7 +1648,6 @@ v st
 				lim_OP.limD(0);
 			}
 		}
-
 		state st_init par{
 			reset_FLAG();
 			goto st_mac1;
@@ -1720,7 +1704,6 @@ v st
 		mul_s16 gpf_smul_mac1, gpf_smul_mac2, gpf_smul_mac3;
 		gte_LIMIT lim_GPF;
 		first_state st_init;
-
 		par{
 			// int shift = 12 * GTE_SF(op);
 		//	gpf_shift = 0b01100 & 5#op<19>;
@@ -1732,7 +1715,6 @@ v st
 				lim_GPF.limD(0);
 			}
 		}
-
 		state st_init par{
 			reset_FLAG();
 			goto st_mac1;
@@ -1777,16 +1759,16 @@ v st
 			set_RGB0(RGB1);
 			// RGB1 = RGB2;
 			set_RGB1(RGB2);
-/*
+
 			// CODE2 = CODE;
-			set_CODE2(CODE);
+		//	set_CODE2(CODE);
 			// R2 = limC1(MAC1 >> 4);
-			set_R2(limC1((MAC1>>4)<15:0>).limC1_ret);
+		//	set_R2(limC1((MAC1>>4)<15:0>).limC1_ret);
 			// G2 = limC2(MAC2 >> 4);
-			set_G2(limC2((MAC2>>4)<15:0>).limC2_ret);
+		//	set_G2(limC2((MAC2>>4)<15:0>).limC2_ret);
 			// B2 = limC3(MAC3 >> 4);
-			set_B2(limC3((MAC3>>4)<15:0>).limC3_ret);
-*/
+		//	set_B2(limC3((MAC3>>4)<15:0>).limC3_ret);
+
 			d[22] :=
 				CODE ||
 				lim_GPF.limC3(32#MAC3<31:4>).limC3_ret ||
@@ -1801,7 +1783,6 @@ v st
 		mul_s16 gpl_smul_mac1, gpl_smul_mac2, gpl_smul_mac3;
 		gte_LIMIT lim_GPL;
 		first_state st_init;
-
 		par{
 			// int shift = 12 * GTE_SF(op);
 		//	gpl_shift = 0b01100 & 5#op<19>;
@@ -1811,35 +1792,38 @@ v st
 				lim_GPL.limD(0);
 			}
 		}
-
 		state st_init par{
 			reset_FLAG();
 			goto st_mac1;
 		}
 		state st_mac1 par{
-			// MAC1 = A1((((s64)MAC1 << shift) + (IR0 * IR1)) >> shift);
+/*
+			MAC1 = A1(
+				(((s64)MAC1 << shift) + (IR0 * IR1)) >> shift
+			);
+*/
 			gpl_smul_mac1.con(IR0, IR1);
-			sel mac1_t<32>;
-			if(op<19>) mac1_t = MAC1<31-12:12>||0x000 + 32#gpl_smul_mac1.dout<31:12>;
-			else mac1_t = MAC1 + gpl_smul_mac1.dout;
+			sel mac1_t<44>;
+			if(op<19>) mac1_t = 44#(MAC1||0x000 + 44#gpl_smul_mac1.dout)<31:12>;
+			else mac1_t = 44#MAC1 + 44#gpl_smul_mac1.dout;
 		//	A1(t);
-			set_MAC1(mac1_t);
+			set_MAC1(mac1_t<31:0>);
 
 			// MAC2 = A2((((s64)MAC2 << shift) + (IR0 * IR2)) >> shift);
 			gpl_smul_mac2.con(IR0, IR2);
-			sel mac2_t<32>;
-			if(op<19>) mac2_t = MAC2<31-12:12>||0x000 + 32#gpl_smul_mac2.dout<31:12>;
-			else mac2_t = MAC1 + gpl_smul_mac2.dout;
+			sel mac2_t<44>;
+			if(op<19>) mac2_t = 44#(MAC2||0x000 + 44#gpl_smul_mac2.dout)<31:12>;
+			else mac2_t = 44#MAC2 + 44#gpl_smul_mac2.dout;
 		//	A2(t);
-			set_MAC2(mac2_t);
+			set_MAC2(mac2_t<31:0>);
 
 			// MAC3 = A3((((s64)MAC3 << shift) + (IR0 * IR3)) >> shift);
 			gpl_smul_mac3.con(IR0, IR3);
-			sel mac3_t<32>;
-			if(op<19>) mac3_t = MAC3<31-12:12>||0x000 + 32#gpl_smul_mac3.dout<31:12>;
-			else mac3_t = MAC3 + gpl_smul_mac3.dout;
+			sel mac3_t<44>;
+			if(op<19>) mac3_t = 44#(MAC3||0x000 + 44#gpl_smul_mac3.dout)<31:12>;
+			else mac3_t = 44#MAC3 + 44#gpl_smul_mac3.dout;
 		//	A3(t);
-			set_MAC3(mac3_t);
+			set_MAC3(mac3_t<31:0>);
 			goto st_ir;
 		}
 		state st_ir par{
@@ -1856,16 +1840,16 @@ v st
 			set_RGB0(RGB1);
 			// RGB1 = RGB2;
 			set_RGB1(RGB2);
-/*
+
 			// CODE2 = CODE;
-			set_CODE2(CODE);
+		//	set_CODE2(CODE);
 			// R2 = limC1(MAC1 >> 4);
-			set_R2(limC1((MAC1>>4)<15:0>).limC1_ret);
+		//	set_R2(limC1((MAC1>>4)<15:0>).limC1_ret);
 			// G2 = limC2(MAC2 >> 4);
-			set_G2(limC2((MAC2>>4)<15:0>).limC2_ret);
+		//	set_G2(limC2((MAC2>>4)<15:0>).limC2_ret);
 			// B2 = limC3(MAC3 >> 4);
-			set_B2(limC3((MAC3>>4)<15:0>).limC3_ret);
-*/
+		//	set_B2(limC3((MAC3>>4)<15:0>).limC3_ret);
+
 			d[22] :=
 				CODE ||
 				lim_GPL.limC3(32#MAC3<31:4>).limC3_ret ||
@@ -1875,5 +1859,4 @@ v st
 			finish;
 		}
 	}
-
 }
