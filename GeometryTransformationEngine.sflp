@@ -1780,12 +1780,15 @@ v st
 	}
 
 	stage GPL_stg {
+		sel gpl_lm;
 		mul_s16 gpl_smul_mac1, gpl_smul_mac2, gpl_smul_mac3;
 		gte_LIMIT lim_GPL;
 		first_state st_init;
 		par{
 			// int shift = 12 * GTE_SF(op);
 		//	gpl_shift = 0b01100 & 5#op<19>;
+			// int lm = GTE_LM(op);
+			gpl_lm = op<10>;
 
 			instruct lim_GPL.set_FLAG set_FLAG(lim_GPL.FLAG);
 			if(0b0){
@@ -1828,11 +1831,11 @@ v st
 		}
 		state st_ir par{
 			// IR1 = limB1(MAC1, lm);
-			set_IR1(lim_GPL.limB1(MAC1, 0b0).limB1_ret);
+			set_IR1(lim_GPL.limB1(MAC1, gpl_lm).limB1_ret);
 			// IR2 = limB2(MAC2, lm);
-			set_IR2(lim_GPL.limB2(MAC2, 0b0).limB2_ret);
+			set_IR2(lim_GPL.limB2(MAC2, gpl_lm).limB2_ret);
 			// IR3 = limB3(MAC3, lm);
-			set_IR3(lim_GPL.limB3(MAC3, 0b0).limB3_ret);
+			set_IR3(lim_GPL.limB3(MAC3, gpl_lm).limB3_ret);
 			goto st_rgb;
 		}
 		state st_rgb par{
