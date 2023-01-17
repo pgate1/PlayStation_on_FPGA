@@ -1,4 +1,4 @@
-# PlayStation(PSX) on FPGA
+# PlayStation on FPGA
 implemented PlayStation on an FPGA.  
 
 When executing with the Terasic DE2-115 FPGA board, write the BIOS of SCPH-5500 to address 0 of the flash memory.
