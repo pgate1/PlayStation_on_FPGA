@@ -1,0 +1,3 @@
+PlayStation on FPGA feat. Pocket
+
+This is a basic functions of the first PlayStation to Pocket, excluding the sound and movie functional in order to get it into Pocket's FPGA.

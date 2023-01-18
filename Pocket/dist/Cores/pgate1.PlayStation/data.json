@@ -1,0 +1,27 @@
+{
+    "data": {
+        "magic": "APF_VER_1",
+        "data_slots": [
+				{
+					"name": "BIOS",
+					"id": "0x20",
+					"required": false,
+					"parameters": "0x00A",
+					"deferload": true,
+					"filename": "SCPH5500.bin",
+					"size_exact": 524288,
+					"address": "0x00000000"
+				},
+				{
+					"name": "ROM",
+					"id": "0x40",
+					"required": true,
+					"parameters": "0x00A",
+					"deferload": true,
+					"extensions": ["bin", "img", "exe"],
+					"size_maximum": "0x40000000",
+					"address": "0x00080000"
+				}
+		]
+    }
+}
