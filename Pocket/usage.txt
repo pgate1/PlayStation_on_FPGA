@@ -1,3 +1,7 @@
+
+【　WARNING, the screen flashes, so be careful if you have weak eyesight.　】
+
+
 ・using PlayStation on FPGA feat. Pocket core.
 
 1. Put the "Assets", "Cores" and "Platforms" in the dist on the SD card.
