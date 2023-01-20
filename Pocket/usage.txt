@@ -1,5 +1,5 @@
 
-【　WARNING, the screen flashes, so be careful if you have weak eyesight.　】
+【　CAUTION, the screen flickering, protect your eyes.　】
 
 
 ・using PlayStation on FPGA feat. Pocket core.
