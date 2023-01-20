@@ -1,0 +1,36 @@
+・using PlayStation on FPGA feat. Pocket core.
+
+1. Put the "Assets", "Cores" and "Platforms" in the dist on the SD card.
+
+2. Put the PlayStation SCPH5500 BIOS file on the Assets/playstation/pgate1.PlayStation.
+   The file name is "SCPH5500.bin". Other versions of BIOS have not been tested.
+
+3. Put the .bin or .img created from the PlayStation-ROM with image creation software 
+   (e.g. ImgBurn) in the Assets/playstation/pgate1.PlayStation.
+
+4. OK. Insert the SD card into the Pocket, turn it on, and select PlayStation from openFPGA.
+
+5. There are three choices from the file browser.
+
+   If you choose ROM.bin(.img), the game will launch via the PS logo (if you are lucky).
+
+   If you choose SCPH5500.bin, the PlayStation main menu will appear.
+
+   If you choose a demo program such as PSXNICCC.exe, it will run without going through the PS logo.
+
+6. Have fun until your Pocket's battery runs out.
+
+
+・What to do when it doesn't work
+
+Immediately after the first black screen, red lines appear on all four sides.
+  -> BIOS is not loaded properly. Check the file size and checksum.
+
+Cannot proceed after PS logo is displayed.
+  -> This software is not yet supported. Sorry.
+
+During play, a red line appeared on all four sides and the game stopped.
+  -> PlayStatoin Core has issued a HALT code. Insufficient functionality. Sorry.
+
+
+2023/01/20 pgate1
