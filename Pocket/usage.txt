@@ -36,8 +36,12 @@ Immediately after the first black screen, red lines appear on all four sides.
 Cannot proceed after PS logo is displayed.
   -> This software is not yet supported. Sorry.
 
+The game won't start after the PS logo.
+  -> The movie is probably being processed, so hit the Start button repeatedly after the PS logo to skip the movie. 
+     If it still doesn't start, it's still not supported.
+
 During play, a red line appeared on all four sides and the game stopped.
   -> PlayStatoin Core has issued a HALT code. Insufficient functionality. Sorry.
 
 
-2023/01/20 pgate1
+2023/01/23 pgate1
