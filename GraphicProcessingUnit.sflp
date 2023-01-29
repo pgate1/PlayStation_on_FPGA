@@ -72,7 +72,7 @@ circuit GraphicProcessingUnit
 	drawPoly poly;
 	drawRect rect;
 
-	instrin sw_outview_on, sw_view_half;
+	instrin sw_outview_on, sw_view_half, sw_texture_off;
 
 	instrout view_on;
 	output view_x<10>, view_y<9>;
@@ -176,6 +176,8 @@ dbg = dbg_reg;
 				status_dma_direction := din<1:0>;
 			}
 			din<31:24>==0x05 : par{
+				DispStartX_pre := DispStartX;
+				DispStartY_pre := DispStartY;
 				DispStartX := din<9:0>;
 				DispStartY := din<18:10>;
 				display_flip();
@@ -537,14 +539,20 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 		fill.sw_outview_on();
 		poly.sw_outview_on();
 	}
-/*
-	instruct sw_view_half par{
-		fill.sw_view_half();
-		poly.sw_view_half();
-		rect.sw_view_half();
+
+	instruct sw_view_half if(dispW){
+		fill.sw_view_half_width();
+		poly.sw_view_half_width();
+		rect.sw_view_half_width();
 	}
-*/
-	instruct texture_full /*if(poly.f_texture)*/ poly.texture_full();
+
+	instruct sw_view_half if(dispH){
+		fill.sw_view_half_height();
+		poly.sw_view_half_height();
+		rect.sw_view_half_height();
+	}
+
+	instruct texture_full if(^dispW) poly.texture_full();
 
 //poly.dbg_in = dbg_in;
 
@@ -594,11 +602,11 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 	sel view_offset_x<10>;
 	any{
 		// for width 320 of メタルギアソリッド
-		(dispWidth==320) & ((drawOffsetX-320)<10>==0b0) & ^sw_view_half : par{ // drawOffsetX >= 320
+		(dispWidth==320) & (DispStartX_pre==340) /*((drawOffsetX-320)<10>==0b0)*/ : par{ // drawOffsetX >= 320
 			view_offset_x = -320;
 		}
 		// for width 256 of PSXNICCC
-		(dispWidth==256) & ((drawOffsetX-256)<10>==0b0) & ^sw_view_half : par{ // drawOffsetX >= 256
+		(dispWidth==256) & (DispStartX_pre==256) /*((drawOffsetX-256)<10>==0b0)*/ : par{ // drawOffsetX >= 256
 			view_offset_x = -256;
 		}
 		else : view_offset_x = 0;
@@ -607,8 +615,12 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 	sel view_offset_y<9>;
 	any{
 		// for height 240 of アインハンダー
-		(dispHeight==240) & ((drawOffsetY-240)<10>==0b0) & ^sw_view_half : par{ // drawOffsetY >= 240
+		(dispHeight==240) & (DispStartY_pre==240) /*((drawOffsetY-240)<10>==0b0)*/ : par{ // drawOffsetY >= 240
 			view_offset_y = -240;
+		}
+		// for height 240 of デュープリズム
+		(dispHeight==240) & (DispStartY_pre==256) /*((drawOffsetY-240)<10>==0b0)*/ : par{ // drawOffsetY >= 240
+			view_offset_y = -256;
 		}
 		else : view_offset_y = 0;
 	}
@@ -617,7 +629,6 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 	if((dispHeight==240) & (drawOffsetY!=(0b00||DispStartY))){
 		draw_notdisp_side();
 	}
-
 
 	instruct fill.view_on par{
 		view_on();

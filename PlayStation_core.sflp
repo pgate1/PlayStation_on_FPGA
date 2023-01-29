@@ -268,7 +268,7 @@ if(spu.halt_code!=0) dbg_reg := spu.dbg;
 	dma_GPU.DmaMADR_2 = DmaMADR_2;
 	dma_GPU.DmaBCR_2 = DmaBCR_2;
 	instruct dma_GPU.wram_read WRAM_READ(dma_GPU.A);
-	if(wram_ack) dma_GPU.wram_ack();
+	if(wram_ack & (gpu.halt_code==0)) dma_GPU.wram_ack();
 	if(gpu.read_ack){
 		dma_GPU.gpu_vram_ack();
 		dma_GPU.Din = gpu.dout;
@@ -610,8 +610,6 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 						cpu_A<15:0>==0x1824 : io_reg := 0; // MDEC Status Register (R)
 
 						cpu_A<15:10>==0b000111 : par{ // 0x1C00-1E00
-						//	if(sw_spu_off) io_reg := 0x00000000; // OFFでもBIOSは通る
-						//	else 
 							io_reg := spu.io_get(cpu_A<15:0>).io_Dout || spu.io_Dout;
 						}
 
@@ -808,7 +806,6 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 					cpu_A<15:0>==0x1820 : ; // MDEC Command/Parameter Register (W)
 					cpu_A<15:0>==0x1824 : ; // MDEC Control/Reset Register (W)
 					cpu_A<15:10>==0b000111 : par{ // 0x1F80_1C00-1E00
-					//	if(^sw_spu_off) 
 						spu.io_set(cpu_A<15:0>, cpu_Dout<15:0>);
 					}
 					cpu_A<15:0>==0x2041 : ; // ディップスイッチ?

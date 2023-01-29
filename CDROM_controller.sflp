@@ -553,6 +553,22 @@ if(Irq_==0x0109) count++;
 					CdPlay();
 					goto st_CdPlay;
 				}
+				Irq_==7 : par{ // CdlStandby
+					if(DriveState!=4){
+						//error := 0x20;
+						SetResultSize(2);
+						Result[0] := StatP | 0x01;
+						Result[1] := 0x20;//error;
+						Stat := 5;
+					}
+					else{
+						AddIrqQueue(0x0107, 0x1AEAA00);
+						start_rotating := 1;
+					}
+				}
+				Irq_==0x0107 : par{ // CdlStandby
+					Stat := 2;
+				}
 				Irq_==8 : par{ // CdlStop
 					if(Play){
 						getTD(CurTrack);

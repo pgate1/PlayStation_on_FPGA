@@ -101,7 +101,7 @@ circuit drawPoly
 	input f_texblend;
 	input f_semitrans;
 
-	instrin sw_outview_on, sw_view_half;
+	instrin sw_outview_on, sw_view_half_width, sw_view_half_height;
 
 	// VIEW 640x480(320x240)
 	output view_x<10>, view_y<9>;
@@ -273,7 +273,7 @@ dbg = dbg_reg;
 	}
 
 	instruct delta_add par{
-		if(sw_view_half){
+		if(sw_view_half_width){
 	//	if(under640 & (x<0>==0b0)){
 			x += 2;
 			vr += dr << 1;
@@ -326,7 +326,7 @@ dbg = dbg_reg;
 			alt{
 				y<10> // y < 0
 				| cmp_y.lt(y, 0b0||drawY).result // y < drawY
-				| (sw_view_half & (y<0>==0b1))
+				| (sw_view_half_height & (y<0>==0b1))
 				: par{
 					y++;
 					generate bilinear_hbase.do();

@@ -25,7 +25,7 @@ circuit drawRect
 	input drawX<10>, drawY<10>, drawW<10>, drawH<10>;
 	instrin con(vx1, vy1, vx4, vy4, col, clut, tpage, vu1, vv1, vu4, vv4, drawX, drawY, drawW, drawH);
 
-	instrin sw_view_half;
+	instrin sw_view_half_width, sw_view_half_height;
 
 	instrin draw;
 	output drawing;
@@ -133,7 +133,7 @@ circuit drawRect
 				((x-vx4)<10>==0b0) // x >= ex
 				| cmp_w.gt(x, 0b0||drawW).result // x > drawW
 			){
-				if(sw_view_half){
+				if(sw_view_half_height){
 					y += 2;
 					pv += 2;
 				}
@@ -160,7 +160,7 @@ circuit drawRect
 				}
 			}
 
-			if(sw_view_half){
+			if(sw_view_half_width){
 				x += 2;
 				pu += 2;
 			}

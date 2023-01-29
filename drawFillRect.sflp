@@ -28,7 +28,7 @@ circuit drawFillRect
 	compare_s11 cmp_x, cmp_y;
 	compare_s11 cmp_w, cmp_h;
 
-	instrin sw_outview_on, sw_view_half;
+	instrin sw_outview_on, sw_view_half_width, sw_view_half_height;
 
 	output view_x<10>, view_y<9>;
 	instrout view_on(view_x, view_y);
@@ -113,7 +113,7 @@ circuit drawFillRect
 				| cmp_ex.gte(x, vx1+vx2).result // x >= ex
 				| cmp_w.gt(x, 0b0||drawW).result // x > drawW
 			){
-				if(sw_view_half) y += 2;
+				if(sw_view_half_height) y += 2;
 				else y++;
 				goto st2;
 			}
@@ -143,7 +143,7 @@ circuit drawFillRect
 			//	vram_write(y<8:0>||x<9:0>, 0b0||col);
 			}
 
-			if(sw_view_half) x += 2;
+			if(sw_view_half_width) x += 2;
 			else x++;
 		}
 	}

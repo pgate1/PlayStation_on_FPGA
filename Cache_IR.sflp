@@ -60,8 +60,8 @@ circuit Cache_IR
 	doing = clear_stg.do;
 
 	stage clear_stg {
-		reg_wr adrs<10>;
 		par{
+			reg_wr adrs<10>;
 			adrs++;
 			ram_tag_write(adrs, 0b0000000000);
 			if(/&adrs) finish;
