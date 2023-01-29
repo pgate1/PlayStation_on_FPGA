@@ -44,4 +44,4 @@ During play, a red line appeared on all four sides and the game stopped.
   -> PlayStatoin Core has issued a HALT code. Insufficient functionality. Sorry.
 
 
-2023/01/23 pgate1
+2023/01/29 pgate1
