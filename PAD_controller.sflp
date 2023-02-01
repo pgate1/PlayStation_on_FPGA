@@ -178,6 +178,14 @@ dbg16 = dbg16_reg;
 			else{
 				bufcount := 0x02 + (0b000||data_buf[parp]<3:0>||0b0);
 			}
+
+			if(data_buf[parp]==0x41){
+				switch(din_reg){
+				case 0x43: data_buf[1] := 0x43;
+				case 0x45: data_buf[1] := 0xF3;
+				}
+			}
+
 			goto st1;
 			finish;
 		}
