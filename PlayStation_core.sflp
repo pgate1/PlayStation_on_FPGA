@@ -10,6 +10,8 @@
 %i "Timer.h"
 %i "SoundProcessingUnit.h"
 %i "GraphicProcessingUnit.h"
+%i "DMA_MDECin.h"
+%i "DMA_MDECout.h"
 %i "DMA_GPU.h"
 %i "DMA_CDR.h"
 %i "DMA_SPU.h"
@@ -79,6 +81,8 @@ circuit PlayStation_core
 	output voice_L<21>, voice_R<21>;
 	output disp_env<24>;
 
+	DMA_MDECin dma_MDECin;
+	DMA_MDECout dma_MDECout;
 	DMA_GPU dma_GPU;
 	DMA_CDR dma_CDR;
 	DMA_SPU dma_SPU;
@@ -172,6 +176,7 @@ dbg32 = cdr.dbg32;//dbg32_reg;dma_CDR.dbg32;cpu.dbg32;
 	peripheral_running =
 		(/*sw_kernel_run &*/ dma_GPU.running /*& ^gpu.drawing*/) |
 		gpu.drawing | gpu.vram_busy |
+		dma_MDECin.running | dma_MDECout.running |
 		dma_CDR.running | dma_SPU.running | dma_OTC.running |
 		cdr.running | pad.running |
 		ir_cache.doing | ir_cache_check.do | cpu_read.do | cpu_write.do |
@@ -264,6 +269,24 @@ if(spu.halt_code!=0) dbg_reg := spu.dbg;
 	demo.voice_L = voice_L;
 	demo.voice_R = voice_R;
 #endif
+
+	instruct dma_MDECin.interrupt par{
+		// mdec0Interrupt()
+		DmaCHCR_0 &= ^0x01000000;
+		if(DmaDICR<16>){
+			DmaDICR |= 0x01000000;
+			IREG |= 0x0008;
+		}
+	}
+
+	instruct dma_MDECout.interrupt par{
+		// mdec1Interrupt()
+		DmaCHCR_1 &= ^0x01000000;
+		if(DmaDICR<17>){
+			DmaDICR |= 0x02000000;
+			IREG |= 0x0008;
+		}
+	}
 
 	dma_GPU.DmaMADR_2 = DmaMADR_2;
 	dma_GPU.DmaBCR_2 = DmaBCR_2;
@@ -728,11 +751,20 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 
 					cpu_A<15:0>==0x1080 : DmaMADR_0 := cpu_Dout; // DMACチャネル0(MDECin)メモリアドレス
 					cpu_A<15:0>==0x1084 : DmaBCR_0  := cpu_Dout; // DMACチャネル0(MDECin)ブロックカウント
-					cpu_A<15:0>==0x1088 : DmaCHCR_0 := cpu_Dout; // DMACチャネル0(MDECin)チャネルコントロール
+					cpu_A<15:0>==0x1088 : par{ // DMACチャネル0(MDECin)チャネルコントロール
+						DmaCHCR_0 := cpu_Dout;
+						if(DmaDPCR<3> & (cpu_Dout==0x01000201)){
+							dma_MDECin.Execute();
+						}
+					}
 					cpu_A<15:0>==0x1090 : DmaMADR_1 := cpu_Dout; // DMACチャネル1(MDECout)メモリアドレス
 					cpu_A<15:0>==0x1094 : DmaBCR_1  := cpu_Dout; // DMACチャネル1(MDECout)ブロックカウント
-					cpu_A<15:0>==0x1098 : DmaCHCR_1 := cpu_Dout; // DMACチャネル1(MDECout)チャネルコントロール
-
+					cpu_A<15:0>==0x1098 : par{ // DMACチャネル1(MDECout)チャネルコントロール
+						DmaCHCR_1 := cpu_Dout;
+						if(DmaDPCR<7> & (cpu_Dout==0x01000200)){
+							dma_MDECout.Execute();
+						}
+					}
 					cpu_A<15:0>==0x10A0 : DmaMADR_2 := cpu_Dout; // DMACチャネル2(GPU)メモリアドレス
 					cpu_A<15:0>==0x10A4 : DmaBCR_2  := cpu_Dout; // DMACチャネル2(GPU)ブロックカウント
 					cpu_A<15:0>==0x10A8 : par{ // DMACチャネル2(GPU)チャネルコントロール

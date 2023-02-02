@@ -638,6 +638,14 @@ if(Irq_==0x0109) count++;
 						Result[i] := Transfer_head[i];
 					}
 				}
+				Irq_==17 : par{ // CdlGetlocP
+					SetResultSize(8);
+					//memcpy(&Result, &subq, 8);
+					par(i=0;i<8;i++){
+						Result[i] := 0;
+					}
+				//	if(^Play & ^Reading) Result[1] := 0;
+				}
 				Irq_==18 : par{
 					AddIrqQueue(0x0112/*CdlReadT*/, 0x1F39200);
 					start_rotating := 0b1;

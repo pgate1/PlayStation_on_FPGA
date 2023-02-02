@@ -134,6 +134,7 @@ dbg = dsp.dbg;
 		}
 		io_A==0x1DA8 : par{ // Sound RAM Data Transfer Fifo
 			if(^sw_spu_off) io_write_req := 0b1;
+			else spuAddr += 2;
 			io_write_Din := io_Din;
 		}
 		io_A==0x1DAA : par{ // SPU control
