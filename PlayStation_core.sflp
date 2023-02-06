@@ -174,7 +174,7 @@ dbg32 = cdr.dbg32;//dbg32_reg;dma_CDR.dbg32;cpu.dbg32;
 
 	sel peripheral_running;
 	peripheral_running =
-		(/*sw_kernel_run &*/ dma_GPU.running /*& ^gpu.drawing*/) |
+		(dma_GPU.running /*& ^gpu.drawing*/) |
 		gpu.drawing | gpu.vram_busy |
 		dma_MDECin.running | dma_MDECout.running |
 		dma_CDR.running | dma_SPU.running | dma_OTC.running |
