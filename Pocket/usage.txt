@@ -12,6 +12,20 @@
 3. Put the .bin or .img created from the PlayStation-ROM with image creation software 
    (e.g. ImgBurn) in the Assets/playstation/common.
 
+   Assets
+     playstation
+       common
+         Rom.bin (get it from the game CD)
+         scph5500.bin (replace dummy)
+   Cores
+     pgate1.PlayStation
+       bitstream.rbf_r
+       *.json
+   Platforms
+     _images
+       playstation.bin
+     playstation.json
+
 4. OK. Insert the SD card into the Pocket, turn it on, and select PlayStation from openFPGA.
 
 5. There are three choices from the file browser.
