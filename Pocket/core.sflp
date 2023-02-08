@@ -58,7 +58,7 @@ circuit core
 	stage_name apf2sdram { task do(target_id_reg, target_slotoffset_reg, target_bridgeaddr_reg, target_length_reg); }
 	stage_name check_file { task do(); }
 	stage_name wram_clear { task do(); }
-	stage_name apf2bram { task do(target_id_reg, target_slotoffset_reg, target_bridgeaddr_reg, target_length_reg); }
+	stage_name apf2bram { task do(target_id_reg, target_slotoffset_reg, target_length_reg); }
 	stage_name rom_read { task do(); }
 	stage_name exe_read { task do(); }
 
@@ -68,12 +68,11 @@ circuit core
 	}
 
 	instruct halt halt_code := halt_sel;
-
+/*
 	reg_wr radrs<3>;
 	sel vj_data<32>;
-	if(radrs<2>==0b0) vj_data = 0x000000 || psx.halt_code;
+	if(radrs<2>==0b0) vj_data = 0x0000 || halt_code || psx.halt_code;
 	if(radrs<2>==0b1) vj_data = psx.dbg;
-/*
 	instruct vjtag.init_send radrs := 0;
 	reg_wr send_set, send_data<8>;
 	instruct vjtag.send par{
@@ -152,14 +151,13 @@ circuit core
 		}
 		if((^psx.drawing) & (^psx.stop)){
 			if(psx_run_ok) psx.vblank_begin();
-			//reg_wr flip; flip := ^flip; // 30fps
-		//	if(sw_1 | flip | ^psx.sw_kernel_run) ;//view_ram.bank_change();
+			if(f_exe) view_ram.bank_change();
 		}
 	}
 	instruct vga.vblank_end psx.vblank_end();
-//	if(psx.sw_kernel_run) view_ram.frame_rate = 1;
+//	if(f_exe) view_ram.frame_rate = 1;
 //	else view_ram.frame_rate = 0;
-	instruct psx.display_flip view_ram.bank_change();
+	instruct psx.display_flip if(^f_exe) view_ram.bank_change();
 	instruct psx.fill_view_on view_ram.fill_view_on();
 //	instruct psx.draw_notdisp_side view_ram.draw_notdisp_side();
 
@@ -169,25 +167,26 @@ circuit core
 	}
 
 	// PS : Å†,Å~,Åõ,Å¢,R,L,R2,L2,Å©,Å´,Å®,Å™,St,0,0,Sl
-	psx.key_in = (key<7> || key<5> || key<4> || key<6> || key<9> || key<8> || 0b00 || key<2> || key<1> || key<3> || key<0> || key<15> || 0b00 || key<14>);
+	psx.key_in = (key<7> || key<5> || key<4> || key<6> || key<9> || key<8> || key<11> || key<10> || key<2> || key<1> || key<3> || key<0> || key<15> || 0b00 || key<14>);
 
 psx.sw_reverb_off();
 psx.sw_spu_off();
 psx.sw_spuenv_off();
 
 	any{
-		f_bios : psx.sw_cdrom_ctrl = 0b11;
-		f_exe  : psx.sw_cdrom_ctrl = 0b01;
-		else   : psx.sw_cdrom_ctrl = 0b00;
+		f_bios : psx.sw_cdrom_ctrl = 0b11; // BIOS
+		f_exe  : psx.sw_cdrom_ctrl = 0b01; // PS-X EXE
+		else   : psx.sw_cdrom_ctrl = 0b00; // Game ROM
 	}
 
-	if(psx.sw_cdrom_ctrl!=0b01) psx.sw_kernel_run();
+	if(^f_exe) psx.sw_kernel_run();
 //	if(sw_7) psx.stop();
 
 	reg_wr key_push, key_14_hold;
 	if(key<14> & ^key_push) key_push := 0b1;
 	if(key_push & ^key<14>){ key_push := 0b0; key_14_hold := ^key_14_hold; }
 	if(key_14_hold) psx.sw_texture_off();
+//psx.sw_cache_off();
 
 /*
 SDRAM <24> 64MB
@@ -279,22 +278,24 @@ halt(0x96);
 		generate exe_read.do();
 	}
 
-//reg_wr tcount<11>;
-//vj_data := rom_apf2ram.do||exe_read_ok||19#0b0||tcount; // 0xBB800
-
 	// BIOS 0b0100_0000_0000_0000_0000_0000
 	// 0x00400000 -> 0x01000000
 	stage apf2sdram {
 		first_state st1;
 		state st1 par{
-			set_sdram_reg := 0b1;
-			goto st2;
+			reg_wr wait_count<4>;
+			wait_count++;
+			if(/&wait_count) goto st2;
 		}
-		state st2 if(target_dataslot_read){
-			set_sdram_reg := 0b0;
+		state st2 if(sdram_ack){
+			set_sdram_reg := 0b1;
 			goto st3;
 		}
-		state st3 if(^ram_reloading){
+		state st3 if(target_dataslot_read){
+			set_sdram_reg := 0b0;
+			goto st4;
+		}
+		state st4 if(^ram_reloading){
 			reg_wr file_checked;
 			if(^file_checked){
 				generate check_file.do();
@@ -308,7 +309,7 @@ halt(0x96);
 	stage check_file {
 		first_state st1;
 		state st1 par{
-			generate apf2bram.do(0x0040, 0, 0, 4);
+			generate apf2bram.do(0x0040, 0, 4);
 			goto st2;
 		}
 		state st2 if(^apf2bram.do){
@@ -369,7 +370,7 @@ halt(0x96);
 				goto st_data;
 			}
 			else{
-				generate apf2bram.do(0x0040, 0b00||psx.file_adrs<29:13>||13#0b0, 0, 8192);
+				generate apf2bram.do(0x0040, 0b00||psx.file_adrs<29:13>||13#0b0, 8192);
 				file_adrs := psx.file_adrs<29:13>;
 			}
 		}
@@ -391,7 +392,7 @@ halt(0x96);
 		reg_wr text_start<21>, text_size<21>; // ram 2MB
 		first_state st_open;
 		state st_open par{
-			generate apf2bram.do(0x0040, 0, 0, 0x00000800);
+			generate apf2bram.do(0x0040, 0, 0x00000800);
 			goto st_head;
 		}
 		state st_head if(^apf2bram.do){
@@ -406,19 +407,21 @@ halt(0x96);
 			psx.exe_set(h_adrs, h_data);
 
 			any{
-				h_adrs==0x01B : text_start := file_ram.dout<20:0>;
-				h_adrs==0x01F : text_size := file_ram.dout<20:0>;
+				h_adrs==0x018 : text_start := file_ram.dout<20:0>;
+				h_adrs==0x01C : text_size := file_ram.dout<20:0>;
 			}
 
-			file_ram.read(0b0 || h_adrs<11:2>);
-			h_adrs++;
+			sel h_adrs_inc<12>;
+			h_adrs_inc = h_adrs + 0x001;
+			file_ram.read(0b0 || h_adrs_inc<11:2>);
+			h_adrs := h_adrs_inc;
 			if(h_adrs==0x7FF) goto st_text;
 		}
 		state st_text par{
 			generate apf2sdram.do(0x0040, 0x00000800, 11#0b0||text_start, 11#0b0||text_size);
 			goto st_end;
 		}
-		state st_end if(sdram_ack & ^apf2sdram.do){
+		state st_end if(^apf2sdram.do){
 			exe_read_ok := 0b1;
 			finish;
 		}
