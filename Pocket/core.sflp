@@ -151,13 +151,13 @@ circuit core
 		}
 		if((^psx.drawing) & (^psx.stop)){
 			if(psx_run_ok) psx.vblank_begin();
-			if(f_exe) view_ram.bank_change();
+		//	if(f_exe) view_ram.bank_change();
 		}
 	}
 	instruct vga.vblank_end psx.vblank_end();
 //	if(f_exe) view_ram.frame_rate = 1;
 //	else view_ram.frame_rate = 0;
-	instruct psx.display_flip if(^f_exe) view_ram.bank_change();
+	instruct psx.display_flip /*if(^f_exe)*/ view_ram.bank_change();
 	instruct psx.fill_view_on view_ram.fill_view_on();
 //	instruct psx.draw_notdisp_side view_ram.draw_notdisp_side();
 
