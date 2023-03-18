@@ -1,0 +1,135 @@
+/*
+	Motion Decoder
+		by pgate1
+*/
+
+circuit MDEC
+{
+	input din<32>;
+	instrin WriteCmd(din), WriteCtrl(din);
+	instrin ReadData, ReadStatus;
+	output dout<32>;
+
+	reg_wr reg0<32>, reg1<32>;
+
+	instrin DMAin_Execute, DMAout_Execute;
+	output running;
+
+	instrin run33;
+	reg_wr count0_rst, count1_rst;
+	instrout mdec0_interrupt, mdec1_interrupt;
+
+	stage_name run_dma0 { task do(); }
+	stage_name int_wait0 { task do(count0_rst); }
+	stage_name run_dma1 { task do(); }
+	stage_name int_wait1 { task do(count1_rst); }
+
+
+	instruct WriteCmd par{
+		reg0 := din;
+	}
+
+	instruct WriteCtrl par{
+		if(din<31>){
+			reg0 := 0x00000000;
+			reg1 := 0x00000000;
+		}
+	}
+
+	instruct ReadData par{
+		dout = reg0;
+	}
+
+	instruct ReadStatus par{
+		dout = reg1;
+	}
+
+
+	running = run_dma0.do | run_dma1.do;
+
+	instruct DMAin_Execute par{
+		generate run_dma0.do();
+	}
+
+	instruct DMAout_Execute par{
+		generate run_dma1.do();
+	}
+
+	stage run_dma0 {
+		first_state st1;
+		state st1 par{
+			reg1 |= 0x00800000;
+			goto st2;
+		}
+		state st2 par{
+			switch(reg0<31:28>){
+				case 3: par{
+					reg1 |= 0x20000000;
+				}
+				case 4: par{
+					generate int_wait0.do(1);
+				}
+				case 6: par{
+					generate int_wait0.do(1);
+				}
+				default: par{
+					mdec0_interrupt();
+				}
+			}
+
+			goto st1;
+			finish;
+		}
+	}
+
+	stage int_wait0 {
+		reg_wr int_wait_count0<8>;
+		first_state st1;
+		state st1 par{
+			int_wait_count0 := 0;
+			count0_rst := 0b0;
+			goto st2;
+		}
+		state st2 if(run33){
+			int_wait_count0++;
+			if(int_wait_count0==20){
+				mdec0_interrupt();
+				goto st1;
+				finish;
+			}
+			if(count0_rst) goto st1;
+		}
+	}
+
+	stage run_dma1 {
+		first_state st1;
+		state st1 par{
+			if(reg1<29>==0b0){
+			}
+			else{
+				generate int_wait1.do(1);
+			}
+			finish;
+		}
+	}
+
+	stage int_wait1 {
+		reg_wr int_wait_count1<8>;
+		first_state st1;
+		state st1 par{
+			int_wait_count1 := 0;
+			count1_rst := 0b0;
+			goto st2;
+		}
+		state st2 if(run33){
+			int_wait_count1++;
+			if(int_wait_count1==20){
+				mdec1_interrupt();
+				goto st1;
+				finish;
+			}
+			if(count1_rst) goto st1;
+		}
+	}
+
+}

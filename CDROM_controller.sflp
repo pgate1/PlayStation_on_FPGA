@@ -1178,8 +1178,8 @@ dbg_reg := 0x0000 || Irq_;
 	}
 
 	stage clear_transbuf {
-		reg_wr ca<12>;
 		par{
+			reg_wr ca<12>;
 			Transfer.write(ca, 0x00);
 			ca++;
 			if(/&ca) finish;

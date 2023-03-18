@@ -10,8 +10,7 @@
 %i "Timer.h"
 %i "SoundProcessingUnit.h"
 %i "GraphicProcessingUnit.h"
-%i "DMA_MDECin.h"
-%i "DMA_MDECout.h"
+%i "MDEC.h"
 %i "DMA_GPU.h"
 %i "DMA_CDR.h"
 %i "DMA_SPU.h"
@@ -28,7 +27,7 @@ circuit PlayStation_core
 	instrin cpu_run;
 	R3000A cpu;
 	Cache_IR ir_cache;
-	reg_wr cache_control<32>;
+	reg_wr cache_control<12>;
 //	reg_wr cache_A<21>;
 
 	output A<21>;
@@ -81,8 +80,7 @@ circuit PlayStation_core
 	output voice_L<21>, voice_R<21>;
 	output disp_env<24>;
 
-	DMA_MDECin dma_MDECin;
-	DMA_MDECout dma_MDECout;
+	MDEC mdec;
 	DMA_GPU dma_GPU;
 	DMA_CDR dma_CDR;
 	DMA_SPU dma_SPU;
@@ -176,7 +174,7 @@ dbg32 = cdr.dbg32;//dbg32_reg;dma_CDR.dbg32;cpu.dbg32;
 	peripheral_running =
 		(dma_GPU.running /*& ^gpu.drawing*/) |
 		gpu.drawing | gpu.vram_busy |
-		dma_MDECin.running | dma_MDECout.running |
+		mdec.running |
 		dma_CDR.running | dma_SPU.running | dma_OTC.running |
 		cdr.running | pad.running |
 		ir_cache.doing | ir_cache_check.do | cpu_read.do | cpu_write.do |
@@ -193,11 +191,13 @@ dbg32 = cdr.dbg32;//dbg32_reg;dma_CDR.dbg32;cpu.dbg32;
 		}
 	}
 
+	// for PS-X EXE
 	if(sw_cdrom_ctrl==0b01){
 		reg_wr exe_running;
 		if(cpu_read.do & (cpu_A==0x80030000) & ^exe_running){
 			exe_running := 0b1;
 			kernel_ok();
+			ir_cache.clear();
 		}
 	}
 
@@ -270,7 +270,7 @@ if(spu.halt_code!=0) dbg_reg := spu.dbg;
 	demo.voice_R = voice_R;
 #endif
 
-	instruct dma_MDECin.interrupt par{
+	instruct mdec.mdec0_interrupt par{
 		// mdec0Interrupt()
 		DmaCHCR_0 &= ^0x01000000;
 		if(DmaDICR<16>){
@@ -279,7 +279,7 @@ if(spu.halt_code!=0) dbg_reg := spu.dbg;
 		}
 	}
 
-	instruct dma_MDECout.interrupt par{
+	instruct mdec.mdec1_interrupt par{
 		// mdec1Interrupt()
 		DmaCHCR_1 &= ^0x01000000;
 		if(DmaDICR<17>){
@@ -423,7 +423,7 @@ drawing = gpu.drawing;
 vraming = gpu.vram_busy;
 
 	instruct cpu.read_req par{
-		if((^sw_cache_off) & ((cpu.A<31:24>==0x00) | (cpu.A<31:24>==0x80)) & cpu.ir_read){ // キャッシュは0x80だけ?
+		if((^sw_cache_off) & ((cpu.A<31:24>==0x00) | (cpu.A<31:24>==0x80)) /*& cpu.ir_read*/){
 			ir_cache.read(cpu.A<20:0>);
 			generate ir_cache_check.do(cpu.A);
 		}
@@ -452,14 +452,12 @@ vraming = gpu.vram_busy;
 			}
 
 			if(cpu.run){
+				mdec.run33();
 				dma_GPU.run33();
 				dma_CDR.run33();
 				dma_SPU.run33();
 				dma_OTC.run33();
-			}
-
-			if(cpu.run) cdr.run33();
-			if(cpu.run){ // CPUに合わせてキー入力できるようになった
+				cdr.run33();
 				pad.run33();
 			}
 
@@ -471,12 +469,15 @@ vraming = gpu.vram_busy;
 					timer[i].run33();
 				}
 			}
-			dma_GPU.run33();
-			dma_CDR.run33();
-			dma_SPU.run33();
-			dma_OTC.run33();
-			cdr.run33();
-			pad.run33();
+			if(cpu.run){
+				mdec.run33();
+				dma_GPU.run33();
+				dma_CDR.run33();
+				dma_SPU.run33();
+				dma_OTC.run33();
+				cdr.run33();
+				pad.run33();
+			}
 		}
 	}
 
@@ -629,8 +630,8 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 						cpu_A<15:0>==0x1814 : par{ // GPUステータス／コントロール
 							io_reg := gpu.read_status().dout;
 						}
-						cpu_A<15:0>==0x1820 : io_reg := 0; // MDEC Data/Response Register (R)
-						cpu_A<15:0>==0x1824 : io_reg := 0; // MDEC Status Register (R)
+						cpu_A<15:0>==0x1820 : io_reg := mdec.ReadData().dout; // MDEC Data/Response Register (R)
+						cpu_A<15:0>==0x1824 : io_reg := mdec.ReadStatus().dout; // MDEC Status Register (R)
 
 						cpu_A<15:10>==0b000111 : par{ // 0x1C00-1E00
 							io_reg := spu.io_get(cpu_A<15:0>).io_Dout || spu.io_Dout;
@@ -648,7 +649,7 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 					generate read_bios_wait.do();
 				}
 				map_cctrl : if(cpu_A<15:0>==0x0130){
-					io_reg := cache_control;
+					io_reg := 20#0b0 || cache_control;
 					generate read_io_wait.do();
 				}
 				else : read_io_wait.do();
@@ -754,7 +755,7 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 					cpu_A<15:0>==0x1088 : par{ // DMACチャネル0(MDECin)チャネルコントロール
 						DmaCHCR_0 := cpu_Dout;
 						if(DmaDPCR<3> & (cpu_Dout==0x01000201)){
-							dma_MDECin.Execute();
+							mdec.DMAin_Execute();
 						}
 					}
 					cpu_A<15:0>==0x1090 : DmaMADR_1 := cpu_Dout; // DMACチャネル1(MDECout)メモリアドレス
@@ -762,7 +763,7 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 					cpu_A<15:0>==0x1098 : par{ // DMACチャネル1(MDECout)チャネルコントロール
 						DmaCHCR_1 := cpu_Dout;
 						if(DmaDPCR<7> & (cpu_Dout==0x01000200)){
-							dma_MDECout.Execute();
+							mdec.DMAout_Execute();
 						}
 					}
 					cpu_A<15:0>==0x10A0 : DmaMADR_2 := cpu_Dout; // DMACチャネル2(GPU)メモリアドレス
@@ -797,7 +798,7 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 					cpu_A<15:0>==0x10C4 : DmaBCR_4 := cpu_Dout;
 					cpu_A<15:0>==0x10C8 : par{
 						DmaCHCR_4 := cpu_Dout;
-						if(DmaDPCR<19> & (cpu_Dout==0x01000201)){
+						if(DmaDPCR<19> & (cpu_Dout==0x01000201)){ // mem2spuram
 							dma_SPU.Execute();
 						}
 					}
@@ -835,8 +836,8 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 					cpu_A<15:0>==0x1814 : par{ // GPUステータス／コントロール
 						gpu.write_status(cpu_Dout);
 					}
-					cpu_A<15:0>==0x1820 : ; // MDEC Command/Parameter Register (W)
-					cpu_A<15:0>==0x1824 : ; // MDEC Control/Reset Register (W)
+					cpu_A<15:0>==0x1820 : mdec.WriteCmd(cpu_Dout); // MDEC Command/Parameter Register (W)
+					cpu_A<15:0>==0x1824 : mdec.WriteCtrl(cpu_Dout); // MDEC Control/Reset Register (W)
 					cpu_A<15:10>==0b000111 : par{ // 0x1F80_1C00-1E00
 						spu.io_set(cpu_A<15:0>, cpu_Dout<15:0>);
 					}
@@ -847,9 +848,8 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 					}
 				}
 				map_cctrl : if(cpu_A<15:0>==0x0130){
-					cache_control := cpu_Dout;
-
-					if((cpu_Dout==0x00000800) | (cpu_Dout==0x00000804)){
+					cache_control := cpu_Dout<11:0>;
+					if((cpu_Dout==0x00000800) /*| (cpu_Dout==0x00000804)*/){
 						ir_cache.clear();
 					}
 				}
