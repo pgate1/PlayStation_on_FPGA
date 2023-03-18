@@ -15,7 +15,7 @@
    Assets
      playstation
        common
-         Rom.bin (get it from the game CD)
+         rom.bin (get it from the game CD)
          scph5500.bin (replace dummy)
    Cores
      pgate1.PlayStation

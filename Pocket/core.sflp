@@ -68,7 +68,7 @@ circuit core
 	}
 
 	instruct halt halt_code := halt_sel;
-/*
+
 	reg_wr radrs<3>;
 	sel vj_data<32>;
 	if(radrs<2>==0b0) vj_data = 0x0000 || halt_code || psx.halt_code;
@@ -89,7 +89,7 @@ circuit core
 		vjtag.send_set(send_data);
 		send_set := 0b0;
 	}
-*/
+
 	sdram_ack := sdram_ack_100;
 
 	set_sdram = set_sdram_reg;
@@ -185,7 +185,7 @@ psx.sw_spuenv_off();
 	reg_wr key_push, key_14_hold;
 	if(key<14> & ^key_push) key_push := 0b1;
 	if(key_push & ^key<14>){ key_push := 0b0; key_14_hold := ^key_14_hold; }
-	if(key_14_hold) psx.sw_texture_off();
+//	if(key_14_hold) psx.sw_texture_off();
 //psx.sw_cache_off();
 
 /*
