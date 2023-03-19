@@ -1,8 +1,14 @@
 
-【　CAUTION, the screen flickering, protect your eyes.　】
+PlayStation on FPGA feat. Analogue Pocket
 
 
-・using PlayStation on FPGA feat. Pocket core.
+[ CAUTION, the screen flickering, protect your eyes. ]
+
+This is a port of the basic functions of the first PlayStation to Analogue Pocket.
+Sound and movie functions have been left out to fit in Pocket's FPGA.
+
+
+* Using core.
 
 1. Put the "Assets", "Cores" and "Platforms" in the dist on the SD card.
 
@@ -42,7 +48,7 @@ If it works happily, please take a video of it and upload it to Twitter. I will 
 Select button? to enter raw polygon drawing mode.
 
 
-・What to do when it doesn't work
+* What to do when it doesn't work.
 
 Immediately after the first black screen, red lines appear on all four sides.
   -> BIOS is not loaded properly. Check the file size and checksum.
@@ -58,4 +64,4 @@ During play, a red line appeared on all four sides and the game stopped.
   -> PlayStatoin Core has issued a HALT code. Insufficient functionality. Sorry.
 
 
-2023/02/04 pgate1
+2023/03/18 pgate1
