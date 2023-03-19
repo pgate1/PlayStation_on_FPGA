@@ -1,3 +1,4 @@
-PlayStation on FPGA feat. Pocket
+PlayStation on FPGA feat. Analogue Pocket
 
-This is a basic functions of the first PlayStation to Pocket, excluding the sound and movie functional in order to get it into Pocket's FPGA.
+This is a port of the basic functions of the original PlayStation to Analogue Pocket.
+Sound and movie functions have been left out to fit in Pocket's FPGA.
