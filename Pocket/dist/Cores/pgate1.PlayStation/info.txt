@@ -1,4 +1,4 @@
 PlayStation on FPGA feat. Analogue Pocket
 
-This is a port of the basic functions of the original PlayStation to Analogue Pocket.
+This is a port of the basic functions of the first PlayStation to Analogue Pocket.
 Sound and movie functions have been left out to fit in Pocket's FPGA.
