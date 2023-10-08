@@ -1,6 +1,7 @@
 # PlayStation on FPGA
 implemented PlayStation on an FPGA.  
 
+<!--
 When executing with the Terasic DE2-115 FPGA board, write the BIOS of SCPH-5500 to address 0 of the flash memory.
 Reset is BUTTON 0.  
 <pre>
@@ -10,10 +11,13 @@ Reset is BUTTON 0.
   1    0     SONY logo -> "Not a PlayStation standard disc"
   1    1     SONY logo -> Main menu view.
 </pre>
+-->
 
 <a target=_blank href="https://pgate1.at-ninja.jp/PSX_on_FPGA/">PlayStation Sound Player on FPGA</a>  
-<a target=_blank href="https://www.youtube.com/watch?v=2PupKQtSOCA">PlayStation(PSX) on FPGA (Kernel run and the Texture)</a>
+<a target=_blank href="https://www.youtube.com/watch?v=2PupKQtSOCA">PlayStation on FPGA feat. DE2-115 (Kernel run and the Texture)</a>  
+<a target=_blank href="https://www.youtube.com/watch?v=xV6hRjSPIlo">PlayStation on FPGA feat. Pocket</a>
   
+<!--
 2019/11/12  
 Run BIOS.  
 <img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/20191112_sony.jpg">
@@ -42,3 +46,23 @@ Metalgear Solid demo
 2022/03/27  
 Add MemoryCard Controller for Saga Frontier 2.  
 <img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/v_SagaFrontier2.jpg">
+-->
+
+<img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/v_SagaFrontier2.jpg">
+
+##Here's a list of games that work a little, but somehow.
+There may be other games that work too.
+
+- Einhander
+- Ridge Racer
+- Tobal No.1
+- Ace Combat 2
+- XI
+- Vagrant Story
+- Love & Destroy
+- iS internal section
+- Saga Frontier 2
+- Dewprism
+- Metal Gear Solid Integral VR disc
+- Ray Storm
+
