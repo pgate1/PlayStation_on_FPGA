@@ -48,13 +48,15 @@ Add MemoryCard Controller for Saga Frontier 2.
 <img width=600 src="https://pgate1.at-ninja.jp/PSX_on_FPGA/github_img/v_SagaFrontier2.jpg">
 -->
 
-<img width=300 src="img/20230129_Einhander.jpg"><img width=300 src="img/20230318_VagrantStory.jpg">
-<img width=300 src="img/20230201_MetalGearSolid.jpg"><img width=300 src="img/20230318_XI.jpg">
+## Screenshots
+
+<img width=200 src="img/20230129_Einhander.jpg"><img width=200 src="img/20230318_VagrantStory.jpg">
+<img width=200 src="img/20230201_MetalGearSolid.jpg"><img width=200 src="img/20230318_XI.jpg">
+<img width=200 src="img/20230129_Dewprism.jpg"><img width=200 src="img/20230203_RayStorm.jpg">
 
 ## Working game list
 
-Here's a list of games that work a little, but somehow.
-There may be other games that work too.
+Here's a list of games that work a little. There may be other games that work as well.
 
 - Einhander
 - Ridge Racer
