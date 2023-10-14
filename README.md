@@ -14,8 +14,8 @@ Reset is BUTTON 0.
 -->
 
 <a target=_blank href="https://pgate1.at-ninja.jp/PSX_on_FPGA/">PlayStation Sound Player on FPGA</a>  
-<a target=_blank href="https://www.youtube.com/watch?v=2PupKQtSOCA">PlayStation on FPGA feat. DE2-115 (Kernel run and the Texture</a>  
-<a target=_blank href="https://www.youtube.com/watch?v=xV6hRjSPIlo">PlayStation on FPGA feat. Pocket</a>  
+<a target=_blank href="https://www.youtube.com/watch?v=2PupKQtSOCA">PlayStation on FPGA feat. DE2-115 (Run kernel)</a>  
+<a target=_blank href="https://www.youtube.com/watch?v=xV6hRjSPIlo">PlayStation on FPGA feat. Pocket (No sound)</a>  
   
 <!--
 2019/11/12  
