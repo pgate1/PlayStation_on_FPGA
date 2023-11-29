@@ -19,18 +19,18 @@ Sound and movie functions have been left out to fit in Pocket's FPGA.
    (e.g. ImgBurn) in the Assets/playstation/common.
 
    Assets
-     playstation
-       common
-         rom.bin (get it from the game CD)
-         scph5500.bin (replace dummy)
+      playstation
+         common
+            rom.bin (get it from the game CD)
+            scph5500.bin (replace dummy)
    Cores
-     pgate1.PlayStation
-       bitstream.rbf_r
-       *.json
+      pgate1.PlayStation
+         bitstream.rbf_r
+         *.json
    Platforms
-     _images
-       playstation.bin
-     playstation.json
+      _images
+         playstation.bin
+      playstation.json
 
 4. OK. Insert the SD card into the Pocket, turn it on, and select PlayStation from openFPGA.
 
@@ -50,8 +50,11 @@ Select button? to enter raw polygon drawing mode.
 
 * What to do when it doesn't work.
 
+Error in framework File ID [32] size bad.
+  -> The file size of BIOS must be 524,288 bytes.
+
 Immediately after the first black screen, red lines appear on all four sides.
-  -> BIOS is not loaded properly. Check the file size and checksum.
+  -> It may not be a valid BIOS file. Please check the checksum.
 
 Cannot proceed after PS logo is displayed.
   -> This software is not yet supported. Sorry.
@@ -64,4 +67,4 @@ During play, a red line appeared on all four sides and the game stopped.
   -> PlayStatoin Core has issued a HALT code. Insufficient functionality. Sorry.
 
 
-2023/03/18 pgate1
+2023/11/28 pgate1
