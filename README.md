@@ -54,6 +54,7 @@ Add MemoryCard Controller for Saga Frontier 2.
 <img width=260 src="img/20230129_Einhander.jpg"><img width=260 src="img/20230318_VagrantStory.jpg">
 <img width=260 src="img/20230201_MetalGearSolid.jpg"><img width=260 src="img/20230318_XI.jpg">
 <img width=260 src="img/20230203_RayStorm.jpg"><img width=260 src="img/20230202_IsInternalSection.jpg">
+<img width=260 src="img/20250228_RockmanX6.jpg"><img width=260 src="img/20250228_ValkyrieProfile.jpg">
 
 ## Working game list
 
@@ -71,4 +72,5 @@ Here's a list of games that work a little. There may be other games that work as
 - Dewprism
 - Metal Gear Solid Integral VR disc
 - Ray Storm
-
+- Rockman X6
+- Valkyrie Profile
