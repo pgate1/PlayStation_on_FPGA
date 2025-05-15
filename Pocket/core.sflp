@@ -8,9 +8,9 @@
 %i "../DDS_50to33868800.h"
 %i "../VGA_ctrl.h"
 %i "../view_ram_ctrl.h"
-%i "ram_8k.h"
+%i "ram_4k.h"
 
-%i "../../../Pocket/vjtag_uart.h"
+%i "../../../hdl/USB-JTAG/DE0-CV/vjtag_uart.h"
 
 circuit core
 {
@@ -45,7 +45,7 @@ circuit core
 
 	reg_wr exe_read_ok, psx_run_ok;
 
-	ram_8k file_ram;
+	ram_4k file_ram;
 
 	reg_wr f_bios, f_exe;
 
@@ -73,9 +73,11 @@ circuit core
 	sel vj_data<32>;
 	if(radrs<2>==0b0) vj_data = 0x0000 || halt_code || psx.halt_code;
 	if(radrs<2>==0b1) vj_data = psx.dbg;
-	instruct vjtag.init_send radrs := 0;
-	reg_wr send_set, send_data<8>;
-	instruct vjtag.send par{
+	instruct vjtag.send_init par{
+		radrs := 0;
+	}
+	reg_wr vjtag_send, send_data<8>;
+	instruct vjtag.send_ready par{
 		switch(radrs<1:0>){
 			case 0: send_data := vj_data<7:0>;
 			case 1: send_data := vj_data<15:8>;
@@ -83,11 +85,11 @@ circuit core
 			case 3: send_data := vj_data<31:24>;
 		}
 		radrs++;
-		send_set := 0b1;
+		vjtag_send := 0b1;
 	}
-	if(send_set){
-		vjtag.send_set(send_data);
-		send_set := 0b0;
+	if(vjtag_send){
+		vjtag.send(send_data);
+		vjtag_send := 0b0;
 	}
 
 	sdram_ack := sdram_ack_100;
@@ -113,9 +115,9 @@ circuit core
 		vga.iR = 0xFF; vga.iG = 0x00; vga.iB = 0x00;
 	}
 	else{
-		vga.iR = view_ram.out_R || 0b111;
-		vga.iG = view_ram.out_G || 0b111;
-		vga.iB = view_ram.out_B || 0b111;
+		vga.iR = view_ram.out_R || view_ram.out_R<4:2>;
+		vga.iG = view_ram.out_G || view_ram.out_G<4:2>;
+		vga.iB = view_ram.out_B || view_ram.out_B<4:2>;
 	}
 	reg_wr vga_R_reg<8>, vga_G_reg<8>, vga_B_reg<8>;
 	vga_R_reg := vga.oR;
@@ -151,14 +153,11 @@ circuit core
 		}
 		if((^psx.drawing) & (^psx.stop)){
 			if(psx_run_ok) psx.vblank_begin();
-		//	if(f_exe) view_ram.bank_change();
 		}
 	}
 	instruct vga.vblank_end psx.vblank_end();
-//	if(f_exe) view_ram.frame_rate = 1;
-//	else view_ram.frame_rate = 0;
-	instruct psx.display_flip /*if(^f_exe)*/ view_ram.bank_change();
-	instruct psx.fill_view_on view_ram.fill_view_on();
+	instruct psx.display_flip view_ram.bank_change();
+//	instruct psx.fill_view_on view_ram.fill_view_on(); // 20230402 コメントアウト
 //	instruct psx.draw_notdisp_side view_ram.draw_notdisp_side();
 
 	if(exe_read_ok & psx_run_ok & (halt_code==0x00) & (^psx.stop)){
@@ -167,7 +166,11 @@ circuit core
 	}
 
 	// PS : □,×,○,△,R,L,R2,L2,←,↓,→,↑,St,0,0,Sl
-	psx.key_in = (key<7> || key<5> || key<4> || key<6> || key<9> || key<8> || key<11> || key<10> || key<2> || key<1> || key<3> || key<0> || key<15> || 0b00 || key<14>);
+	psx.key_in = (
+		key<7> || key<5> || key<4> || key<6> || 
+		key<9> || key<8> || key<11> || key<10> || 
+		key<2> || key<1> || key<3> || key<0> || 
+		key<15> || 0b00 || key<14>);
 
 psx.sw_reverb_off();
 psx.sw_spu_off();
@@ -216,6 +219,7 @@ SDRAM <24> 64MB
 		}
 	}
 
+	// 0b01_0000_0aaa_aaaa_aaaa_aaaa_aa00
 	instruct psx.BIOS_READ par{
 		sdram_read(0b0100000||psx.A<18:2>);
 	}
@@ -348,7 +352,7 @@ halt(0x96);
 			goto st3;
 		}
 		state st3 if(bram_word_wr | ^ram_reloading){
-			reg_wr adrs<11>; // 0x7FF
+			reg_wr adrs<10>; // 0x3FF
 			file_ram.write(adrs, bram_wdata);
 			adrs++;
 			if(/&adrs) goto st4;
@@ -361,17 +365,17 @@ halt(0x96);
 	}
 
 	stage rom_read {
-		reg_ws file_adrs<17>;
+		reg_ws file_adrs<18>;
 		first_state st_read;
 		state st_read if(psx.file_read_req & ^apf2bram.do){
 			// 783216000 Byte = 0x2EAEED80 -> 0x40000000 30bit
-			if(psx.file_adrs<29:13>==file_adrs){
-				file_ram.read(psx.file_adrs<12:2>);
+			if(psx.file_adrs<29:12>==file_adrs){
+				file_ram.read(psx.file_adrs<11:2>);
 				goto st_data;
 			}
 			else{
-				generate apf2bram.do(0x0040, 0b00||psx.file_adrs<29:13>||13#0b0, 8192);
-				file_adrs := psx.file_adrs<29:13>;
+				generate apf2bram.do(0x0040, 0b00||psx.file_adrs<29:12>||12#0b0, 4096);
+				file_adrs := psx.file_adrs<29:12>;
 			}
 		}
 		state st_data par{
@@ -392,11 +396,11 @@ halt(0x96);
 		reg_wr text_start<21>, text_size<21>; // ram 2MB
 		first_state st_open;
 		state st_open par{
-			generate apf2bram.do(0x0040, 0, 0x00000800);
+			generate apf2bram.do(0x0040, 0, 0x00000100);
 			goto st_head;
 		}
 		state st_head if(^apf2bram.do){
-			reg_wr h_adrs<12>; // 0x7FF<11>
+			reg_wr h_adrs<8>; // 0xFF<8>
 			sel h_data<8>;
 			switch(h_adrs<1:0>){
 				case 0: h_data = file_ram.dout<7:0>;
@@ -404,18 +408,18 @@ halt(0x96);
 				case 2: h_data = file_ram.dout<23:16>;
 				case 3: h_data = file_ram.dout<31:24>;
 			}
-			psx.exe_set(h_adrs, h_data);
+			psx.exe_set(0x0||h_adrs, h_data);
 
 			any{
-				h_adrs==0x018 : text_start := file_ram.dout<20:0>;
-				h_adrs==0x01C : text_size := file_ram.dout<20:0>;
+				h_adrs==0x18 : text_start := file_ram.dout<20:0>;
+				h_adrs==0x1C : text_size := file_ram.dout<20:0>;
 			}
 
-			sel h_adrs_inc<12>;
-			h_adrs_inc = h_adrs + 0x001;
-			file_ram.read(0b0 || h_adrs_inc<11:2>);
+			sel h_adrs_inc<8>;
+			h_adrs_inc = h_adrs + 0x01;
+			file_ram.read(0b0000 || h_adrs_inc<7:2>);
 			h_adrs := h_adrs_inc;
-			if(h_adrs==0x7FF) goto st_text;
+			if(h_adrs==0xFF) goto st_text;
 		}
 		state st_text par{
 			generate apf2sdram.do(0x0040, 0x00000800, 11#0b0||text_start, 11#0b0||text_size);
