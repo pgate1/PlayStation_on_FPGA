@@ -1,4 +1,6 @@
 
+// PSX 59.94Hz, 25MHz V524H796(59.938Hz), V525H794(59.998Hz)
+
 circuit VGA_ctrl
 {
 	instrin htiming; // 25MHz
@@ -8,6 +10,7 @@ circuit VGA_ctrl
 	instrout vblank_begin, vblank_end, /*hblank_begin,*/ view;
 	output h_count<10>, v_count<10>;
 	reg_wr h_count_reg<10>, v_count_reg<10>;
+	instrout vsync, hsync, dsync;
 
 	input iR<8>, iG<8>, iB<8>;
 	output oR<8>, oG<8>, oB<8>;
@@ -61,24 +64,26 @@ VGA_RGB     -  -  d  d  -  -
 	instruct htiming par{
 		reg_wr h_tim<10>;
 		reg_wr view_en_reg;
+		dsync();
 		any{
 			h_tim==0 : par{
 				h_sync_reg := 0b0;
+				hsync();
 			}
 			h_tim==96 : par{
 				h_sync_reg := 0b1;
 				vtiming();
 			}
-			h_tim==(96+48-1) : par{
+			h_tim==(96+44-1) : par{
 				view_en_reg := 0b1;
 			}
-			h_tim==(96+48) : par{
+			h_tim==(96+44) : par{
 				h_en_reg := 0b1;
 			}
-			h_tim==(96+48+640-1) : par{
+			h_tim==(96+44+640-1) : par{
 				view_en_reg := 0b0;
 			}
-			h_tim==(96+48+640) : par{
+			h_tim==(96+44+640) : par{
 				h_en_reg := 0b0;
 			//	hblank_begin();
 			}
@@ -87,10 +92,10 @@ VGA_RGB     -  -  d  d  -  -
 		// view(view_en_reg)でvramからreadして次のクロックで表示する
 		if(v_en_reg & view_en_reg & (h_tim<0>==0b0)) view();
 
-		if(h_tim==(800-1)) h_tim := 0;
+		if(h_tim==(796-1)) h_tim := 0;
 		else h_tim++;
 
-		if(h_tim==(96+48)) h_count_reg := 0;
+		if(h_tim==(96+44)) h_count_reg := 0;
 		else h_count_reg++;
 	}
 
@@ -99,21 +104,22 @@ VGA_RGB     -  -  d  d  -  -
 		any{
 			v_tim==0 : par{
 				v_sync_reg := 0b0;
+				vsync();
 			}
 			v_tim==2 : par{
 				v_sync_reg := 0b1;
 			}
-			v_tim==(2+33) : par{
+			v_tim==(2+32) : par{
 				v_en_reg := 0b1;
 				vblank_end();
 			}
-			v_tim==(2+33+480) : par{
+			v_tim==(2+32+480) : par{
 				v_en_reg := 0b0;
 				vblank_begin();
 			}
 		}
 
-		if(v_tim==(525-1)) v_tim := 0;
+		if(v_tim==(524-1)) v_tim := 0;
 		else v_tim++;
 
 		if(v_tim==(2+33)) v_count_reg := 0;

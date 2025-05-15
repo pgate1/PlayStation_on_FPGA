@@ -9,7 +9,7 @@ circuit ram_8x4k
 	instrin read(adrs), write(adrs, din);
 
 	mem cells[4096]<8>;
-	reg_wr dout_reg<8>;
+	reg dout_reg<8>;
 
 	instruct read dout_reg := cells[adrs];
 	dout = dout_reg;

@@ -8,7 +8,7 @@ circuit Scratchpad
 	input A<10>, Din<32>, Word<3>;
 	instrin read(A), write(A, Din, Word);
 	output Dout<32>;
-	reg_wr Dout0_reg<8>, Dout1_reg<8>, Dout2_reg<8>, Dout3_reg<8>;
+	reg Dout0_reg<8>, Dout1_reg<8>, Dout2_reg<8>, Dout3_reg<8>;
 
 	mem ram0[256]<8>, ram1[256]<8>, ram2[256]<8>, ram3[256]<8>;
 

@@ -1,7 +1,7 @@
 
 // RGB RAM & to VGA Flip Buffer
 
-%i "ram_320x240x15.h"
+%i "ram_320x240x15_dp.h"
 
 declare mul_u9 interface
 {
@@ -16,12 +16,15 @@ circuit view_ram_ctrl
 	input in_x<9>, in_y<8>, in_R<5>, in_G<5>, in_B<5>;
 	instrin write(in_x, in_y, in_R, in_G, in_B);
 	output out_R<5>, out_G<5>, out_B<5>;
-	instrin read, bank_change, read_adrs_reset, flip_buffer;
-	reg_wr flip;
+	instrin read, bank_change, read_adrs_reset;
+	reg_wr write_ok;
+
+	instrin fill_view_on, draw_notdisp_side;
+	input frame_rate<2>;
 
 	reg_ws reset;
 
-	ram_320x240x15 ram0, ram1;
+	ram_320x240x15_dp ram0, ram1;
 	reg_wr radrs_x<9>, radrs_y<9>, bank;
 	sel col<15>;
 	mul_u9 wmul, rmul;
@@ -29,7 +32,7 @@ circuit view_ram_ctrl
 	stage_name clear_stg { task do(); }
 
 	if(reset){
-		generate clear_stg.do();
+	//	generate clear_stg.do();
 		reset := 0b0;
 	}
 
@@ -44,9 +47,18 @@ circuit view_ram_ctrl
 	out_G = col< 9: 5>;
 	out_B = col< 4: 0>;
 
-	// VBlank
+	// GPU DispPos update
 	instruct bank_change par{
-		bank := ^bank;
+	//	bank := ^bank;
+
+//		reg_wr frame<2>;
+//		if(frame==frame_rate){
+			if(write_ok) bank := ^bank;
+			write_ok := 0b0;
+//			frame := 0;
+//		}
+//		else frame++;
+
 	}
 
 	instruct read_adrs_reset par{
@@ -54,11 +66,29 @@ circuit view_ram_ctrl
 		radrs_y := 0;
 	}
 
+	// insert reg
+	reg_wr write_adrs<17>, write_data<15>, fill_view_on_reg, write_req;
 	instruct write par{
-		sel wadrs<17>;
-		wadrs = wmul.con(0b0||in_y, 320).dout<16:0> + (0b00000000||in_x);
-		if(bank) ram0.write(wadrs, in_R||in_G||in_B);
-		else     ram1.write(wadrs, in_R||in_G||in_B);
+		write_adrs := wmul.con(0b0||in_y, 320).dout<16:0> + (0b00000000||in_x);
+		write_data := in_R || in_G || in_B;
+		fill_view_on_reg := fill_view_on;
+		write_req := 0b1;
+	}
+
+	if(write_req){
+		if(^write) write_req := 0b0;
+
+//bank     0  1
+//not   0  0  1
+// disp 1  1  0
+		if(bank @ draw_notdisp_side){
+			ram0.write(write_adrs, write_data);
+			if(^fill_view_on_reg) write_ok := 0b1;
+		}
+		else{
+			ram1.write(write_adrs, write_data);
+			if(^fill_view_on_reg) write_ok := 0b1;
+		}
 	}
 
 	instruct read if(^clear_stg.do){
@@ -72,7 +102,7 @@ circuit view_ram_ctrl
 		}
 		else radrs_x++;
 	}
-
+/*
 	stage clear_stg {
 		sel pa<17>;
 		par{
@@ -87,5 +117,5 @@ circuit view_ram_ctrl
 			else radrs_x++;
 		}
 	}
-
+*/
 }

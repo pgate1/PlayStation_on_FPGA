@@ -36,6 +36,10 @@ circuit gte_DIVIDE
 		0x07,0x07,0x06,0x06,0x05,0x05,0x04,0x04,0x03,0x03,0x02,0x02,0x01,0x01,0x00,0x00
 	};
 
+	sel unr_table_adrs<8>;
+	instrself unr_table_read(unr_table_adrs);
+	reg unr_table_dout<8>;
+
 	mul_u32 mul12, mul3;
 
 	sel s_CLZ<16>, CLZ_ret<4>;
@@ -55,15 +59,20 @@ circuit gte_DIVIDE
 	sel d<16>;
 	d = SZ3 << z;
 
-	reg_wr n0<17>, d0<16>, u0<12>;
+	reg_wr n0<17>, d0<16>;
 	instruct con0 par{
 		n0 := n;
 		d0 := d;
-		sel index<9>;
-		index = (d-0x7FC0)<15:7>;
-		if(index<8>) u0 := 0x101;
-		else u0 := (0x0 || unr_table[index<7:0>]) + 0x101;
+		unr_table_read((d - 0x7FC0)<14:7>);
 	}
+
+// Ç»Ç∫Ç©M10KÇ…Ç»ÇÁÇ»Ç¢ÅH
+	instruct unr_table_read unr_table_dout := unr_table[unr_table_adrs];
+
+	sel index<9>, u0<12>;
+	index = (d0 - 0x7FC0)<15:7>;
+	if(index<8>) u0 = 0x101;
+	else u0 = (0x0 || unr_table_dout) + 0x101;
 
 	reg_wr d1<17>;
 	instruct con1 par{

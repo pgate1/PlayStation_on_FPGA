@@ -33,10 +33,10 @@ circuit PlayStation_core
 	output A<21>;
 	input Din<32>;
 
-	instrout WRAM_READ(A);
+	instrout WRAM_READ(A, Word);
 	instrin wram_ack;
 
-	instrout BIOS_READ(A);
+	instrout BIOS_READ(A, Word);
 	instrin bios_ack;
 
 	instrout WRAM_WRITE(A, Dout, Word);
@@ -106,11 +106,12 @@ circuit PlayStation_core
 	instrin sw_cache_off;
 	instrin sw_spu_off, sw_spuenv_off;
 	instrin stop;
-	instrin sw_view_half;
+	instrin sw_view_half, sw_texture_off;
 
 	CDROM_controller cdr;
 	output file_adrs<32>;
-	instrout file_read(file_adrs);
+	instrout file_read_req, file_preload;
+	output file_adrs<32>;
 	instrin file_ack;
 	input file_data<8>, file_error;
 
@@ -172,8 +173,8 @@ dbg32 = cdr.dbg32;//dbg32_reg;dma_CDR.dbg32;cpu.dbg32;
 
 	sel peripheral_running;
 	peripheral_running =
-		(dma_GPU.running /*& ^gpu.drawing*/) |
-		gpu.drawing | gpu.vram_busy |
+		(dma_GPU.running /*& (gpu.ref_dma_direction!=0b00) & ^gpu.drawing*/) |
+		(/*(gpu.ref_dma_direction==0b00) &*/ gpu.drawing) | gpu.vram_busy |
 		mdec.running |
 		dma_CDR.running | dma_SPU.running | dma_OTC.running |
 		cdr.running | pad.running |
@@ -290,7 +291,7 @@ if(spu.halt_code!=0) dbg_reg := spu.dbg;
 
 	dma_GPU.DmaMADR_2 = DmaMADR_2;
 	dma_GPU.DmaBCR_2 = DmaBCR_2;
-	instruct dma_GPU.wram_read WRAM_READ(dma_GPU.A);
+	instruct dma_GPU.wram_read WRAM_READ(dma_GPU.A, 4);
 	if(wram_ack & (gpu.halt_code==0)) dma_GPU.wram_ack();
 	if(gpu.read_ack){
 		dma_GPU.gpu_vram_ack();
@@ -346,7 +347,7 @@ dma_running = dma_GPU.running;
 
 	dma_SPU.DmaMADR_4 = DmaMADR_4;
 	dma_SPU.DmaBCR_4 = DmaBCR_4;
-	instruct dma_SPU.wram_read WRAM_READ(dma_SPU.A);
+	instruct dma_SPU.wram_read WRAM_READ(dma_SPU.A, 4);
 	instruct wram_ack dma_SPU.wram_ack();
 	dma_SPU.Din = Din;
 	instruct dma_SPU.spu_dma_write_req spu.dma_write_req(dma_SPU.Dout);
@@ -383,7 +384,9 @@ dma_running = dma_GPU.running;
 	instruct cdr.interrupt_out_stopcdda par{
 		IREG |= 0x0200;
 	}
-	instruct cdr.file_read file_read(cdr.file_adrs);
+	instruct cdr.file_read_req file_read_req();
+	instruct cdr.file_preload file_preload();
+	file_adrs = cdr.file_adrs;
 	instruct file_ack cdr.file_ack();
 	cdr.file_data = file_data;
 	cdr.file_error = file_error;
@@ -458,11 +461,11 @@ vraming = gpu.vram_busy;
 				dma_SPU.run33();
 				dma_OTC.run33();
 				cdr.run33();
-				pad.run33();
+				pad.run33(); // CPUに合わせてキー入力できるようになった
 			}
 
 		}
-		else : par{ // サウンド再生
+		else : par{ // PS-X EXE 実行
 			instruct run33 par{ // 33.8688MHz
 				spu.run33();
 				par(i=0;i<4;i++){
@@ -507,13 +510,16 @@ vraming = gpu.vram_busy;
 	instruct vblank_end gpu.vblank_end();
 	instruct timer_3.hsync gpu.hsync();
 
-	reg_wr cdr_dma_count<4>, f_texture_full;
+	reg_wr cdr_dma_count<4>, f_texture_full, f_view_half;
 //	if(cdr_dma_count==8) f_texture_full := 0b1;
+	if(/&cdr_dma_count) f_view_half := 0b1;
 //	if(f_texture_full) 
 gpu.texture_full();
+	if(f_view_half) gpu.sw_view_half();
 //if(cdr_dma_count!=0) dbg_reg := 0x0000000||cdr_dma_count;
 
 gpu.dbg_in = dbg_in;
+	if(sw_kernel_run) gpu.sw_kernel_run();
 	instruct gpu.view_on view_on();
 	view_x = gpu.view_x;
 	view_y = gpu.view_y;
@@ -565,7 +571,7 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 		par{
 			any{
 				map_ram : par{
-					WRAM_READ(cpu_A<20:0>);
+					WRAM_READ(cpu_A<20:0>, cpu_Word);
 					generate read_wram_wait.do();
 				}
 				map_pio : par{
@@ -573,7 +579,8 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 					generate read_io_wait.do();
 				}
 				map_scratchpad : par{ // Scratchpad 0x0000-0x03FF(0x0FFF)
-					if(cpu_A<11:10>==0b00) scratch.read(cpu_A<9:0>);
+					//if(cpu_A<11:10>==0b00) 
+						scratch.read(cpu_A<9:0>);
 					//else{dbg_reg := cpu_A;halt(0x58);}
 					generate read_io_wait.do();
 				}
@@ -645,7 +652,7 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 					generate read_io_wait.do();
 				}
 				map_bios : par{
-					BIOS_READ(0b00||cpu_A<18:0>);
+					BIOS_READ(0b00||cpu_A<18:0>, cpu_Word);
 					generate read_bios_wait.do();
 				}
 				map_cctrl : if(cpu_A<15:0>==0x0130){
@@ -722,7 +729,8 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 					halt(0x53);
 				}
 				map_scratchpad : par{ // Scratchpad 0x0000-0x03FF
-					if(cpu_A<11:10>==0b00) scratch.write(cpu_A<9:0>, cpu_Dout, cpu_Word);
+					//if(cpu_A<11:10>==0b00) 
+						scratch.write(cpu_A<9:0>, cpu_Dout, cpu_Word);
 					//else{dbg_reg := cpu_A;halt(0x56);}
 				}
 				map_io : any{

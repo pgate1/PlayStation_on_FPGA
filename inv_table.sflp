@@ -6,7 +6,7 @@ circuit inv_table
 	input adrs<10>;
 	instrin read(adrs);
 	output dout<16>;
-	reg_wr dout_reg<16>;
+	reg dout_reg<16>;
 
 	mem cells[1024]<16> = {
 		0,
@@ -1035,9 +1035,6 @@ circuit inv_table
 		31
 	};
 
-	instruct read par{
-		dout_reg := cells[adrs];
-	}
-
+	instruct read dout_reg := cells[adrs];
 	dout = dout_reg;
 }

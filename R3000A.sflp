@@ -139,8 +139,8 @@ reg_wr in_irq, in_syscall;
 		reset_1 := 0b1;
 	}
 	if(reset_1){
-		cpr0[0x0C] := 0x10900000;
-		cpr0[0x0F] := 0x00000002;
+		cpr0[12] := 0x10900000; // [0x0C]
+		cpr0[15] := 0x00000002; // [0x0F]
 		reset_1 := 0b0;
 	}
 
@@ -157,7 +157,7 @@ reg_wr in_irq, in_syscall;
 	else Dout = Dout_reg;
 
 	pc_out = pc;
-	opcode_out = opcode;
+	opcode_out = ex_opcode;
 
 dbg = dbg_reg | gte.dbg;
 dbg16 = 0;//gte.dbg16;
@@ -168,14 +168,15 @@ dbg32 = 0;//dbg32_reg;//gte.dbg32;
 		hA==0x011 : pc := pc<31:16> || h_data || pc<7:0>;
 		hA==0x012 : pc := pc<31:24> || h_data || pc<15:0>;
 		hA==0x013 : pc := h_data || pc<23:0>;
-		hA==0x030 : gpr[0x1D] := gpr[0x1D]<31:8> || h_data;
-		hA==0x031 : gpr[0x1D] := gpr[0x1D]<31:16> || h_data || gpr[0x1D]<7:0>;
-		hA==0x032 : gpr[0x1D] := gpr[0x1D]<31:24> || h_data || gpr[0x1D]<15:0>;
+	//	hA==0x014 : gpr[0x1C] := 0x00000000;
+		hA==0x030 : gpr[29] := gpr[29]<31:8> || h_data; // [0x1D]
+		hA==0x031 : gpr[29] := gpr[29]<31:16> || h_data || gpr[29]<7:0>; // [0x1D]
+		hA==0x032 : gpr[29] := gpr[29]<31:24> || h_data || gpr[29]<15:0>; // [0x1D]
 		hA==0x033 : par{
 			sel sp_adrs<32>;
-			sp_adrs = h_data || gpr[0x1D]<23:0>;
-			if(sp_adrs!=0x00000000) gpr[0x1D] := sp_adrs;
-			else gpr[0x1D] := 0x801FFF00;
+			sp_adrs = h_data || gpr[29]<23:0>; // [0x1D]
+			if(sp_adrs!=0x00000000) gpr[29] := sp_adrs; // [0x1D]
+			else gpr[29] := 0x801FFF00; // [0x1D]
 		}
 	}
 
@@ -191,7 +192,7 @@ dbg32 = 0;//dbg32_reg;//gte.dbg32;
 
 	instruct write par{
 		// if(cpu->SR->is_c) return;
-		if(cpr0[0x0C]<16>==0b0) write_req();
+		if(cpr0[12]<16>==0b0) write_req(); // [0x0C]
 	}
 
 	reg_wr id_delay_slot, ex_delay_slot;
@@ -778,6 +779,7 @@ dbg_reg := 0b000||rs; halt(0x05);
 					cop_rs := rs;
 				}
 				else : par{
+
 					any{
 						funct==0x01 : gte.RTPS();
 						funct==0x06 : gte.NCLIP();
@@ -788,9 +790,11 @@ dbg_reg := 0b000||rs; halt(0x05);
 						funct==0x13 : gte.NCDS();
 						funct==0x16 : gte.NCDT();
 						funct==0x1B : gte.NCCS();
+						funct==0x1C : gte.CC();
 						funct==0x1E : gte.NCS();
 						funct==0x20 : gte.NCT();
 						funct==0x28 : gte.SQR();
+						funct==0x2A : gte.DPCT();
 						funct==0x2D : gte.AVSZ3();
 						funct==0x2E : gte.AVSZ4();
 						funct==0x30 : gte.RTPT();
@@ -801,6 +805,7 @@ dbg_reg := 0b000||rs; halt(0x05);
 dbg_reg := funct; halt(0x04);
 						}
 					}
+
 					reset_rtrd();
 				}
 			}

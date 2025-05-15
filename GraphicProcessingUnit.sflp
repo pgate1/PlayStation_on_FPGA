@@ -43,6 +43,7 @@ circuit GraphicProcessingUnit
 	reg_wr vblank;
 
 	reg_wr DispStartX<10>, DispStartY<9>;
+	reg_wr DispStartX_pre<10>, DispStartY_pre<9>;
 //	reg_wr HorDispRangeStart<12>, HorDispRangeEnd<12>;
 //	reg_wr VertDispRangeStart<10>, VertDispRangeEnd<10>;
 
@@ -72,7 +73,7 @@ circuit GraphicProcessingUnit
 	drawPoly poly;
 	drawRect rect;
 
-	instrin sw_outview_on, sw_view_half, sw_texture_off;
+	instrin sw_outview_on, sw_view_half, sw_texture_off, sw_kernel_run;
 
 	instrout view_on;
 	output view_x<10>, view_y<9>;
@@ -149,6 +150,10 @@ dbg = dbg_reg;
 		VramPosY := 0;
 		dispWidth := 640;
 		dispHeight := 480;
+	//	DispStartX_pre := 320;
+	//	DispStartY_pre := 240;
+		DispStartX := 0;
+		DispStartY := 0;
 		drawOffsetX := 0;
 		drawOffsetY := 0;
 		tpage := 14#0b0;
@@ -180,7 +185,9 @@ dbg = dbg_reg;
 				DispStartY_pre := DispStartY;
 				DispStartX := din<9:0>;
 				DispStartY := din<18:10>;
-				display_flip();
+			//	if((DispStartX_pre!=DispStartX) | (DispStartY_pre!=DispStartY)){
+					display_flip();
+			//	}
 			}
 			din<31:24>==0x06 : par{
 			//	HorDispRangeStart := din<11:0>;
@@ -326,7 +333,8 @@ if(BufferOffset==15) halt(0xA9);
 				else : BufferOffset++;
 			}
 
-			(cmd==0x03) | (cmd==0x04) | (cmd==0x05) | (cmd==0x06) | (cmd==0x07) |
+			(cmd==0x03) | 
+			(cmd==0x04) | (cmd==0x05) | (cmd==0x06) | (cmd==0x07) |
 			(cmd==0x08) | (cmd==0x09) | (cmd==0x0A) | (cmd==0x0B) | (cmd==0x0C) | (cmd==0x0D) | (cmd==0x0E) | (cmd==0x0F) |
 			(cmd==0x10) | (cmd==0x11) | (cmd==0x12) | (cmd==0x13) | (cmd==0x14) | (cmd==0x15) | (cmd==0x16) | (cmd==0x17) |
 			(cmd==0x18) | (cmd==0x19) | (cmd==0x1A) | (cmd==0x1B) | (cmd==0x1C) | (cmd==0x1D) | (cmd==0x1E) | (cmd==0x1F) : ; // none
@@ -566,11 +574,11 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 		px3+drawOffsetX, py3+drawOffsetY, pc3, pu3, pv3,
 		clut, tpage, drawX, drawY, drawW, drawH);
 	poly.f_dither = tpage<9>;
-	poly.f_texture = 
+	poly.f_texture = ^sw_texture_off & (
 		(cmd==0x24) | (cmd==0x25) | (cmd==0x26) | (cmd==0x27) | // 0b0010_01--
 		(cmd==0x2C) | (cmd==0x2D) | (cmd==0x2E) | (cmd==0x2F) | // 0b0010_11--
 		(cmd==0x34) | (cmd==0x35) | (cmd==0x36) | (cmd==0x37) | // 0b0011_01--
-		(cmd==0x3C) | (cmd==0x3D) | (cmd==0x3E) | (cmd==0x3F);  // 0b0011_11--
+		(cmd==0x3C) | (cmd==0x3D) | (cmd==0x3E) | (cmd==0x3F)); // 0b0011_11--
 
 	poly.f_texblend =
 		(cmd==0x24) | (cmd==0x26) | (cmd==0x2C) | (cmd==0x2E) |
@@ -602,7 +610,11 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 	sel view_offset_x<10>;
 	any{
 		// for width 320 of メタルギアソリッド
-		(dispWidth==320) & (DispStartX_pre==340) /*((drawOffsetX-320)<10>==0b0)*/ : par{ // drawOffsetX >= 320
+		(dispWidth==320) & (DispStartX_pre==320) /*((drawOffsetX-320)<10>==0b0)*/ : par{ // drawOffsetX >= 320
+			view_offset_x = -320;
+		}
+		// for width 328 of サガフロ２
+		(dispWidth==320) & (DispStartX_pre==328) /*((drawOffsetX-256)<10>==0b0)*/ : par{ // drawOffsetX >= 256
 			view_offset_x = -320;
 		}
 		// for width 256 of PSXNICCC
@@ -621,6 +633,10 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 		// for height 240 of デュープリズム
 		(dispHeight==240) & (DispStartY_pre==256) /*((drawOffsetY-240)<10>==0b0)*/ : par{ // drawOffsetY >= 240
 			view_offset_y = -256;
+		}
+		// for height 224 of レイストーム
+		(dispHeight==240) & (DispStartY_pre==224) /*((drawOffsetY-240)<10>==0b0)*/ : par{ // drawOffsetY >= 240
+			view_offset_y = -224;
 		}
 		else : view_offset_y = 0;
 	}

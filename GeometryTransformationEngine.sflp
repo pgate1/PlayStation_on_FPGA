@@ -29,7 +29,7 @@ circuit GeometryTransformationEngine
 	output dout<32>;
 	reg_wr dout_reg<32>;
 
-	instrin RTPS, RTPT, MVMVA, DPCS, DPCT, INTPL, SQR, NCS, NCT, NCDS, NCDT, NCCS, NCCT, NCLIP, AVSZ3, AVSZ4, OP, GPF, GPL;
+	instrin RTPS, RTPT, MVMVA, DPCS, DPCT, INTPL, SQR, NCS, NCT, NCDS, NCDT, NCCS, NCCT, CC, NCLIP, AVSZ3, AVSZ4, OP, GPF, GPL;
 
 	reg_wr rt_value<32>, rd_reg<5>;
 	output running;
@@ -94,6 +94,12 @@ circuit GeometryTransformationEngine
 	sel limG2_val<32>, limG2_ret<16>; instrself limG2(limG2_val);
 	sel limH_val<32>, limH_ret<16>; instrself limH(limH_val);
 
+	mul_s16 smul_mac1_1, smul_mac1_2, smul_mac1_3,
+		    smul_mac2_1, smul_mac2_2, smul_mac2_3,
+		    smul_mac3_1, smul_mac3_2, smul_mac3_3;
+
+	mul_s16 smul_mac1, smul_mac2, smul_mac3;
+
 	gte_DIVIDE divide;
 
 	sel h_code<8>;
@@ -114,6 +120,10 @@ reg_wr dbg_reg<8>;
 	stage_name MTC2_stg { task do(rt_value, rd_reg); }
 	stage_name CTC2_stg { task do(rt_value, rd_reg); }
 
+	reg_wr MACtoIR_limB_lim;
+	stage_name MACtoIR { task do(MACtoIR_limB_lim); }
+	stage_name MACtoCODE2 { task do(); }
+
 	stage_name RTP_stg { task rtpt(); task rtps(); }
 	stage_name MVMVA_stg { task do(); }
 	stage_name DPC_stg { task dpcs(); task dpct(); }
@@ -122,6 +132,7 @@ reg_wr dbg_reg<8>;
 	stage_name NC_stg { task ncs(); task nct(); }
 	stage_name NCD_stg { task ncds(); task ncdt(); }
 	stage_name NCC_stg { task nccs(); task ncct(); }
+	stage_name CC_stg { task do(); }
 	stage_name NCLIP_stg { task do(); }
 	stage_name AVSZ3_stg { task do(); }
 	stage_name AVSZ4_stg { task do(); }
@@ -161,6 +172,7 @@ dbg = dbg_reg;
 	instruct NCDT generate NCD_stg.ncdt();
 	instruct NCCS generate NCC_stg.nccs();
 	instruct NCCT generate NCC_stg.ncct();
+	instruct CC generate CC_stg.do();
 	instruct NCLIP generate NCLIP_stg.do();
 	instruct AVSZ3 generate AVSZ3_stg.do();
 	instruct AVSZ4 generate AVSZ4_stg.do();
@@ -177,8 +189,8 @@ dbg = dbg_reg;
 		NC_stg.ncs | NC_stg.nct |
 		NCD_stg.ncds | NCD_stg.ncdt |
 		NCC_stg.nccs | NCC_stg.ncct |
-		NCLIP_stg.do | 
-		AVSZ3_stg.do | AVSZ4_stg.do | 
+		CC_stg.do | NCLIP_stg.do |
+		AVSZ3_stg.do | AVSZ4_stg.do |
 		OP_stg.do | GPF_stg.do | GPL_stg.do;
 
 	dout = dout_reg;
@@ -210,6 +222,9 @@ dbg = dbg_reg;
 	sel SZ1<16>; SZ1 = d[17]<15:0>;
 	sel SZ2<16>; SZ2 = d[18]<15:0>;
 	sel SZ3<16>; SZ3 = d[19]<15:0>;
+	sel R0<8>; R0 = d[20]<7:0>;
+	sel G0<8>; G0 = d[20]<15:8>;
+	sel B0<8>; B0 = d[20]<23:16>;
 	sel RGB1<32>; RGB1 = d[21];
 	sel RGB2<32>; RGB2 = d[22];
 	sel MAC0<32>; MAC0 = d[24];
@@ -536,22 +551,73 @@ dbg = dbg_reg;
 		}
 	}
 
+	stage MACtoIR {
+		gte_LIMIT lim_MACtoIR;
+		par{
+			if(0b0){
+				lim_MACtoIR.limC1(0); lim_MACtoIR.limC2(0); lim_MACtoIR.limC3(0);
+				lim_MACtoIR.limD(0);
+			}
+
+			instruct lim_MACtoIR.set_FLAG set_FLAG(lim_MACtoIR.FLAG);
+
+			// IR1 = limB1(MAC1, lim);
+			set_IR1(lim_MACtoIR.limB1(MAC1, MACtoIR_limB_lim).limB1_ret);
+			// IR2 = limB2(MAC2, lim);
+			set_IR2(lim_MACtoIR.limB2(MAC2, MACtoIR_limB_lim).limB2_ret);
+			// IR3 = limB3(MAC3, lim);
+			set_IR3(lim_MACtoIR.limB3(MAC3, MACtoIR_limB_lim).limB3_ret);
+
+			finish;
+		}
+	}
+
+	stage MACtoCODE2 {
+		gte_LIMIT lim_MACtoCODE2;
+		par{
+			instruct lim_MACtoCODE2.set_FLAG set_FLAG(lim_MACtoCODE2.FLAG);
+			if(0b0){
+				lim_MACtoCODE2.limB1(0,0); lim_MACtoCODE2.limB2(0,0); lim_MACtoCODE2.limB3(0,0);
+				lim_MACtoCODE2.limD(0);
+			}
+
+			// RGB0 = RGB1;
+			set_RGB0(RGB1);
+			// RGB1 = RGB2;
+			set_RGB1(RGB2);
+
+			// CODE2 = CODE;
+		//	set_CODE2(CODE);
+			// R2 = limC1(MAC1 >> 4);
+		//	set_R2(limC1((MAC1>>4)<15:0>).limC1_ret);
+			// G2 = limC2(MAC2 >> 4);
+		//	set_G2(limC2((MAC2>>4)<15:0>).limC2_ret);
+			// B2 = limC3(MAC3 >> 4);
+		//	set_B2(limC3((MAC3>>4)<15:0>).limC3_ret);
+			d[22] :=
+				CODE ||
+				lim_MACtoCODE2.limC3(32#MAC3<31:4>).limC3_ret ||
+				lim_MACtoCODE2.limC2(32#MAC2<31:4>).limC2_ret ||
+				lim_MACtoCODE2.limC1(32#MAC1<31:4>).limC1_ret;
+
+			finish;
+		}
+	}
+
 	stage RTP_stg { // RTPS RTPT
 		reg_wr rtp_v<5>, rtp_vx<16>, rtp_vy<16>, rtp_vz<16>, szv<16>, quotient<32>;
-		mul_s16 rtp_smul_mac1_1, rtp_smul_mac1_2, rtp_smul_mac1_3,
-		        rtp_smul_mac2_1, rtp_smul_mac2_2, rtp_smul_mac2_3,
-		        rtp_smul_mac3_1, rtp_smul_mac3_2, rtp_smul_mac3_3;
-		mul_s32 rtp_mulq;
+		mul_s32 rtp_mulq_x, rtp_mulq_y, rtp_mulq_m;
 		gte_LIMIT lim_RTP;
 		first_state st_init;
+
 		par{
 			instruct lim_RTP.set_FLAG set_FLAG(lim_RTP.FLAG);
 			if(0b0){
-				lim_RTP.limC1(0);
-				lim_RTP.limC2(0);
-				lim_RTP.limC3(0);
+				lim_RTP.limB1(0,0); lim_RTP.limB2(0,0); lim_RTP.limB3(0,0);
+				lim_RTP.limC1(0); lim_RTP.limC2(0); lim_RTP.limC3(0);
 			}
 		}
+
 		state st_init par{
 			reset_FLAG();
 			if(RTP_stg.rtpt) set_SZ0(SZ3);
@@ -575,9 +641,9 @@ dbg = dbg_reg;
 			sel mac1_t<64>;
 			mac1_t = 64#(
 				(TRX || 0x000) + 
-				44#rtp_smul_mac1_1.con(R11, rtp_vx).dout + 
-				44#rtp_smul_mac1_2.con(R12, rtp_vy).dout + 
-				44#rtp_smul_mac1_3.con(R13, rtp_vz).dout
+				44#smul_mac1_1.con(R11, rtp_vx).dout + 
+				44#smul_mac1_2.con(R12, rtp_vy).dout + 
+				44#smul_mac1_3.con(R13, rtp_vz).dout
 				)<43:12>;
 		//	A1(t);
 			set_MAC1(mac1_t<31:0>);
@@ -585,9 +651,9 @@ dbg = dbg_reg;
 			sel mac2_t<64>;
 			mac2_t = 64#(
 				(TRY || 0x000) + 
-				44#rtp_smul_mac2_1.con(R21, rtp_vx).dout + 
-				44#rtp_smul_mac2_2.con(R22, rtp_vy).dout + 
-				44#rtp_smul_mac2_3.con(R23, rtp_vz).dout
+				44#smul_mac2_1.con(R21, rtp_vx).dout + 
+				44#smul_mac2_2.con(R22, rtp_vy).dout + 
+				44#smul_mac2_3.con(R23, rtp_vz).dout
 				)<43:12>;
 		//	A2(t);
 			set_MAC2(mac2_t<31:0>);
@@ -595,21 +661,20 @@ dbg = dbg_reg;
 			sel mac3_t<64>;
 			mac3_t = 64#(
 				(TRZ || 0x000) + 
-				44#rtp_smul_mac3_1.con(R31, rtp_vx).dout + 
-				44#rtp_smul_mac3_2.con(R32, rtp_vy).dout + 
-				44#rtp_smul_mac3_3.con(R33, rtp_vz).dout
+				44#smul_mac3_1.con(R31, rtp_vx).dout + 
+				44#smul_mac3_2.con(R32, rtp_vy).dout + 
+				44#smul_mac3_3.con(R33, rtp_vz).dout
 				)<43:12>;
 		//	A3(t);
 			set_MAC3(mac3_t<31:0>);
+
+			generate MACtoIR.do(0b0);
 			goto st_ir;
 		}
 		state st_ir par{
 			// IR1 = limB1(MAC1, 0);
-			set_IR1(lim_RTP.limB1(MAC1, 0b0).limB1_ret);
 			// IR2 = limB2(MAC2, 0);
-			set_IR2(lim_RTP.limB2(MAC2, 0b0).limB2_ret);
 			// IR3 = limB3(MAC3, 0);
-			set_IR3(lim_RTP.limB3(MAC3, 0b0).limB3_ret);
 
 			// fSZ(v) = limD(MAC3);
 			sel fszv<16>;
@@ -655,7 +720,7 @@ dbg = dbg_reg;
 				);
 */
 			sel sx_f<64>;
-			sx_f = (64#OFX) + rtp_mulq.con(32#IR1, quotient).dout;
+			sx_f = (64#OFX) + rtp_mulq_x.con(32#IR1, quotient).dout;
 		//	F(f);
 			set_fSX(rtp_v, limG1(sx_f<32+16-1:16>).limG1_ret);
 
@@ -665,7 +730,7 @@ dbg = dbg_reg;
 
 			// fSY(v) = limG2(F((s64)OFY + ((s64)IR2 * quotient)) >> 16);
 			sel sy_f<64>;
-			sy_f = (64#OFY) + rtp_mulq.con(32#IR2, quotient).dout;
+			sy_f = (64#OFY) + rtp_mulq_y.con(32#IR2, quotient).dout;
 		//	F(f);
 			set_fSY(rtp_v, limG2(sy_f<32+16-1:16>).limG2_ret);
 
@@ -676,7 +741,7 @@ dbg = dbg_reg;
 		state st_mac0 par{
 			// MAC0 = F((s64)(DQB + ((s64)DQA * quotient)) >> 12);
 			sel f<64>;
-			f = (64#DQB) + rtp_mulq.con(32#DQA, quotient).dout;
+			f = (64#DQB) + rtp_mulq_m.con(32#DQA, quotient).dout;
 		//	F(f);
 			set_MAC0(f<32+12-1:12>);
 			goto st_ir0;
@@ -692,11 +757,8 @@ dbg = dbg_reg;
 	stage MVMVA_stg {
 		sel mvmva_mx<2>, mvmva_v<2>, mvmva_cv<2>, mvmva_lm;
 		reg_wr mvmva_vx<16>, mvmva_vy<16>, mvmva_vz<16>;
-		mul_s16 mvmva_smul_mac1_1, mvmva_smul_mac1_2, mvmva_smul_mac1_3,
-		        mvmva_smul_mac2_1, mvmva_smul_mac2_2, mvmva_smul_mac2_3,
-		        mvmva_smul_mac3_1, mvmva_smul_mac3_2, mvmva_smul_mac3_3;
-		gte_LIMIT lim_MVMVA;
 		first_state st_init;
+
 		par{
 			//shift = 12 * GTE_SF(op);
 			//mx = GTE_MX(op);
@@ -707,14 +769,8 @@ dbg = dbg_reg;
 			mvmva_cv = op<14:13>;
 			//lm = GTE_LM(op);
 			mvmva_lm = op<10>;
-			instruct lim_MVMVA.set_FLAG set_FLAG(lim_MVMVA.FLAG);
-			if(0b0){
-				lim_MVMVA.limC1(0);
-				lim_MVMVA.limC2(0);
-				lim_MVMVA.limC3(0);
-				lim_MVMVA.limD(0);
-			}
 		}
+
 		state st_init par{
 			reset_FLAG();
 			mvmva_vx := get_VX(0b000||mvmva_v).VX;
@@ -731,9 +787,9 @@ dbg = dbg_reg;
 */
 			sel mac1_t0<44>;
 			mac1_t0 = (get_CV1(mvmva_cv).CV1 || 0x000) +
-				44#mvmva_smul_mac1_1.con(get_MX11(mvmva_mx).MX11, mvmva_vx).dout +
-				44#mvmva_smul_mac1_2.con(get_MX12(mvmva_mx).MX12, mvmva_vy).dout +
-				44#mvmva_smul_mac1_3.con(get_MX13(mvmva_mx).MX13, mvmva_vz).dout;
+				44#smul_mac1_1.con(get_MX11(mvmva_mx).MX11, mvmva_vx).dout +
+				44#smul_mac1_2.con(get_MX12(mvmva_mx).MX12, mvmva_vy).dout +
+				44#smul_mac1_3.con(get_MX13(mvmva_mx).MX13, mvmva_vz).dout;
 			sel mac1_t<32>;
 			if(op<19>) mac1_t = mac1_t0<43:12>;
 			else mac1_t = mac1_t0<31:0>;
@@ -743,9 +799,9 @@ dbg = dbg_reg;
 			// MAC2 = A2((((s64)CV2(cv) << 12) + (MX21(mx) * vx) + (MX22(mx) * vy) + (MX23(mx) * vz)) >> shift);
 			sel mac2_t0<44>;
 			mac2_t0 = (get_CV2(mvmva_cv).CV2 || 0x000) +
-				44#mvmva_smul_mac2_1.con(get_MX21(mvmva_mx).MX21, mvmva_vx).dout +
-				44#mvmva_smul_mac2_2.con(get_MX22(mvmva_mx).MX22, mvmva_vy).dout +
-				44#mvmva_smul_mac2_3.con(get_MX23(mvmva_mx).MX23, mvmva_vz).dout;
+				44#smul_mac2_1.con(get_MX21(mvmva_mx).MX21, mvmva_vx).dout +
+				44#smul_mac2_2.con(get_MX22(mvmva_mx).MX22, mvmva_vy).dout +
+				44#smul_mac2_3.con(get_MX23(mvmva_mx).MX23, mvmva_vz).dout;
 			sel mac2_t<32>;
 			if(op<19>) mac2_t = mac2_t0<43:12>;
 			else mac2_t = mac2_t0<31:0>;
@@ -755,43 +811,45 @@ dbg = dbg_reg;
 			// MAC3 = A3((((s64)CV3(cv) << 12) + (MX31(mx) * vx) + (MX32(mx) * vy) + (MX33(mx) * vz)) >> shift);
 			sel mac3_t0<44>;
 			mac3_t0 = (get_CV3(mvmva_cv).CV3 || 0x000) +
-				44#mvmva_smul_mac3_1.con(get_MX31(mvmva_mx).MX31, mvmva_vx).dout +
-				44#mvmva_smul_mac3_2.con(get_MX32(mvmva_mx).MX32, mvmva_vy).dout +
-				44#mvmva_smul_mac3_3.con(get_MX33(mvmva_mx).MX33, mvmva_vz).dout;
+				44#smul_mac3_1.con(get_MX31(mvmva_mx).MX31, mvmva_vx).dout +
+				44#smul_mac3_2.con(get_MX32(mvmva_mx).MX32, mvmva_vy).dout +
+				44#smul_mac3_3.con(get_MX33(mvmva_mx).MX33, mvmva_vz).dout;
 			sel mac3_t<32>;
 			if(op<19>) mac3_t = mac3_t0<43:12>;
 			else mac3_t = mac3_t0<31:0>;
 			// A3(t);
 			set_MAC3(mac3_t);
+
+			generate MACtoIR.do(mvmva_lm);
 			goto st_ir;
 		}
 		state st_ir par{
 			// IR1 = limB1(MAC1, lm);
-			set_IR1(lim_MVMVA.limB1(MAC1, mvmva_lm).limB1_ret);
 			// IR2 = limB2(MAC2, lm);
-			set_IR2(lim_MVMVA.limB2(MAC2, mvmva_lm).limB2_ret);
 			// IR3 = limB3(MAC3, lm);
-			set_IR3(lim_MVMVA.limB3(MAC3, mvmva_lm).limB3_ret);
 			goto st_init;
 			finish;
 		}
 	}
 
-	stage DPC_stg {
+	stage DPC_stg { // DPCS DPCT
+		reg_wr dpc_st<2>;
 		mul_s16 dpc_smul_mac1, dpc_smul_mac2, dpc_smul_mac3;
 		gte_LIMIT lim_DPC;
 		first_state st_init;
 		par{
 			instruct lim_DPC.set_FLAG set_FLAG(lim_DPC.FLAG);
 			if(0b0){
+				lim_DPC.limC1(0); lim_DPC.limC2(0); lim_DPC.limC3(0);
 				lim_DPC.limD(0);
 			}
 		}
 		state st_init par{
 			reset_FLAG();
-			goto st_mac1;
+			dpc_st := 0;
+			goto st_mac;
 		}
-		state st_mac1 par{
+		state st_mac par{
 /*
 			MAC1 = A1((
 				(R << 16) + 
@@ -800,67 +858,89 @@ dbg = dbg_reg;
 				) )
 			) >> 12);
 */
+			sel shift;
+			shift = op<19> | DPC_stg.dpct;
+
+			sel r<8>;
+			if(DPC_stg.dpcs) r = R;
+			else r = R0;
 			sel rfc_t<32+12>;
-			if(op<19>) rfc_t = 44#RFC - (0x00000000 || R || 0x0);
-			else       rfc_t = (RFC - (0x00000 || R || 0x0)) || 0x000;
+			if(shift) rfc_t = 44#RFC - (0x00000000 || r || 0x0);
+			else      rfc_t = (RFC - (0x00000 || r || 0x0)) || 0x000;
 			sel mac1_t<48>;
-			mac1_t = (R || 0x0000) +
+			mac1_t = (r || 0x0000) +
 				48#dpc_smul_mac1.con(IR0, lim_DPC.limB1(rfc_t<31:0>, 0b0).limB1_ret).dout;
 		//	A1(t);
 			set_MAC1(mac1_t<43:12>);
 
 			// MAC2 = A2(((G << 16) + (IR0 * limB2(A2((s64)GFC - (G << 4)) << (12 - shift), 0))) >> 12);
+			sel g<8>;
+			if(DPC_stg.dpcs) g = G;
+			else g = G0;
 			sel gfc_t<32+12>;
-			if(op<19>) gfc_t = 44#GFC - (0x00000000 || G || 0x0);
-			else       gfc_t = (GFC - (0x00000 || G || 0x0)) || 0x000;
+			if(shift) gfc_t = 44#GFC - (0x00000000 || g || 0x0);
+			else      gfc_t = (GFC - (0x00000 || g || 0x0)) || 0x000;
 			sel mac2_t<48>;
-			mac2_t = (G || 0x0000) +
-				48#dpc_smul_mac2.con(IR0, lim_DPC.limB2(gfc_t<31:0>, 0b0).limB2_ret).dout;
+			if(DPC_stg.dpcs){
+				mac2_t = (g || 0x0000) +
+					48#dpc_smul_mac2.con(IR0, lim_DPC.limB2(gfc_t<31:0>, 0b0).limB2_ret).dout;
+			}
+			else{ // DPCT
+				mac2_t = (g || 0x0000) +
+					48#dpc_smul_mac2.con(IR0, lim_DPC.limB1(gfc_t<31:0>, 0b0).limB1_ret).dout;
+			}
 		//	A2(t);
 			set_MAC2(mac2_t<43:12>);
 
 			// MAC3 = A3(((B << 16) + (IR0 * limB3(A3((s64)BFC - (B << 4)) << (12 - shift), 0))) >> 12);
+			sel b<8>;
+			if(DPC_stg.dpcs) b = B;
+			else b = B0;
 			sel bfc_t<32+12>;
-			if(op<19>) bfc_t = 44#BFC - (0x00000000 || B || 0x0);
-			else       bfc_t = (BFC - (0x00000 || B || 0x0)) || 0x000;
+			if(shift) bfc_t = 44#BFC - (0x00000000 || b || 0x0);
+			else      bfc_t = (BFC - (0x00000 || b || 0x0)) || 0x000;
 			sel mac3_t<48>;
-			mac3_t = (B || 0x0000) +
-				48#dpc_smul_mac3.con(IR0, lim_DPC.limB3(bfc_t<31:0>, 0b0).limB3_ret).dout;
+			if(DPC_stg.dpcs){
+				mac3_t = (b || 0x0000) +
+					48#dpc_smul_mac3.con(IR0, lim_DPC.limB3(bfc_t<31:0>, 0b0).limB3_ret).dout;
+			}
+			else{ // DPCT
+				mac3_t = (b || 0x0000) +
+					48#dpc_smul_mac3.con(IR0, lim_DPC.limB1(bfc_t<31:0>, 0b0).limB1_ret).dout;
+			}
 		//	A3(t);
 			set_MAC3(mac3_t<43:12>);
-			goto st_ir;
+
+			generate MACtoCODE2.do();
+			if(DPC_stg.dpcs) generate MACtoIR.do(0b0);
+			if(DPC_stg.dpct & (dpc_st==2)) generate MACtoIR.do(0b0);
+			goto st_rgbir;
 		}
-		state st_ir par{
-			// IR1 = limB1(MAC1, 0);
-			set_IR1(lim_DPC.limB1(MAC1, 0b0).limB1_ret);
-			// IR2 = limB2(MAC2, 0);
-			set_IR2(lim_DPC.limB2(MAC2, 0b0).limB2_ret);
-			// IR3 = limB3(MAC3, 0);
-			set_IR3(lim_DPC.limB3(MAC3, 0b0).limB3_ret);
-			goto st_rgb;
-		}
-		state st_rgb par{
+		state st_rgbir par{
 			// RGB0 = RGB1;
-			set_RGB0(RGB1);
 			// RGB1 = RGB2;
-			set_RGB1(RGB2);
-/*
 			// CODE2 = CODE;
-			set_CODE2(CODE);
 			// R2 = limC1(MAC1 >> 4);
-			set_R2(limC1((MAC1>>4)<15:0>).limC1_ret);
 			// G2 = limC2(MAC2 >> 4);
-			set_G2(limC2((MAC2>>4)<15:0>).limC2_ret);
 			// B2 = limC3(MAC3 >> 4);
-			set_B2(limC3((MAC3>>4)<15:0>).limC3_ret);
-*/
-			d[22] :=
-				CODE ||
-				lim_DPC.limC3(32#MAC3<31:4>).limC3_ret ||
-				lim_DPC.limC2(32#MAC2<31:4>).limC2_ret ||
-				lim_DPC.limC1(32#MAC1<31:4>).limC1_ret;
-			goto st_init;
-			finish;
+
+			// IR1 = limB1(MAC1, 0);
+			// IR2 = limB2(MAC2, 0);
+			// IR3 = limB3(MAC3, 0);
+
+			if(DPC_stg.dpcs){
+				goto st_init;
+				finish;
+			}
+			else any{ // DPCT
+				dpc_st==0 : goto st_mac;
+				dpc_st==1 : goto st_mac;
+				else : par{
+					goto st_init;
+					finish;
+				}
+			}
+			dpc_st++;
 		}
 	}
 
@@ -869,15 +949,18 @@ dbg = dbg_reg;
 		mul_s16 intpl_smul_mac1, intpl_smul_mac2, intpl_smul_mac3;
 		gte_LIMIT lim_INTPL;
 		first_state st_init;
+
 		par{
 			// int lm = GTE_LM(op);
 			intpl_lm = op<10>;
 
 			instruct lim_INTPL.set_FLAG set_FLAG(lim_INTPL.FLAG);
 			if(0b0){
+				lim_INTPL.limC1(0); lim_INTPL.limC2(0); lim_INTPL.limC3(0);
 				lim_INTPL.limD(0);
 			}
 		}
+
 		state st_init par{
 			reset_FLAG();
 			goto st_mac;
@@ -921,38 +1004,21 @@ dbg = dbg_reg;
 		//	A3(t);
 			set_MAC3(mac3_t);
 
-			goto st_ir;
+			generate MACtoIR.do(intpl_lm);
+			generate MACtoCODE2.do();
+			goto st_irrgb;
 		}
-		state st_ir par{
+		state st_irrgb par{
 			// IR1 = limB1(MAC1, lm);
-			set_IR1(lim_INTPL.limB1(MAC1, intpl_lm).limB1_ret);
 			// IR2 = limB2(MAC2, lm);
-			set_IR2(lim_INTPL.limB2(MAC2, intpl_lm).limB2_ret);
 			// IR3 = limB3(MAC3, lm);
-			set_IR3(lim_INTPL.limB3(MAC3, intpl_lm).limB3_ret);
-			goto st_rgb;
-		}
-		state st_rgb par{
-			// RGB0 = RGB1;
-			set_RGB0(RGB1);
-			// RGB1 = RGB2;
-			set_RGB1(RGB2);
-/*
-			// CODE2 = CODE;
-			set_CODE2(CODE);
-			// R2 = limC1(MAC1 >> 4);
-			set_R2(limC1((MAC1>>4)<15:0>).limC1_ret);
-			// G2 = limC2(MAC2 >> 4);
-			set_G2(limC2((MAC2>>4)<15:0>).limC2_ret);
-			// B2 = limC3(MAC3 >> 4);
-			set_B2(limC3((MAC3>>4)<15:0>).limC3_ret);
-*/
-			d[22] :=
-				CODE ||
-				lim_INTPL.limC3(32#MAC3<31:4>).limC3_ret ||
-				lim_INTPL.limC2(32#MAC2<31:4>).limC2_ret ||
-				lim_INTPL.limC1(32#MAC1<31:4>).limC1_ret;
 
+			// RGB0 = RGB1;
+			// RGB1 = RGB2;
+			// CODE2 = CODE;
+			// R2 = limC1(MAC1 >> 4);
+			// G2 = limC2(MAC2 >> 4);
+			// B2 = limC3(MAC3 >> 4);
 			goto st_init;
 			finish;
 		}
@@ -961,22 +1027,15 @@ dbg = dbg_reg;
 	stage SQR_stg {
 		sel sqr_shift<5>, sqr_lm;
 		mul_s16 sqr_smul_mac1, sqr_smul_mac2, sqr_smul_mac3;
-		gte_LIMIT lim_SQR;
 		first_state st_init;
+
 		par{
 			// int shift = 12 * GTE_SF(op);
 			sqr_shift = 0b01100 & 5#op<19>;
 			// int lm = GTE_LM(op);
 			sqr_lm = op<10>;
-
-			instruct lim_SQR.set_FLAG set_FLAG(lim_SQR.FLAG);
-			if(0b0){
-				lim_SQR.limC1(0);
-				lim_SQR.limC2(0);
-				lim_SQR.limC3(0);
-				lim_SQR.limD(0);
-			}
 		}
+
 		state st_init par{
 			reset_FLAG();
 			goto st_mac1;
@@ -1005,15 +1064,14 @@ dbg = dbg_reg;
 			else mac3_t = sqr_smul_mac3.dout;
 		//	A3(t);
 			set_MAC3(mac3_t);
+
+			generate MACtoIR.do(sqr_lm);
 			goto st_ir;
 		}
 		state st_ir par{
 			// IR1 = limB1(MAC1, lm);
-			set_IR1(lim_SQR.limB1(MAC1, sqr_lm).limB1_ret);
 			// IR2 = limB2(MAC2, lm);
-			set_IR2(lim_SQR.limB2(MAC2, sqr_lm).limB2_ret);
 			// IR3 = limB3(MAC3, lm);
-			set_IR3(lim_SQR.limB3(MAC3, sqr_lm).limB3_ret);
 			goto st_init;
 			finish;
 		}
@@ -1021,17 +1079,8 @@ dbg = dbg_reg;
 
 	stage NC_stg { // NCS NCT
 		reg_wr nc_st<2>, nc_v<5>, nc_vx<16>, nc_vy<16>, nc_vz<16>;
-		mul_s16 nc_smul_mac1_1, nc_smul_mac1_2, nc_smul_mac1_3,
-		        nc_smul_mac2_1, nc_smul_mac2_2, nc_smul_mac2_3,
-		        nc_smul_mac3_1, nc_smul_mac3_2, nc_smul_mac3_3;
-		gte_LIMIT lim_NC;
 		first_state st_init;
-		par{
-			instruct lim_NC.set_FLAG set_FLAG(lim_NC.FLAG);
-			if(0b0){
-				lim_NC.limD(0);
-			}
-		}
+
 		state st_init par{
 			reset_FLAG();
 			nc_v := 0;
@@ -1049,9 +1098,9 @@ dbg = dbg_reg;
 			// MAC1 = A1((((s64)L11 * VX0) + (L12 * VY0) + (L13 * VZ0)) >> 12);
 			sel mac1_t<32>;
 			mac1_t = 32#(
-				nc_smul_mac1_1.con(L11, nc_vx).dout +
-				nc_smul_mac1_2.con(L12, nc_vy).dout +
-				nc_smul_mac1_3.con(L13, nc_vz).dout
+				smul_mac1_1.con(L11, nc_vx).dout +
+				smul_mac1_2.con(L12, nc_vy).dout +
+				smul_mac1_3.con(L13, nc_vz).dout
 				)<31:12>;
 		//	A1(t);
 			set_MAC1(mac1_t);
@@ -1059,9 +1108,9 @@ dbg = dbg_reg;
 			// 	MAC2 = A2((((s64)L21 * VX0) + (L22 * VY0) + (L23 * VZ0)) >> 12);
 			sel mac2_t<32>;
 			mac2_t = 32#(
-				nc_smul_mac2_1.con(L21, nc_vx).dout +
-				nc_smul_mac2_2.con(L22, nc_vy).dout +
-				nc_smul_mac2_3.con(L23, nc_vz).dout
+				smul_mac2_1.con(L21, nc_vx).dout +
+				smul_mac2_2.con(L22, nc_vy).dout +
+				smul_mac2_3.con(L23, nc_vz).dout
 				)<31:12>;
 		//	A2(t);
 			set_MAC2(mac2_t);
@@ -1069,12 +1118,14 @@ dbg = dbg_reg;
 			// MAC3 = A3((((s64)L31 * VX0) + (L32 * VY0) + (L33 * VZ0)) >> 12);
 			sel mac3_t<32>;
 			mac3_t = 32#(
-				nc_smul_mac3_1.con(L31, nc_vx).dout +
-				nc_smul_mac3_2.con(L32, nc_vy).dout +
-				nc_smul_mac3_3.con(L33, nc_vz).dout
+				smul_mac3_1.con(L31, nc_vx).dout +
+				smul_mac3_2.con(L32, nc_vy).dout +
+				smul_mac3_3.con(L33, nc_vz).dout
 				)<31:12>;
 		//	A3(t);
 			set_MAC3(mac3_t);
+
+			generate MACtoIR.do(0b1);
 			goto st_ir;
 		}
 
@@ -1083,9 +1134,9 @@ dbg = dbg_reg;
 			sel mac1_t<32>;
 			mac1_t = (
 				(RBK || 0x000) +
-				44#nc_smul_mac1_1.con(LR1, IR1).dout +
-				44#nc_smul_mac1_2.con(LR2, IR2).dout +
-				44#nc_smul_mac1_3.con(LR3, IR3).dout
+				44#smul_mac1_1.con(LR1, IR1).dout +
+				44#smul_mac1_2.con(LR2, IR2).dout +
+				44#smul_mac1_3.con(LR3, IR3).dout
 				)<43:12>;
 		//	A1(t);
 			set_MAC1(mac1_t);
@@ -1094,9 +1145,9 @@ dbg = dbg_reg;
 			sel mac2_t<32>;
 			mac2_t = (
 				(GBK || 0x000) +
-				44#nc_smul_mac2_1.con(LG1, IR1).dout +
-				44#nc_smul_mac2_2.con(LG2, IR2).dout +
-				44#nc_smul_mac2_3.con(LG3, IR3).dout
+				44#smul_mac2_1.con(LG1, IR1).dout +
+				44#smul_mac2_2.con(LG2, IR2).dout +
+				44#smul_mac2_3.con(LG3, IR3).dout
 				)<43:12>;
 		//	A2(t);
 			set_MAC2(mac2_t);
@@ -1105,37 +1156,29 @@ dbg = dbg_reg;
 			sel mac3_t<32>;
 			mac3_t = (
 				(BBK || 0x000) +
-				44#nc_smul_mac3_1.con(LB1, IR1).dout +
-				44#nc_smul_mac3_2.con(LB2, IR2).dout +
-				44#nc_smul_mac3_3.con(LB3, IR3).dout
+				44#smul_mac3_1.con(LB1, IR1).dout +
+				44#smul_mac3_2.con(LB2, IR2).dout +
+				44#smul_mac3_3.con(LB3, IR3).dout
 				)<43:12>;
 		//	A3(t);
 			set_MAC3(mac3_t);
+
+			generate MACtoCODE2.do();
 			goto st_rgb;
 		}
 
 		state st_rgb par{
 			// RGB0 = RGB1;
-			set_RGB0(RGB1);
 			// RGB1 = RGB2;
-			set_RGB1(RGB2);
-/*
 			// CODE2 = CODE;
-			set_CODE2(CODE);
 			// R2 = limC1(MAC1 >> 4);
-			set_R2(limC1((MAC1>>4)<15:0>).limC1_ret);
 			// G2 = limC2(MAC2 >> 4);
-			set_G2(limC2((MAC2>>4)<15:0>).limC2_ret);
 			// B2 = limC3(MAC3 >> 4);
-			set_B2(limC3((MAC3>>4)<15:0>).limC3_ret);
-*/
-			d[22] := //0x20 || crand;
-				CODE ||
-				lim_NC.limC3(32#MAC3<31:4>).limC3_ret ||
-				lim_NC.limC2(32#MAC2<31:4>).limC2_ret ||
-				lim_NC.limC1(32#MAC1<31:4>).limC1_ret;
 
-			if(NC_stg.ncs | (nc_v==2)) goto st_ir;
+			if(NC_stg.ncs | (nc_v==2)){
+				generate MACtoIR.do(0b1);
+				goto st_ir;
+			}
 			else{
 				nc_st := 0;
 				goto st_vset;
@@ -1145,11 +1188,9 @@ dbg = dbg_reg;
 
 		state st_ir par{
 			// IR1 = limB1(MAC1, 1);
-			set_IR1(lim_NC.limB1(MAC1, 0b1).limB1_ret);
 			// IR2 = limB2(MAC2, 1);
-			set_IR2(lim_NC.limB2(MAC2, 0b1).limB2_ret);
 			// IR3 = limB3(MAC3, 1);
-			set_IR3(lim_NC.limB3(MAC3, 0b1).limB3_ret);
+
 			any{
 				nc_st==0 : goto st_mac1_2;
 				nc_st==1 : par{
@@ -1163,19 +1204,19 @@ dbg = dbg_reg;
 
 	stage NCD_stg { // NCDS NCDT
 		reg_wr ncd_st<2>, ncd_v<5>, ncd_vx<16>, ncd_vy<16>, ncd_vz<16>;
-		mul_s16 ncd_smul_mac1_1, ncd_smul_mac1_2, ncd_smul_mac1_3,
-		        ncd_smul_mac2_1, ncd_smul_mac2_2, ncd_smul_mac2_3,
-		        ncd_smul_mac3_1, ncd_smul_mac3_2, ncd_smul_mac3_3,
-		        ncd_smul1_3, ncd_smul2_3, ncd_smul3_3;
+		mul_s16 ncd_smul1_3, ncd_smul2_3, ncd_smul3_3;
 		reg_wr ncd_mul_lim_reg<16>;
 		gte_LIMIT lim_NCD;
 		first_state st_init;
+
 		par{
 			instruct lim_NCD.set_FLAG set_FLAG(lim_NCD.FLAG);
 			if(0b0){
+				lim_NCD.limC1(0); lim_NCD.limC2(0); lim_NCD.limC3(0);
 				lim_NCD.limD(0);
 			}
 		}
+
 		state st_init par{
 			reset_FLAG();
 			ncd_v := 0;
@@ -1193,9 +1234,9 @@ dbg = dbg_reg;
 			// MAC1 = A1((((s64)L11 * VX0) + (L12 * VY0) + (L13 * VZ0)) >> 12);
 			sel mac1_t<32>;
 			mac1_t = 32#(
-				ncd_smul_mac1_1.con(L11, ncd_vx).dout +
-				ncd_smul_mac1_2.con(L12, ncd_vy).dout +
-				ncd_smul_mac1_3.con(L13, ncd_vz).dout
+				smul_mac1_1.con(L11, ncd_vx).dout +
+				smul_mac1_2.con(L12, ncd_vy).dout +
+				smul_mac1_3.con(L13, ncd_vz).dout
 				)<31:12>;
 		//	A1(t);
 			set_MAC1(mac1_t);
@@ -1203,9 +1244,9 @@ dbg = dbg_reg;
 			// 	MAC2 = A2((((s64)L21 * VX0) + (L22 * VY0) + (L23 * VZ0)) >> 12);
 			sel mac2_t<32>;
 			mac2_t = 32#(
-				ncd_smul_mac2_1.con(L21, ncd_vx).dout +
-				ncd_smul_mac2_2.con(L22, ncd_vy).dout +
-				ncd_smul_mac2_3.con(L23, ncd_vz).dout
+				smul_mac2_1.con(L21, ncd_vx).dout +
+				smul_mac2_2.con(L22, ncd_vy).dout +
+				smul_mac2_3.con(L23, ncd_vz).dout
 				)<31:12>;
 		//	A2(t);
 			set_MAC2(mac2_t);
@@ -1213,12 +1254,14 @@ dbg = dbg_reg;
 			// MAC3 = A3((((s64)L31 * VX0) + (L32 * VY0) + (L33 * VZ0)) >> 12);
 			sel mac3_t<32>;
 			mac3_t = 32#(
-				ncd_smul_mac3_1.con(L31, ncd_vx).dout +
-				ncd_smul_mac3_2.con(L32, ncd_vy).dout +
-				ncd_smul_mac3_3.con(L33, ncd_vz).dout
+				smul_mac3_1.con(L31, ncd_vx).dout +
+				smul_mac3_2.con(L32, ncd_vy).dout +
+				smul_mac3_3.con(L33, ncd_vz).dout
 				)<31:12>;
 		//	A3(t);
 			set_MAC3(mac3_t);
+
+			generate MACtoIR.do(0b1);
 			goto st_ir;
 		}
 
@@ -1227,9 +1270,9 @@ dbg = dbg_reg;
 			sel mac1_t<32>;
 			mac1_t = (
 				(RBK || 0x000) +
-				44#ncd_smul_mac1_1.con(LR1, IR1).dout +
-				44#ncd_smul_mac1_2.con(LR2, IR2).dout +
-				44#ncd_smul_mac1_3.con(LR3, IR3).dout
+				44#smul_mac1_1.con(LR1, IR1).dout +
+				44#smul_mac1_2.con(LR2, IR2).dout +
+				44#smul_mac1_3.con(LR3, IR3).dout
 				)<43:12>;
 		//	A1(t);
 			set_MAC1(mac1_t);
@@ -1238,9 +1281,9 @@ dbg = dbg_reg;
 			sel mac2_t<32>;
 			mac2_t = (
 				(GBK || 0x000) +
-				44#ncd_smul_mac2_1.con(LG1, IR1).dout +
-				44#ncd_smul_mac2_2.con(LG2, IR2).dout +
-				44#ncd_smul_mac2_3.con(LG3, IR3).dout
+				44#smul_mac2_1.con(LG1, IR1).dout +
+				44#smul_mac2_2.con(LG2, IR2).dout +
+				44#smul_mac2_3.con(LG3, IR3).dout
 				)<43:12>;
 		//	A2(t);
 			set_MAC2(mac2_t);
@@ -1249,12 +1292,14 @@ dbg = dbg_reg;
 			sel mac3_t<32>;
 			mac3_t = (
 				(BBK || 0x000) +
-				44#ncd_smul_mac3_1.con(LB1, IR1).dout +
-				44#ncd_smul_mac3_2.con(LB2, IR2).dout +
-				44#ncd_smul_mac3_3.con(LB3, IR3).dout
+				44#smul_mac3_1.con(LB1, IR1).dout +
+				44#smul_mac3_2.con(LB2, IR2).dout +
+				44#smul_mac3_3.con(LB3, IR3).dout
 				)<43:12>;
 		//	A3(t);
 			set_MAC3(mac3_t);
+
+			generate MACtoIR.do(0b1);
 			goto st_ir;
 		}
 
@@ -1309,30 +1354,22 @@ dbg = dbg_reg;
 				)<31:12>;
 		//	A3(t);
 			set_MAC3(t);
+
+			generate MACtoCODE2.do();
 			goto st_rgb;
 		}
 		state st_rgb par{
 			// RGB0 = RGB1;
-			set_RGB0(RGB1);
 			// RGB1 = RGB2;
-			set_RGB1(RGB2);
-/*
 			// CODE2 = CODE;
-			set_CODE2(CODE);
 			// R2 = limC1(MAC1 >> 4);
-			set_R2(limC1((MAC1>>4)<15:0>).limC1_ret);
 			// G2 = limC2(MAC2 >> 4);
-			set_G2(limC2((MAC2>>4)<15:0>).limC2_ret);
 			// B2 = limC3(MAC3 >> 4);
-			set_B2(limC3((MAC3>>4)<15:0>).limC3_ret);
-*/
-			d[22] := //0x20 || crand;
-				CODE ||
-				lim_NCD.limC3(32#MAC3<31:4>).limC3_ret ||
-				lim_NCD.limC2(32#MAC2<31:4>).limC2_ret ||
-				lim_NCD.limC1(32#MAC1<31:4>).limC1_ret;
 
-			if(NCD_stg.ncds | (ncd_v==2)) goto st_ir;
+			if(NCD_stg.ncds | (ncd_v==2)){
+				generate MACtoIR.do(0b1);
+				goto st_ir;
+			}
 			else{
 				ncd_st := 0;
 				goto st_vset;
@@ -1342,11 +1379,9 @@ dbg = dbg_reg;
 
 		state st_ir par{
 			// IR1 = limB1(MAC1, 1);
-			set_IR1(lim_NCD.limB1(MAC1, 0b1).limB1_ret);
 			// IR2 = limB2(MAC2, 1);
-			set_IR2(lim_NCD.limB2(MAC2, 0b1).limB2_ret);
 			// IR3 = limB3(MAC3, 1);
-			set_IR3(lim_NCD.limB3(MAC3, 0b1).limB3_ret);
+
 			any{
 				ncd_st==0 : goto st_mac1_2;
 				ncd_st==1 : goto st_mac_3;
@@ -1361,23 +1396,15 @@ dbg = dbg_reg;
 
 	stage NCC_stg { // NCCS NCCT
 		reg_wr ncc_st<2>, ncc_v<5>, ncc_vx<16>, ncc_vy<16>, ncc_vz<16>;
-		mul_s16 ncc_smul_mac1_1, ncc_smul_mac1_2, ncc_smul_mac1_3,
-		        ncc_smul_mac2_1, ncc_smul_mac2_2, ncc_smul_mac2_3,
-		        ncc_smul_mac3_1, ncc_smul_mac3_2, ncc_smul_mac3_3;
-		gte_LIMIT lim_NCC;
 		first_state st_init;
-		par{
-			instruct lim_NCC.set_FLAG set_FLAG(lim_NCC.FLAG);
-			if(0b0){
-				lim_NCC.limD(0);
-			}
-		}
+
 		state st_init par{
 			reset_FLAG();
 			ncc_v := 0;
 			ncc_st := 0;
 			goto st_vset;
 		}
+
 		state st_vset par{
 			ncc_vx := get_VX(ncc_v).VX;
 			ncc_vy := get_VY(ncc_v).VY;
@@ -1387,12 +1414,11 @@ dbg = dbg_reg;
 
 		state st_mac1_1 par{
 			// MAC1 = A1((((s64)L11 * VX0) + (L12 * VY0) + (L13 * VZ0)) >> 12);
-			// d[25] = (s_c[8]L * s_d[0]L) + (s_c[8]H * s_d[0]H) + (s_c[9]L * s_d[1]L)
 			sel mac1_t<32>;
 			mac1_t = 32#(
-				ncc_smul_mac1_1.con(L11, ncc_vx).dout +
-				ncc_smul_mac1_2.con(L12, ncc_vy).dout +
-				ncc_smul_mac1_3.con(L13, ncc_vz).dout
+				smul_mac1_1.con(L11, ncc_vx).dout +
+				smul_mac1_2.con(L12, ncc_vy).dout +
+				smul_mac1_3.con(L13, ncc_vz).dout
 				)<31:12>;
 			// A1(t);
 			set_MAC1(mac1_t);
@@ -1400,9 +1426,9 @@ dbg = dbg_reg;
 			// MAC2 = A2((((s64)L21 * VX0) + (L22 * VY0) + (L23 * VZ0)) >> 12);
 			sel mac2_t<32>;
 			mac2_t = 32#(
-				ncc_smul_mac2_1.con(L21, ncc_vx).dout +
-				ncc_smul_mac2_2.con(L22, ncc_vy).dout +
-				ncc_smul_mac2_3.con(L23, ncc_vz).dout
+				smul_mac2_1.con(L21, ncc_vx).dout +
+				smul_mac2_2.con(L22, ncc_vy).dout +
+				smul_mac2_3.con(L23, ncc_vz).dout
 				)<31:12>;
 			// A2(t);
 			set_MAC2(mac2_t);
@@ -1410,24 +1436,25 @@ dbg = dbg_reg;
 			// MAC3 = A3((((s64)L31 * VX0) + (L32 * VY0) + (L33 * VZ0)) >> 12);
 			sel mac3_t<32>;
 			mac3_t = 32#(
-				ncc_smul_mac3_1.con(L31, ncc_vx).dout +
-				ncc_smul_mac3_2.con(L32, ncc_vy).dout +
-				ncc_smul_mac3_3.con(L33, ncc_vz).dout
+				smul_mac3_1.con(L31, ncc_vx).dout +
+				smul_mac3_2.con(L32, ncc_vy).dout +
+				smul_mac3_3.con(L33, ncc_vz).dout
 				)<31:12>;
 			// A3(t);
 			set_MAC3(mac3_t);
+
+			generate MACtoIR.do(0b1);
 			goto st_ir;
 		}
 
 		state st_mac1_2 par{
 			// MAC1 = A1((((s64)RBK << 12) + (LR1 * IR1) + (LR2 * IR2) + (LR3 * IR3)) >> 12);
-			// d[25] = (s_c[13]<32>||0x000) + (s_c[16]L * s_d[9]L) + (s_c[16]H * s_d[10]L) + (s_c[17]L * s_d[11]L)
 			sel mac1_t<32>;
 			mac1_t = (
 				(RBK || 0x000) +
-				44#ncc_smul_mac1_1.con(LR1, IR1).dout + 
-				44#ncc_smul_mac1_2.con(LR2, IR2).dout + 
-				44#ncc_smul_mac1_3.con(LR3, IR3).dout
+				44#smul_mac1_1.con(LR1, IR1).dout + 
+				44#smul_mac1_2.con(LR2, IR2).dout + 
+				44#smul_mac1_3.con(LR3, IR3).dout
 				)<43:12>;
 			// A1(t);
 			set_MAC1(mac1_t);
@@ -1436,9 +1463,9 @@ dbg = dbg_reg;
 			sel mac2_t<32>;
 			mac2_t = (
 				(GBK || 0x000) +
-				44#ncc_smul_mac2_1.con(LG1, IR1).dout + 
-				44#ncc_smul_mac2_2.con(LG2, IR2).dout + 
-				44#ncc_smul_mac2_3.con(LG3, IR3).dout
+				44#smul_mac2_1.con(LG1, IR1).dout + 
+				44#smul_mac2_2.con(LG2, IR2).dout + 
+				44#smul_mac2_3.con(LG3, IR3).dout
 				)<43:12>;
 			// A2(t);
 			set_MAC2(mac2_t);
@@ -1447,59 +1474,51 @@ dbg = dbg_reg;
 			sel mac3_t<32>;
 			mac3_t = (
 				(BBK || 0x000) +
-				44#ncc_smul_mac3_1.con(LB1, IR1).dout + 
-				44#ncc_smul_mac3_2.con(LB2, IR2).dout + 
-				44#ncc_smul_mac3_3.con(LB3, IR3).dout
+				44#smul_mac3_1.con(LB1, IR1).dout + 
+				44#smul_mac3_2.con(LB2, IR2).dout + 
+				44#smul_mac3_3.con(LB3, IR3).dout
 				)<43:12>;
 			// A3(t);
 			set_MAC3(mac3_t);
+
+			generate MACtoIR.do(0b1);
 			goto st_ir;
 		}
 
 		state st_mac_3 par{
 			// MAC1 = A1(((s64)R * IR1) >> 8);
-			// d[25] = (d[6]<8>bl * s_d[9]L) >> 8
 			sel mac1_t<32>;
-			mac1_t = 32#ncc_smul_mac1_1.con(0x00||R, IR1).dout<31:8>;
+			mac1_t = 32#smul_mac1.con(0x00||R, IR1).dout<31:8>;
 			//A1(t1);
 			set_MAC1(mac1_t);
 
 			// MAC2 = A2(((s64)G * IR2) >> 8);
 			sel mac2_t<32>;
-			mac2_t = 32#ncc_smul_mac2_2.con(0x00||G, IR2).dout<31:8>;
+			mac2_t = 32#smul_mac2.con(0x00||G, IR2).dout<31:8>;
 			//A2(t2);
 			set_MAC2(mac2_t);
 
 			// MAC3 = A3(((s64)B * IR3) >> 8);
 			sel mac3_t<32>;
-			mac3_t = 32#ncc_smul_mac3_3.con(0x00||B, IR3).dout<31:8>;
+			mac3_t = 32#smul_mac3.con(0x00||B, IR3).dout<31:8>;
 			//A3(t3);
 			set_MAC3(mac3_t);
+
+			generate MACtoCODE2.do();
 			goto st_rgb;
 		}
 		state st_rgb par{
 			// RGB0 = RGB1;
-			// d[20] = d[21]
-			set_RGB0(RGB1);
 			// RGB1 = RGB2;
-			// d[21] = d[22]
-			set_RGB1(RGB2);
-/*
 			// CODE2 = CODE;
-			set_CODE2(CODE);
 			// R2 = limC1(MAC1 >> 4);
-			set_R2(limC1((MAC1>>4)<15:0>).limC1_ret);
 			// G2 = limC2(MAC2 >> 4);
-			set_G2(limC2((MAC2>>4)<15:0>).limC2_ret);
 			// B2 = limC3(MAC3 >> 4);
-			set_B2(limC3((MAC3>>4)<15:0>).limC3_ret);
-*/
-			d[22] :=
-				CODE ||
-				lim_NCC.limC3(32#MAC3<31:4>).limC3_ret ||
-				lim_NCC.limC2(32#MAC2<31:4>).limC2_ret ||
-				lim_NCC.limC1(32#MAC1<31:4>).limC1_ret;
-			if(NCC_stg.nccs | (ncc_v==2)) goto st_ir;
+
+			if(NCC_stg.nccs | (ncc_v==2)){
+				generate MACtoIR.do(0b1);
+				goto st_ir;
+			}
 			else{
 				ncc_st := 0;
 				goto st_vset;
@@ -1518,12 +1537,9 @@ v st
 */
 		state st_ir par{
 			// IR1 = limB1(MAC1, 1);
-			// s_d[9]L = 
-			set_IR1(lim_NCC.limB1(MAC1, 0b1).limB1_ret);
 			// IR2 = limB2(MAC2, 1);
-			set_IR2(lim_NCC.limB2(MAC2, 0b1).limB2_ret);
 			// IR3 = limB3(MAC3, 1);
-			set_IR3(lim_NCC.limB3(MAC3, 0b1).limB3_ret);
+
 			any{
 				ncc_st==0 : goto st_mac1_2;
 				ncc_st==1 : goto st_mac_3;
@@ -1533,6 +1549,88 @@ v st
 				}
 			}
 			ncc_st++;
+		}
+	}
+
+	stage CC_stg {
+		reg_wr cc_st<2>;
+		first_state st_init;
+		state st_init par{
+			reset_FLAG();
+			cc_st := 0;
+			goto st_mac_1;
+		}
+		state st_mac_1 par{
+			// MAC1 = A1(
+			//	(
+			//		((s64)RBK << 12) + (LR1 * IR1) + (LR2 * IR2) + (LR3 * IR3)
+			//	) >> 12
+			// );
+			sel mac1_t<32>;
+			mac1_t = (
+				(RBK || 0x000) +
+				44#smul_mac1_1.con(LR1, IR1).dout + 
+				44#smul_mac1_2.con(LR2, IR2).dout + 
+				44#smul_mac1_3.con(LR3, IR3).dout
+				)<43:12>;
+			// A1(t);
+			set_MAC1(mac1_t);
+
+			sel mac2_t<32>;
+			mac2_t = (
+				(GBK || 0x000) +
+				44#smul_mac2_1.con(LG1, IR1).dout + 
+				44#smul_mac2_2.con(LG2, IR2).dout + 
+				44#smul_mac2_3.con(LG3, IR3).dout
+				)<43:12>;
+			// A2(t);
+			set_MAC2(mac2_t);
+
+			sel mac3_t<32>;
+			mac3_t = (
+				(BBK || 0x000) +
+				44#smul_mac3_1.con(LB1, IR1).dout + 
+				44#smul_mac3_2.con(LB2, IR2).dout + 
+				44#smul_mac3_3.con(LB3, IR3).dout
+				)<43:12>;
+			// A3(t);
+			set_MAC3(mac3_t);
+
+			generate MACtoIR.do(0b1);
+			goto st_ir;
+		}
+		state st_mac_2 par{
+			// MAC1 = A1(((s64)R * IR1) >> 8);
+			sel mac1_t<32>;
+			mac1_t = 32#smul_mac1.con(0x00||R, IR1).dout<31:8>;
+			//A1(t1);
+			set_MAC1(mac1_t);
+
+			// MAC2 = A2(((s64)G * IR2) >> 8);
+			sel mac2_t<32>;
+			mac2_t = 32#smul_mac2.con(0x00||G, IR2).dout<31:8>;
+			//A2(t2);
+			set_MAC2(mac2_t);
+
+			// MAC3 = A3(((s64)B * IR3) >> 8);
+			sel mac3_t<32>;
+			mac3_t = 32#smul_mac3.con(0x00||B, IR3).dout<31:8>;
+			//A3(t3);
+			set_MAC3(mac3_t);
+
+			generate MACtoIR.do(0b1);
+			generate MACtoCODE2.do();
+			goto st_ir;
+		}
+		state st_ir par{
+			any{
+				cc_st==0 : goto st_mac_2;
+				cc_st==1 : par{
+					goto st_init;
+					finish;
+				}
+			}
+			cc_st++;
 		}
 	}
 
@@ -1568,17 +1666,15 @@ v st
 		mul_s16 avsz3_smul;
 		gte_LIMIT lim_AVSZ3;
 		first_state st_init;
+
 		par{
 			instruct lim_AVSZ3.set_FLAG set_FLAG(lim_AVSZ3.FLAG);
 			if(0b0){
-				lim_AVSZ3.limB1(0,0);
-				lim_AVSZ3.limB2(0,0);
-				lim_AVSZ3.limB3(0,0);
-				lim_AVSZ3.limC1(0);
-				lim_AVSZ3.limC2(0);
-				lim_AVSZ3.limC3(0);
+				lim_AVSZ3.limB1(0,0); lim_AVSZ3.limB2(0,0); lim_AVSZ3.limB3(0,0);
+				lim_AVSZ3.limC1(0); lim_AVSZ3.limC2(0); lim_AVSZ3.limC3(0);
 			}
 		}
+
 		state st_init par{
 			reset_FLAG();
 			sz3_add := SZ1 + SZ2 + SZ3;
@@ -1600,17 +1696,15 @@ v st
 		mul_s32 avsz4_smul;
 		gte_LIMIT lim_AVSZ4;
 		first_state st_init;
+
 		par{
 			instruct lim_AVSZ4.set_FLAG set_FLAG(lim_AVSZ4.FLAG);
 			if(0b0){
-				lim_AVSZ4.limB1(0,0);
-				lim_AVSZ4.limB2(0,0);
-				lim_AVSZ4.limB3(0,0);
-				lim_AVSZ4.limC1(0);
-				lim_AVSZ4.limC2(0);
-				lim_AVSZ4.limC3(0);
+				lim_AVSZ4.limB1(0,0); lim_AVSZ4.limB2(0,0); lim_AVSZ4.limB3(0,0);
+				lim_AVSZ4.limC1(0); lim_AVSZ4.limC2(0); lim_AVSZ4.limC3(0);
 			}
 		}
+
 		state st_init par{
 			reset_FLAG();
 			sz4_sum := (0b00||SZ0) + (0b00||SZ1) + (0b00||SZ2) + (0b00||SZ3); // [16][17][18][19]<16>
@@ -1630,24 +1724,15 @@ v st
 
 	stage OP_stg {
 		sel op_lm;
-		mul_s16 op_smul_mac1_1, op_smul_mac1_2,
-		        op_smul_mac2_1, op_smul_mac2_2,
-		        op_smul_mac3_1, op_smul_mac3_2;
-		gte_LIMIT lim_OP;
 		first_state st_init;
+
 		par{
 			// int shift = 12 * GTE_SF(op);
 		//	op_shift = 0b01100 & 5#op<19>;
 			// int lm = GTE_LM(op);
 			op_lm = op<10>;
-			instruct lim_OP.set_FLAG set_FLAG(lim_OP.FLAG);
-			if(0b0){
-				lim_OP.limC1(0);
-				lim_OP.limC2(0);
-				lim_OP.limC3(0);
-				lim_OP.limD(0);
-			}
 		}
+
 		state st_init par{
 			reset_FLAG();
 			goto st_mac1;
@@ -1656,8 +1741,8 @@ v st
 			// MAC1 = A1(((s64)(R22 * IR3) - (R33 * IR2)) >> shift);
 			sel mac1_t0<32>;
 			mac1_t0 =
-				op_smul_mac1_1.con(R22, IR3).dout -
-				op_smul_mac1_2.con(R33, IR2).dout;
+				smul_mac1_1.con(R22, IR3).dout -
+				smul_mac1_2.con(R33, IR2).dout;
 			sel mac1_t<32>;
 			if(op<19>) mac1_t = 32#mac1_t0<31:12>;
 			else mac1_t = mac1_t0;
@@ -1667,8 +1752,8 @@ v st
 			// MAC2 = A2(((s64)(gteR33 * gteIR1) - (gteR11 * gteIR3)) >> shift);
 			sel mac2_t0<32>;
 			mac2_t0 =
-				op_smul_mac2_1.con(R33, IR1).dout -
-				op_smul_mac2_2.con(R11, IR3).dout;
+				smul_mac2_1.con(R33, IR1).dout -
+				smul_mac2_2.con(R11, IR3).dout;
 			sel mac2_t<32>;
 			if(op<19>) mac2_t = 32#mac2_t0<31:12>;
 			else mac2_t = mac2_t0;
@@ -1678,22 +1763,22 @@ v st
 			// MAC3 = A3(((s64)(gteR11 * gteIR2) - (gteR22 * gteIR1)) >> shift);
 			sel mac3_t0<32>;
 			mac3_t0 =
-				op_smul_mac3_1.con(R11, IR2).dout -
-				op_smul_mac3_2.con(R22, IR1).dout;
+				smul_mac3_1.con(R11, IR2).dout -
+				smul_mac3_2.con(R22, IR1).dout;
 			sel mac3_t<32>;
 			if(op<19>) mac3_t = 32#mac3_t0<31:12>;
 			else mac3_t = mac3_t0;
 			//A3(t);
 			set_MAC3(mac3_t);
+
+			generate MACtoIR.do(op_lm);
 			goto st_ir;
 		}
 		state st_ir par{
 			// IR1 = limB1(MAC1, lm);
-			set_IR1(lim_OP.limB1(MAC1, op_lm).limB1_ret);
 			// IR2 = limB2(MAC2, lm);
-			set_IR2(lim_OP.limB2(MAC2, op_lm).limB2_ret);
 			// IR3 = limB3(MAC3, lm);
-			set_IR3(lim_OP.limB3(MAC3, op_lm).limB3_ret);
+
 			goto st_init;
 			finish;
 		}
@@ -1702,19 +1787,15 @@ v st
 	stage GPF_stg {
 		sel gpf_lm;
 		mul_s16 gpf_smul_mac1, gpf_smul_mac2, gpf_smul_mac3;
-		gte_LIMIT lim_GPF;
 		first_state st_init;
+
 		par{
 			// int shift = 12 * GTE_SF(op);
 		//	gpf_shift = 0b01100 & 5#op<19>;
 			// int lm = GTE_LM(op);
 			gpf_lm = op<10>;
-
-			instruct lim_GPF.set_FLAG set_FLAG(lim_GPF.FLAG);
-			if(0b0){
-				lim_GPF.limD(0);
-			}
 		}
+
 		state st_init par{
 			reset_FLAG();
 			goto st_mac1;
@@ -1743,37 +1824,23 @@ v st
 			else mac3_t = gpf_smul_mac3.dout;
 		//	A3(t);
 			set_MAC3(mac3_t);
-			goto st_ir;
+
+			generate MACtoIR.do(gpf_lm);
+			generate MACtoCODE2.do();
+			goto st_irrgb;
 		}
-		state st_ir par{
+		state st_irrgb par{
 			// IR1 = limB1(MAC1, lm);
-			set_IR1(lim_GPF.limB1(MAC1, gpf_lm).limB1_ret);
 			// IR2 = limB2(MAC2, lm);
-			set_IR2(lim_GPF.limB2(MAC2, gpf_lm).limB2_ret);
 			// IR3 = limB3(MAC3, lm);
-			set_IR3(lim_GPF.limB3(MAC3, gpf_lm).limB3_ret);
-			goto st_rgb;
-		}
-		state st_rgb par{
+
 			// RGB0 = RGB1;
-			set_RGB0(RGB1);
 			// RGB1 = RGB2;
-			set_RGB1(RGB2);
-
 			// CODE2 = CODE;
-		//	set_CODE2(CODE);
 			// R2 = limC1(MAC1 >> 4);
-		//	set_R2(limC1((MAC1>>4)<15:0>).limC1_ret);
 			// G2 = limC2(MAC2 >> 4);
-		//	set_G2(limC2((MAC2>>4)<15:0>).limC2_ret);
 			// B2 = limC3(MAC3 >> 4);
-		//	set_B2(limC3((MAC3>>4)<15:0>).limC3_ret);
 
-			d[22] :=
-				CODE ||
-				lim_GPF.limC3(32#MAC3<31:4>).limC3_ret ||
-				lim_GPF.limC2(32#MAC2<31:4>).limC2_ret ||
-				lim_GPF.limC1(32#MAC1<31:4>).limC1_ret;
 			goto st_init;
 			finish;
 		}
@@ -1782,19 +1849,15 @@ v st
 	stage GPL_stg {
 		sel gpl_lm;
 		mul_s16 gpl_smul_mac1, gpl_smul_mac2, gpl_smul_mac3;
-		gte_LIMIT lim_GPL;
 		first_state st_init;
+
 		par{
 			// int shift = 12 * GTE_SF(op);
 		//	gpl_shift = 0b01100 & 5#op<19>;
 			// int lm = GTE_LM(op);
 			gpl_lm = op<10>;
-
-			instruct lim_GPL.set_FLAG set_FLAG(lim_GPL.FLAG);
-			if(0b0){
-				lim_GPL.limD(0);
-			}
 		}
+
 		state st_init par{
 			reset_FLAG();
 			goto st_mac1;
@@ -1827,39 +1890,25 @@ v st
 			else mac3_t = 44#MAC3 + 44#gpl_smul_mac3.dout;
 		//	A3(t);
 			set_MAC3(mac3_t<31:0>);
-			goto st_ir;
+
+			generate MACtoIR.do(gpl_lm);
+			generate MACtoCODE2.do();
+			goto st_irrgb;
 		}
-		state st_ir par{
+		state st_irrgb par{
 			// IR1 = limB1(MAC1, lm);
-			set_IR1(lim_GPL.limB1(MAC1, gpl_lm).limB1_ret);
 			// IR2 = limB2(MAC2, lm);
-			set_IR2(lim_GPL.limB2(MAC2, gpl_lm).limB2_ret);
 			// IR3 = limB3(MAC3, lm);
-			set_IR3(lim_GPL.limB3(MAC3, gpl_lm).limB3_ret);
-			goto st_rgb;
-		}
-		state st_rgb par{
+
 			// RGB0 = RGB1;
-			set_RGB0(RGB1);
 			// RGB1 = RGB2;
-			set_RGB1(RGB2);
-
 			// CODE2 = CODE;
-		//	set_CODE2(CODE);
 			// R2 = limC1(MAC1 >> 4);
-		//	set_R2(limC1((MAC1>>4)<15:0>).limC1_ret);
 			// G2 = limC2(MAC2 >> 4);
-		//	set_G2(limC2((MAC2>>4)<15:0>).limC2_ret);
 			// B2 = limC3(MAC3 >> 4);
-		//	set_B2(limC3((MAC3>>4)<15:0>).limC3_ret);
-
-			d[22] :=
-				CODE ||
-				lim_GPL.limC3(32#MAC3<31:4>).limC3_ret ||
-				lim_GPL.limC2(32#MAC2<31:4>).limC2_ret ||
-				lim_GPL.limC1(32#MAC1<31:4>).limC1_ret;
 			goto st_init;
 			finish;
 		}
 	}
+
 }

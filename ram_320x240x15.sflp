@@ -11,7 +11,7 @@ circuit ram_320x240x15
 
 // 76800 / 0x1380(4992) = 
 	mem cells[320*240]<15>;
-	reg_wr dout_reg<15>;
+	reg dout_reg<15>;
 
 	instruct read dout_reg := cells[adrs];
 	dout = dout_reg;

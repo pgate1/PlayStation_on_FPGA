@@ -126,7 +126,9 @@ circuit CDROM_controller
 	instrself getTD(getTD_track);
 
 	output file_adrs<32>;
-	instrout file_read(file_adrs);
+	reg_wr file_adrs_reg<32>;
+	instrself file_read(file_adrs);
+	instrout file_read_req, file_preload;
 	instrin file_ack;
 	input file_data<8>, file_error;
 
@@ -429,6 +431,18 @@ dbg32 = dbg32_reg;
 		dma_read_Dout = dma_read_Dout_reg;
 	}
 
+	reg_wr file_read_req_reg;
+	if(file_read){
+		file_read_req();
+		file_read_req_reg := 0b1;
+		file_adrs_reg := file_adrs;
+	}
+	else{
+		file_adrs = file_adrs_reg;
+	}
+	if(file_read_req_reg & ^file_ack) file_read_req();
+	if(file_ack) file_read_req_reg := 0b0;
+
 // >>8,4,3,2 NG
 	stage interrupt_wait {
 		reg_wr int_wait_count<32>;
@@ -440,7 +454,7 @@ dbg32 = dbg32_reg;
 		}
 		state st2 if(run33){
 			int_wait_count++;
-			if(int_wait_count==(0x0||(int_wait_max/*>>1*/))){
+			if(int_wait_count==(0x0||(int_wait_max>>1))){
 				generate cdrInterrupt.do(); // CDR_INT
 				goto st1;
 				finish;
@@ -459,7 +473,7 @@ dbg32 = dbg32_reg;
 		}
 		state st2 if(run33){
 			play_int_wait_count++;
-			if(play_int_wait_count==(0x0||(play_int_wait_max/*>>1*/))){
+			if(play_int_wait_count==(0x0||(play_int_wait_max>>1))){
 				generate cdrPlayInterrupt.do(); // CDRMISC_INT
 				goto st1;
 				finish;
@@ -478,7 +492,7 @@ dbg32 = dbg32_reg;
 		}
 		state st2 if(run33){
 			read_int_wait_count++;
-			if(read_int_wait_count==(0x0||(read_int_wait_max/*>>1*/))){
+			if(read_int_wait_count==(0x0||(read_int_wait_max>>1))){
 				generate cdrReadInterrupt.do(); // CDREAD_INT
 				goto st1;
 				finish;
@@ -911,6 +925,7 @@ dbg_reg := 0x0000 || Irq_;
 		reg_wr readtrack_transfer_index<12>;
 		first_state st1;
 		state st1 par{
+			RErr := 0b0;
 			if((SetSectorPlay[0]==Prev[0]) & (SetSectorPlay[1]==Prev[1]) & (SetSectorPlay[2]==Prev[2])){
 				finish;
 			}
@@ -922,39 +937,38 @@ dbg_reg := 0x0000 || Irq_;
 		}
 		state st2 par{
 //dbg32_reg := 0x00 || Prev[0] || Prev[1] || Prev[2];
+			seek_point := readtrack_mul.con(0x00||sector, 2352).dout<31:0>;
+			readtrack_transfer_index := -12; // 同期12バイトを除外
 			if(sector<23>){
 				RErr := 0b1;
 				goto st1;
 				finish;
 			}
-			else{
-				seek_point := readtrack_mul.con(0x00||sector, 2352).dout<31:0>;
-				goto st3;
-			}
+			else goto st3;
 		}
 		state st3 par{
 			file_read(seek_point);
 			seek_point++;
-			readtrack_transfer_index := -12; // 同期12バイトを除外
 			goto st4;
 		}
 		state st4 if(file_ack){
+			Transfer.write(readtrack_transfer_index, file_data);
+			if(readtrack_transfer_index<11:3>==0b000000000){
+				Transfer_head[readtrack_transfer_index<2:0>] := file_data;
+			}
+			readtrack_transfer_index++;
 			if(file_error){
 				RErr := 0b1;
 				goto st1;
 				finish;
 			}
 			else{
-				file_read(seek_point);
-				seek_point++;
-				Transfer.write(readtrack_transfer_index, file_data);
-				if(readtrack_transfer_index<11:3>==0b000000000) Transfer_head[readtrack_transfer_index<2:0>] := file_data;
-				readtrack_transfer_index++;
 				if(readtrack_transfer_index==(2352-1-12)){
-					RErr := 0b0;
+				//	file_preload();
 					goto st1;
 					finish;
 				}
+				else goto st3;
 			}
 		}
 	}

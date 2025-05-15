@@ -97,7 +97,27 @@ dbg16 = dbg16_reg;
 
 	instruct ReadData par{
 		if(StatReg<1>/*RX_RDY*/){
-			io_dout = 0x00 || data_buf[parp];
+
+			sel data<8>;
+			any{
+				bufcount==133 : any{
+					parp<7:2>==0b000000 : data = data_buf[parp<2:0>];
+					parp==132 : data = 0x00;
+					parp==133 : data = 0x47;
+					else : data = 0x00;
+				} 
+				bufcount==131 : any{
+					parp<7:1>==0b0000000 : data = data_buf[parp<2:0>];
+					parp==129 : data = 0x5C;
+					parp==130 : data = 0x5D;
+					parp==131 : data = 0x47;
+					else : data = 0x00;
+				}
+				else : data = data_buf[parp<2:0>];
+			}
+			io_dout = 0x00 || data;
+			//io_dout = 0x00 || data_buf[parp];
+
 			if(parp==bufcount){
 			//	StatReg &= ^0x0002;//RX_RDY; // Receive is not Ready now â∫Ç≈é¿çs
 				if(mcdst==5){
