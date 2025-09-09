@@ -130,16 +130,7 @@ circuit drawFillRect
 						vram_write(y<8:0>||x<9:0>, col);
 					}
 				}
-/*
-広範囲にvram_writeするとちらつく
-	W 0x02000000
-	W 0x000A0000
-	W 0x01C60200
-60fpsに間に合わない？
-案：chain中はNMIブロックする？
-案：NMIがあったらchainを中断する？
-案：ある範囲以上なら描画しない？
-*/
+
 			//	vram_write(y<8:0>||x<9:0>, 0b0||col);
 			}
 

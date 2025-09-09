@@ -55,19 +55,19 @@ circuit GraphicProcessingUnit
 	mem CommandBuffer[16]<32>;
 	reg_wr BufferOffset<4>;
 	reg_wr cmd_reg<8>;
-	reg_wr reg_E2<32>;
+	reg reg_E2<32>;
 
 	output busy, drawing, vram_busy;
 
-	reg_wr px1<11>, py1<11>, pc1<24>; // A点
-	reg_wr px2<11>, py2<11>, pc2<24>; // B点
-	reg_wr px3<11>, py3<11>, pc3<24>; // C点
+	reg px1<11>, py1<11>, pc1<24>; // A点
+	reg px2<11>, py2<11>, pc2<24>; // B点
+	reg px3<11>, py3<11>, pc3<24>; // C点
 
-	reg_wr pu1<8>, pv1<8>;
-	reg_wr pu2<8>, pv2<8>;
-	reg_wr pu3<8>, pv3<8>;
+	reg pu1<8>, pv1<8>;
+	reg pu2<8>, pv2<8>;
+	reg pu3<8>, pv3<8>;
 
-	reg_wr clut<16>, tpage<14>;
+	reg clut<16>, tpage<14>;
 
 	drawFillRect fill;
 	drawPoly poly;
@@ -630,7 +630,7 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 		(dispHeight==240) & (DispStartY_pre==240) /*((drawOffsetY-240)<10>==0b0)*/ : par{ // drawOffsetY >= 240
 			view_offset_y = -240;
 		}
-		// for height 240 of デュープリズム
+		// for height 256 of デュープリズム
 		(dispHeight==240) & (DispStartY_pre==256) /*((drawOffsetY-240)<10>==0b0)*/ : par{ // drawOffsetY >= 240
 			view_offset_y = -256;
 		}
@@ -743,12 +743,14 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 				io_write_data := io_write_data >> 16;
 /*
 // test.exeの時
+if(^sw_kernel_run){
 view_on();
 view_x = CommandBuffer[1]<9:0> + VramPosX<9:0>;
 view_y = CommandBuffer[1]<24:16> + VramPosY<8:0>;
 view_R = io_write_data<4:0> || 0b111;
 view_G = io_write_data<9:5> || 0b111;
 view_B = io_write_data<14:10> || 0b111;
+}
 */
 			}
 			if(VramData_image.read_vram){

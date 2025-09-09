@@ -77,3 +77,5 @@ Here's a list of games that work a little. There may be other games that work as
 - Rockman X5
 - Rockman X6
 - Valkyrie Profile
+- Omega Boost
+- Final Fantasy Tactics

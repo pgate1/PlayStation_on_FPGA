@@ -9,7 +9,7 @@ circuit ram_16x32k
 	instrin read(adrs), write(adrs, din);
 
 	mem cells[32768]<16>;
-	reg_wr dout_reg<16>;
+	reg dout_reg<16>;
 
 	instruct read dout_reg := cells[adrs];
 	dout = dout_reg;

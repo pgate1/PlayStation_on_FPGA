@@ -64,28 +64,28 @@ circuit drawPoly
 	instrself vertex_sort;
 	compare_s11 cmp12, cmp13, cmp23;
 	// YÉ\Å[Égå„
-	reg_wr x1<11>, y1<11>, r1<8>, g1<8>, b1<8>, u1<8>, v1<8>;
-	reg_wr x2<11>, y2<11>, r2<8>, g2<8>, b2<8>, u2<8>, v2<8>;
-	reg_wr x3<11>, y3<11>, r3<8>, g3<8>, b3<8>, u3<8>, v3<8>;
+	reg x1<11>, y1<11>, r1<8>, g1<8>, b1<8>, u1<8>, v1<8>;
+	reg x2<11>, y2<11>, r2<8>, g2<8>, b2<8>, u2<8>, v2<8>;
+	reg x3<11>, y3<11>, r3<8>, g3<8>, b3<8>, u3<8>, v3<8>;
 
 	inv_table inv_t;
 
 	mul_s11 mule1, mule2;
-	reg_wr eval;
+	reg eval;
 	sel upper;
 
 	mul_s18s16 mulcr, mulcg, mulcb;
 	mul_s18s16 multu, multv;
 
-	reg_wr sy<11>, ey<11>;
-	reg_wr sx<11>, ex<11>;
-	reg_wr dr<8+CMULS>, dg<8+CMULS>, db<8+CMULS>;
-	reg_wr vr<8+CMULS>, vg<8+CMULS>, vb<8+CMULS>;
-	reg_wr du<8+TMULS>, dv<8+TMULS>;
-	reg_wr vu<8+TMULS>, vv<8+TMULS>;
+	reg sy<11>, ey<11>;
+	reg sx<11>, ex<11>;
+	reg dr<8+CMULS>, dg<8+CMULS>, db<8+CMULS>;
+	reg vr<8+CMULS>, vg<8+CMULS>, vb<8+CMULS>;
+	reg du<8+TMULS>, dv<8+TMULS>;
+	reg vu<8+TMULS>, vv<8+TMULS>;
 	instrself delta_add;
 
-	reg_wr x<11>, y<11>;
+	reg x<11>, y<11>;
 	compare_s11 cmp_ex, cmp_ey, cmp_x, cmp_y, cmp_w, cmp_h;
 
 	input f_dither;
@@ -312,13 +312,17 @@ dbg = dbg_reg;
 			goto st2;
 		}
 		state st2 if(^bilinear_vbase.do){
-			if(sy<10> & ey<10>){ // y < 0
-				goto st1;
-				finish;
-			}
-			else{
-				generate bilinear_hbase.do();
-				goto st3;
+			any{
+				(sy<10> & ey<10>) // y < 0
+				| (px1<10> & px2<10> & px3<10>) // x < 0
+				: par{
+					goto st1;
+					finish;
+				}
+				else : par{
+					generate bilinear_hbase.do();
+					goto st3;
+				}
 			}
 			y := sy;
 		}

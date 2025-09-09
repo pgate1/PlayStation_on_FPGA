@@ -110,17 +110,17 @@ circuit drawRect
 		state st3 par{
 			alt{
 				y<10> // y < 0
-				| ((y-(0b0||drawY))<10>==0b1) // y < drawY
+				| ((y-(0b0||drawY))<10>==0b1) // y < drawY ドローライン未満
 				: par{
 					y++;
 					pv++;
 				}
 				((y-vy4)<10>==0b0) // y >= ey
-				| cmp_h.gt(y, 0b0||drawH).result : par{ // y > drawH
+				| cmp_h.gt(y, 0b0||drawH).result : par{ // y > drawH ドローライン超え
 					goto st1;
 					finish;
 				}
-				else : par{ // y < ey
+				else : par{ // y < ey 描画ライン
 					goto st4;
 				}
 			}
@@ -131,7 +131,7 @@ circuit drawRect
 			if(
 			//	((vx4-x)<10>==0b1) // x > ex
 				((x-vx4)<10>==0b0) // x >= ex
-				| cmp_w.gt(x, 0b0||drawW).result // x > drawW
+				| cmp_w.gt(x, 0b0||drawW).result // x > drawW ドロードット超え
 			){
 				if(sw_view_half_height){
 					y += 2;
@@ -149,7 +149,7 @@ circuit drawRect
 				//	& (y-0b00111100000)<10> // y < 480
 					(x<10>==0b0)          // x >= 0
 				//	& (x-0b01010000000)<10> // x < 640
-					& ((x-(0b0||drawX))<10>==0b0) // x >= drawX
+					& ((x-(0b0||drawX))<10>==0b0) // x >= drawX // ドロードット以上
 				){
 					any{
 						f_texture : generate texdraw.do(x, pu);
