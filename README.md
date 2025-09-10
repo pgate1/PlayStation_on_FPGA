@@ -15,7 +15,7 @@ Reset is BUTTON 0.
 
 <a target=_blank href="https://pgate1.at-ninja.jp/PSX_on_FPGA/">PlayStation Sound Player on FPGA</a>  
 <a target=_blank href="https://www.youtube.com/watch?v=2PupKQtSOCA">PlayStation on FPGA feat. DE2-115 (Run kernel)</a>  
-<a target=_blank href="https://www.youtube.com/watch?v=xV6hRjSPIlo">PlayStation on FPGA feat. Pocket (No sound)</a>  
+<a target=_blank href="https://www.youtube.com/watch?v=xV6hRjSPIlo">PlayStation on FPGA feat. Pocket (No sound, movie. The frame rate is slow because the main memory and vram are shared.)</a>  
   
 <!--
 2019/11/12  
@@ -55,6 +55,7 @@ Add MemoryCard Controller for Saga Frontier 2.
 <img width=260 src="img/20230201_MetalGearSolid.jpg"><img width=260 src="img/20230318_XI.jpg">
 <img width=260 src="img/20230203_RayStorm.jpg"><img width=260 src="img/20230202_IsInternalSection.jpg">
 <img width=260 src="img/20250228_RockmanX6.jpg"><img width=260 src="img/20250228_ValkyrieProfile.jpg">
+<img width=260 src="img/20250909_OmegaBoost.jpg">
 
 ## Working game list
 
