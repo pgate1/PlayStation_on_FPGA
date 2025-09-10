@@ -80,3 +80,10 @@ Here's a list of games that work a little. There may be other games that work as
 - Valkyrie Profile
 - Omega Boost
 - Final Fantasy Tactics
+
+User reports.
+
+- GUNPEY
+- Speed Power Gunbike
+- Rakugaki Showtime
+
