@@ -86,4 +86,6 @@ User reports.
 - GUNPEY
 - Speed Power Gunbike
 - Rakugaki Showtime
+- Mr. Driller
+- Harmful Park
 
