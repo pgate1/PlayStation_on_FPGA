@@ -6,6 +6,7 @@ PlayStation on FPGA feat. Analogue Pocket
 
 This is a port of the basic functions of the first PlayStation to Analogue Pocket.
 Sound and movie functions have been left out to fit in Pocket's FPGA.
+The FPS is low because the main memory and VRAM are shared.
 
 
 * Using core.
@@ -32,7 +33,7 @@ Sound and movie functions have been left out to fit in Pocket's FPGA.
          playstation.bin
       playstation.json
 
-4. OK. Insert the SD card into the Pocket, turn it on, and select PlayStation from openFPGA.
+4. OK. Insert the SD card into the Pocket, turn it on, and select PlayStation core from openFPGA.
 
 5. There are three choices from the file browser.
 
@@ -45,7 +46,7 @@ Sound and movie functions have been left out to fit in Pocket's FPGA.
 6. Have fun until your Pocket's battery runs out.
 
 If it works happily, please take a video of it and upload it to Twitter. I will be delighted.
-Select button? to enter raw polygon drawing mode.
+/*Select button? to enter raw polygon drawing mode.*/
 
 
 * What to do when it doesn't work.
@@ -56,11 +57,11 @@ Error in framework File ID [32] size bad.
 Immediately after the first black screen, red lines appear on all four sides.
   -> It may not be a valid BIOS file. Please check the checksum.
 
-Cannot proceed after PS logo is displayed.
+Cannot proceed after PS logo is displayed, red lines appear on all four sides.
   -> This software is not yet supported. Sorry.
 
 The game won't start after the PS logo.
-  -> The movie is probably being processed, so hit the Start button repeatedly after the PS logo to skip the movie. 
+  -> The movie is probably being processed, so hit the Start button repeatedly after the PS logo to skip the movie. If you time it right, you might be able to skip the movie.
      If it still doesn't start, it's still not supported.
 
 During play, a red line appeared on all four sides and the game stopped.
