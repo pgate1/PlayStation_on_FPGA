@@ -88,4 +88,7 @@ User reports.
 - Rakugaki Showtime
 - Mr. Driller
 - Harmful Park
+- Runabout
+- Kaette Kita Cyborg Kurochan
+- Bloody Roar
 
