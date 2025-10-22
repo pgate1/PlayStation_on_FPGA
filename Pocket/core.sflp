@@ -8,7 +8,7 @@
 %i "../DDS_50to33868800.h"
 %i "../VGA_ctrl.h"
 %i "../view_ram_ctrl.h"
-%i "ram_4k.h"
+%i "../../../Pocket/sram_ctrl.h"
 
 %i "../../../hdl/USB-JTAG/DE0-CV/vjtag_uart.h"
 
@@ -16,23 +16,29 @@ circuit core
 {
 	input key<16>;
 //--------------------- SDRAM Interface --------------------
-	instrout sdram_write(sdram_adrs, sdram_wdata, sdram_enable);
-	output sdram_adrs<24>, sdram_wdata<32>, sdram_enable<4>;
-	instrout sdram_read(sdram_adrs);
-	input sdram_rdata<32>, sdram_ack_100;
-	reg_wr sdram_ack;
+	instrout sdram_write(sdram_adrs, sdram_din, sdram_enable, sdram_burst);
+	output sdram_adrs<25>, sdram_din<128>, sdram_enable<16>, sdram_burst<4>;
+	instrout sdram_read(sdram_adrs, sdram_burst);
+	input sdram_dout<128>, sdram_ack_100; reg sdram_ack;
+//--------------------- SRAM -------------------------------
+	sram_ctrl sram;
+	output SRAM_OEn, SRAM_WEn, SRAM_UBn, SRAM_LBn;
+	output SRAM_ADDR<17>, SRAM_Din<16>, SRAM_DEn;
+	input SRAM_Dout<16>;
 //--------------------- VGA --------------------------------
 	VGA_ctrl vga;
 	output VGA_HS, VGA_VS, VGA_DE;
 	output VGA_R<8>, VGA_G<8>, VGA_B<8>;
 //----------------------------------------------------------
 	output set_sdram; reg_wr set_sdram_reg;
-	output set_bram; reg_wr set_bram_reg;
+//	output set_bram; reg_wr set_bram_reg;
+	output set_sram; reg_wr set_sram_reg;
 	output target_id<16>; reg_wr target_id_reg<16>;
 	output target_slotoffset<32>; reg_wr target_slotoffset_reg<32>;
 	output target_bridgeaddr<32>; reg_wr target_bridgeaddr_reg<32>;
 	output target_length<32>; reg_wr target_length_reg<32>;
-	input bram_word_wr, bram_wdata<32>;
+//	input bram_word_wr, bram_wdata<32>;
+	input sram_word_wr, sram_wdata<32>;
 	input target_dataslot_read, ram_reloading;
 //----------------------------------------------------------
 
@@ -45,11 +51,12 @@ circuit core
 
 	reg_wr exe_read_ok, psx_run_ok;
 
-	ram_4k file_ram;
-
 	reg_wr f_bios, f_exe;
 
 	vjtag_uart vjtag;
+
+	reg_wr count_1sec<26>, pass_1sec;
+	reg fps<8>, fps_count<8>;
 
 	instrself halt(halt_sel);
 	sel halt_sel<8>;
@@ -58,7 +65,8 @@ circuit core
 	stage_name apf2sdram { task do(target_id_reg, target_slotoffset_reg, target_bridgeaddr_reg, target_length_reg); }
 	stage_name check_file { task do(); }
 	stage_name wram_clear { task do(); }
-	stage_name apf2bram { task do(target_id_reg, target_slotoffset_reg, target_length_reg); }
+//	stage_name apf2bram { task do(target_id_reg, target_slotoffset_reg, target_length_reg); }
+	stage_name apf2sram { task do(target_id_reg, target_slotoffset_reg, target_length_reg); }
 	stage_name rom_read { task do(); }
 	stage_name exe_read { task do(); }
 
@@ -69,9 +77,18 @@ circuit core
 
 	instruct halt halt_code := halt_sel;
 
+	SRAM_OEn = sram.OEn;
+	SRAM_WEn = sram.WEn;
+	SRAM_UBn = sram.UBn;
+	SRAM_LBn = sram.LBn;
+	SRAM_DEn = sram.DEn;
+	SRAM_ADDR = sram.ADDR;
+	SRAM_Din = sram.Din;
+	sram.Dout = SRAM_Dout;
+
 	reg_wr radrs<3>;
 	sel vj_data<32>;
-	if(radrs<2>==0b0) vj_data = 0x0000 || halt_code || psx.halt_code;
+	if(radrs<2>==0b0) vj_data = 0x00 || fps || halt_code || psx.halt_code;
 	if(radrs<2>==0b1) vj_data = psx.dbg;
 	instruct vjtag.send_init par{
 		radrs := 0;
@@ -95,7 +112,8 @@ circuit core
 	sdram_ack := sdram_ack_100;
 
 	set_sdram = set_sdram_reg;
-	set_bram = set_bram_reg;
+//	set_bram = set_bram_reg;
+	set_sram = set_sram_reg;
 	target_id = target_id_reg;
 	target_slotoffset = target_slotoffset_reg;
 	target_bridgeaddr = target_bridgeaddr_reg;
@@ -109,8 +127,8 @@ circuit core
 	vga_hsync_reg := vga.h_sync; VGA_HS = vga_hsync_reg;
 	vga_vsync_reg := vga.v_sync; VGA_VS = vga_vsync_reg;
 
-	if(((vga.h_count==5) | (vga.h_count==635) |
-	   (vga.v_count==5) | (vga.v_count==475)) & /|psx.halt_code){
+	if(((vga.h_count==10) | (vga.h_count==630) |
+	   (vga.v_count==10) | (vga.v_count==470)) & /|psx.halt_code){
 	//	vga.iR = 0xFF; vga.iG = 0xFF; vga.iB = 0xFF;
 		vga.iR = 0xFF; vga.iG = 0x00; vga.iB = 0x00;
 	}
@@ -127,9 +145,13 @@ circuit core
 	VGA_G = vga_G_reg;
 	VGA_B = vga_B_reg;
 
-	reg_wr boot_count<16>, pass_1sec;
-	if(/&boot_count) pass_1sec := 0b1;
-	else boot_count++;
+	if(count_1sec==50000000){
+		pass_1sec := 0b1;
+		count_1sec := 1;
+		fps := fps_count;
+		fps_count := 0;
+	}
+	else count_1sec++;
 
 	instruct psx.view_on par{
 		sel psx_view_x<9>, psx_view_y<8>;
@@ -151,12 +173,19 @@ circuit core
 			psx_run_ok := 0b1;
 			vblank_wait := 0b1;
 		}
-		if((^psx.drawing) & (^psx.stop)){
+		if(/*(^psx.drawing) &*/ (^psx.stop)){
 			if(psx_run_ok) psx.vblank_begin();
+			if(^psx.sw_kernel_run){
+				view_ram.bank_change();
+				fps_count++;
+			}
 		}
 	}
 	instruct vga.vblank_end psx.vblank_end();
-	instruct psx.display_flip view_ram.bank_change();
+	instruct psx.display_flip if(psx.sw_kernel_run){
+		view_ram.bank_change();
+		fps_count++;
+	}
 //	instruct psx.fill_view_on view_ram.fill_view_on(); // 20230402 コメントアウト
 //	instruct psx.draw_notdisp_side view_ram.draw_notdisp_side();
 
@@ -185,76 +214,107 @@ psx.sw_spuenv_off();
 	if(^f_exe) psx.sw_kernel_run();
 //	if(sw_7) psx.stop();
 
-	reg_wr key_push, key_14_hold;
-	if(key<14> & ^key_push) key_push := 0b1;
-	if(key_push & ^key<14>){ key_push := 0b0; key_14_hold := ^key_14_hold; }
+	reg_wr key_14_push, key_14_hold; // Select
+	if(key<14> & ^key_14_push) key_14_push := 0b1;
+	if(key_14_push & ^key<14>){ key_14_push := 0b0; key_14_hold := ^key_14_hold; }
+	reg_wr key_9_push, key_9_hold; // R
+	if(key<9> & ^key_9_push) key_9_push := 0b1;
+	if(key_9_push & ^key<9>){ key_9_push := 0b0; key_9_hold := ^key_9_hold; }
 //	if(key_14_hold) psx.sw_texture_off();
-//psx.sw_cache_off();
+	if(key_14_hold /*& key_9_hold*/) psx.sw_texcache_off();
 
 /*
-SDRAM <24> 64MB
-0b00000   ||psx.A<20:2>         WorkRAM 2MB<19>
-0b00001   ||psx.vram_read_adrs  VideoRAM 1MB<19>
-0b0100000 ||psx.A<18:2>         BIOS 512kB<17>
+SDRAM 64MB 16bit 32Mword<25>
+0b00000   || psx.A<20:2> || 0b0      WorkRAM  2MB 32bit 512kWord<19>
+0b000010  || psx.vram_adrs<18:0>     VideoRAM 1MB 16bit 512kWord<19>
+0b0100000 || psx.A<18:2> || 0b0      BIOS   512kB 32bit 128kWord<17>
 */
+	reg_wr psx_Word<5>, psx_A<21>;
 
 	instruct psx.WRAM_READ par{
-		sdram_read(0b00000||psx.A<20:2>);
+		any{
+			(psx.Word==1) | (psx.Word==2) : par{
+				sdram_read(0b00000 || psx.A<20:1>, 1);
+			}
+			else : par{// byte 16,12,8,4 -> burst 8,6,4,2
+				sdram_read(0b00000 || psx.A<20:2> || 0b0, psx.Word<4:1>);
+			}
+		}
+		psx_Word := psx.Word;
+		psx_A := psx.A;
 	}
 	if(sdram_ack) psx.wram_ack();
 
+	any{
+		((psx_Word==1) | (psx_Word==2)) & (psx_A<1>==0b1) : par{
+			psx.Din = sdram_dout << 16;
+		}
+		else : par{
+			psx.Din = sdram_dout;
+		}
+	}
+
 	instruct psx.WRAM_WRITE par{
 		any{
-			psx.Word==4 : sdram_write(0b00000||psx.A<20:2>, psx.Dout, 0b1111);
-			psx.Word==2 : any{
-				psx.A<1>==0b0 : sdram_write(0b00000||psx.A<20:2>, 0x0000||psx.Dout<15:0>, 0b0011);
-				psx.A<1>==0b1 : sdram_write(0b00000||psx.A<20:2>, psx.Dout<15:0>||0x0000, 0b1100);
-			}
 			psx.Word==1 : any{
-				psx.A<1:0>==0b00 : sdram_write(0b00000||psx.A<20:2>, 0x000000||psx.Dout<7:0>,     0b0001);
-				psx.A<1:0>==0b01 : sdram_write(0b00000||psx.A<20:2>, 0x0000||psx.Dout<7:0>||0x00, 0b0010);
-				psx.A<1:0>==0b10 : sdram_write(0b00000||psx.A<20:2>, 0x00||psx.Dout<7:0>||0x0000, 0b0100);
-				psx.A<1:0>==0b11 : sdram_write(0b00000||psx.A<20:2>, psx.Dout<7:0>||0x000000,     0b1000);
+				psx.A<0>==0b0 : sdram_write(0b00000 || psx.A<20:1>, 128#psx.Dout<7:0>,      0x0001, 1);
+				psx.A<0>==0b1 : sdram_write(0b00000 || psx.A<20:1>, (128#psx.Dout<7:0>)<<8, 0x0002, 1);
 			}
+			psx.Word==2 : par{
+				sdram_write(0b00000 || psx.A<20:1>, 128#psx.Dout<15:0>, 0x0003, 1);
+			}
+			else/*psx.Word==4*/ : sdram_write(0b00000 || psx.A<20:2> || 0b0, 128#psx.Dout, 0x000F, 2);
 		}
 	}
 
 	// 0b01_0000_0aaa_aaaa_aaaa_aaaa_aa00
 	instruct psx.BIOS_READ par{
-		sdram_read(0b0100000||psx.A<18:2>);
+		any{
+			(psx.Word==1) | (psx.Word==2) : par{
+				sdram_read(0b0100000 || psx.A<18:1>, 1);
+			}
+			else : par{// byte 4 -> burst 2
+				sdram_read(0b0100000 || psx.A<18:2> || 0b0, 2);//psx.Word<4:1>);
+			}
+		}
+		psx_Word := psx.Word;
+		psx_A := psx.A;
 	}
-	psx.Din = sdram_rdata;
 	if(sdram_ack) psx.bios_ack();
 
-	reg_wr gpu_read_wait_ack, gpu_write_wait_ack, spu_wait_ack;
+	reg_wr gpu_read_wait_ack, gpu_write_wait_ack;
+	reg_wr spu_wait_ack;
+
 	alt{
-		gpu_read_wait_ack | gpu_write_wait_ack | spu_wait_ack | ^sdram_ack : ;
+		gpu_read_wait_ack | gpu_write_wait_ack | 
+		spu_wait_ack | ^sdram_ack : ;
 
 		psx.vram_read_req : par{
-			sdram_read(0b00001||psx.vram_read_adrs);
+			sdram_read(0b000010 || psx.vram_adrs, 0b0 || psx.vram_burst);
 			gpu_read_wait_ack := 0b1;
 		}
 
 		psx.vram_write_req : par{
-			sdram_write(0b00001||psx.vram_write_adrs, 0x0000||psx.vram_write_data, 0b0011);
+			sdram_write(0b000010 || psx.vram_adrs, 128#psx.vram_write_data, 0x0003, 1);
 			gpu_write_wait_ack := 0b1;
 		}
+
 /*
 		psx.spu_mem_read_req : par{
 halt(0x95);
-			sdram_read_L(0b000100||psx.spu_mem_A);
+			sdram_read_L(0b000100 || psx.spu_mem_A);
 			spu_wait_ack := 0b1;
 		}
 
 		psx.spu_mem_write_req : par{
 halt(0x96);
-			sdram_write_L(0b000100||psx.spu_mem_A, 0x0000||psx.spu_mem_Din, 0b0011);
+			sdram_write_L(0b000100 || psx.spu_mem_A, 0x0000 || psx.spu_mem_Din, 0b0011);
 			spu_wait_ack := 0b1;
 		}
 */
 	}
 
-	psx.vram_read_data = sdram_rdata<15:0>;
+	psx.vram_read_data = sdram_dout<63:0>;
 
 	if(gpu_read_wait_ack & sdram_ack){
 		psx.vram_read_ack();
@@ -265,6 +325,7 @@ halt(0x96);
 		psx.vram_write_ack();
 		gpu_write_wait_ack := 0b0;
 	}
+
 /*
 	psx.spu_mem_Dout = sdram_rdata<15:0>;
 
@@ -313,12 +374,13 @@ halt(0x96);
 	stage check_file {
 		first_state st1;
 		state st1 par{
-			generate apf2bram.do(0x0040, 0, 4);
+			// スロットID、スロット内バイトオフセット、バイト数
+			generate apf2sram.do(0x0040, 2, 2);
 			goto st2;
 		}
-		state st2 if(^apf2bram.do){
-			if(file_ram.dout==0x3C080013) f_bios := 0b1;
-			if(file_ram.dout==0x582D5350) f_exe := 0b1;
+		state st2 if(^apf2sram.do & sram.ack){
+			if(sram.dout==0x3C08) f_bios := 0b1; // 0x1300083C
+			if(sram.dout==0x582D) f_exe := 0b1; // "PS-X" 0x50532D58
 			generate wram_clear.do();
 			finish;
 		}
@@ -328,7 +390,7 @@ halt(0x96);
 		first_state st1;
 		state st1 if(sdram_ack){
 			reg_wr wA<19>;
-			sdram_write(0b00000||wA, 32#0b0, 0b1111);
+			sdram_write(0b00000 || wA || 0b0, 128#0b0, 0x000F , 2);
 			wA++;
 			if(/&wA) goto st2;
 		}
@@ -340,7 +402,7 @@ halt(0x96);
 			finish;
 		}
 	}
-
+/*
 	stage apf2bram {
 		first_state st1;
 		state st1 par{
@@ -363,30 +425,55 @@ halt(0x96);
 			finish;
 		}
 	}
+*/
+	stage apf2sram {
+//		reg_wr sram_wadrs<10>; // 1kWord 4kByte
+		reg_wr sram_wadrs<11>; // 2kWord 8kByte
+		first_state st1;
+		state st1 par{
+			set_sram_reg := 0b1;
+			goto st2;
+		}
+		state st2 if(target_dataslot_read){
+			set_sram_reg := 0b0;
+			goto st3;
+		}
+		state st3 if((sram_word_wr | ^ram_reloading) & sram.ack){
+			sram.write(0b00000 || sram_wadrs || 0b0, sram_wdata<15:0>);
+			goto st4;
+		}
+		state st4 if(sram.ack){
+			sram.write(0b00000 || sram_wadrs || 0b1, sram_wdata<31:16>);
+			sram_wadrs++;
+			if(/&sram_wadrs) goto st5;
+			else goto st3;
+		}
+		state st5 if(^ram_reloading & sram.ack){
+			sram.read(0);
+			goto st1;
+			finish;
+		}
+	}
 
 	stage rom_read {
-		reg_ws file_adrs<18>;
+		reg_ws file_adrs<17>;
 		first_state st_read;
-		state st_read if(psx.file_read_req & ^apf2bram.do){
+		state st_read if(psx.file_read_req & ^apf2sram.do & sram.ack){
 			// 783216000 Byte = 0x2EAEED80 -> 0x40000000 30bit
-			if(psx.file_adrs<29:12>==file_adrs){
-				file_ram.read(psx.file_adrs<11:2>);
+			if(psx.file_adrs<29:13>==file_adrs){
+				sram.read(0b00000 || psx.file_adrs<12:1>);
 				goto st_data;
 			}
 			else{
-				generate apf2bram.do(0x0040, 0b00||psx.file_adrs<29:12>||12#0b0, 4096);
-				file_adrs := psx.file_adrs<29:12>;
+				generate apf2sram.do(0x0040, 0b00 || psx.file_adrs<29:13> || 13#0b0, 8192);
+				file_adrs := psx.file_adrs<29:13>;
 			}
 		}
-		state st_data par{
-			sel file_data<8>;
-			switch(psx.file_adrs<1:0>){
-				case 0: file_data = file_ram.dout<7:0>;
-				case 1: file_data = file_ram.dout<15:8>;
-				case 2: file_data = file_ram.dout<23:16>;
-				case 3: file_data = file_ram.dout<31:24>;
+		state st_data if(sram.ack){
+			switch(psx.file_adrs<0>){
+				case 0: psx.file_data = sram.dout<7:0>;
+				case 1: psx.file_data = sram.dout<15:8>;
 			}
-			psx.file_data = file_data;
 			psx.file_ack();
 			goto st_read;
 		}
@@ -396,33 +483,33 @@ halt(0x96);
 		reg_wr text_start<21>, text_size<21>; // ram 2MB
 		first_state st_open;
 		state st_open par{
-			generate apf2bram.do(0x0040, 0, 0x00000100);
+			generate apf2sram.do(0x0040, 0, 0x00000100);
 			goto st_head;
 		}
-		state st_head if(^apf2bram.do){
+		state st_head if(^apf2sram.do & sram.ack){
 			reg_wr h_adrs<8>; // 0xFF<8>
 			sel h_data<8>;
-			switch(h_adrs<1:0>){
-				case 0: h_data = file_ram.dout<7:0>;
-				case 1: h_data = file_ram.dout<15:8>;
-				case 2: h_data = file_ram.dout<23:16>;
-				case 3: h_data = file_ram.dout<31:24>;
+			switch(h_adrs<0>){
+				case 0: h_data = sram.dout<7:0>;
+				case 1: h_data = sram.dout<15:8>;
 			}
-			psx.exe_set(0x0||h_adrs, h_data);
+			psx.exe_set(0x0 || h_adrs, h_data);
 
 			any{
-				h_adrs==0x18 : text_start := file_ram.dout<20:0>;
-				h_adrs==0x1C : text_size := file_ram.dout<20:0>;
+				h_adrs==0x18 : text_start := 0b00000 || sram.dout;
+				h_adrs==0x1A : text_start := sram.dout<4:0> || text_start<15:0>;
+				h_adrs==0x1C : text_size := 0b00000 || sram.dout;
+				h_adrs==0x1E : text_size := sram.dout<4:0> || text_size<15:0>;
 			}
 
 			sel h_adrs_inc<8>;
 			h_adrs_inc = h_adrs + 0x01;
-			file_ram.read(0b0000 || h_adrs_inc<7:2>);
+			sram.read(0b0000000000 || h_adrs_inc<7:1>);
 			h_adrs := h_adrs_inc;
 			if(h_adrs==0xFF) goto st_text;
 		}
 		state st_text par{
-			generate apf2sdram.do(0x0040, 0x00000800, 11#0b0||text_start, 11#0b0||text_size);
+			generate apf2sdram.do(0x0040, 0x00000800, 11#0b0 || text_start, 11#0b0 || text_size);
 			goto st_end;
 		}
 		state st_end if(^apf2sdram.do){
