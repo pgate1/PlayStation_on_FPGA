@@ -1,0 +1,174 @@
+/*
+	Texture Cache
+		by pgate1
+
+	2kByte 32x32x2
+	4way read
+*/
+
+circuit Cache_Texture
+{
+	input adrs<19>;
+	reg adrs_reg<19>;
+	instrin read(adrs);
+	output hit, dout<16>;
+	output doing, ack;
+
+	reg_ws reset;
+
+	// 1MByte 512kWord adrs<19> ttt_tttt_ttii_iiii_iioo
+	sel tag<9>, index<8>, offset<2>;
+
+	instrself in_hit;
+
+	instrin sw_texcache_off;
+
+	mem tag_ram[256]<9>;
+	sel tag_adrs<8>, tag_din<9>;
+	reg tag_dout<9>;
+	instrself tag_read(tag_adrs);
+	instrself tag_write(tag_adrs, tag_din);
+
+	// valid + data
+	mem ram0[256]<1+16>, ram1[256]<1+16>, ram2[256]<1+16>, ram3[256]<1+16>;
+	sel ram0_adrs<8>, ram1_adrs<8>, ram2_adrs<8>, ram3_adrs<8>;
+	sel ram0_din<17>, ram1_din<17>, ram2_din<17>, ram3_din<17>;
+	reg ram0_dout<17>, ram1_dout<17>, ram2_dout<17>, ram3_dout<17>;
+	instrself ram0_read(ram0_adrs), ram0_write(ram0_adrs, ram0_din);
+	instrself ram1_read(ram1_adrs), ram1_write(ram1_adrs, ram1_din);
+	instrself ram2_read(ram2_adrs), ram2_write(ram2_adrs, ram2_din);
+	instrself ram3_read(ram3_adrs), ram3_write(ram3_adrs, ram3_din);
+	sel ram_dout<17>;
+
+	instrself vram_read(vram_adrs, vram_burst);
+	instrout vram_read_req;
+	output vram_adrs<19>, vram_burst<3>;
+	reg vram_adrs_reg<19>, vram_burst_reg<3>;
+	input vram_dout<64>;
+	instrin vram_ack;
+
+	stage_name read_line_stg { task do(adrs_reg); }
+	stage_name clear_all_stg { task do(); }
+
+	instruct tag_read tag_dout := tag_ram[tag_adrs];
+	instruct tag_write tag_ram[tag_adrs] := tag_din;
+	instruct ram0_read ram0_dout := ram0[ram0_adrs];
+	instruct ram0_write ram0[ram0_adrs] := ram0_din;
+	instruct ram1_read ram1_dout := ram1[ram1_adrs];
+	instruct ram1_write ram1[ram1_adrs] := ram1_din;
+	instruct ram2_read ram2_dout := ram2[ram2_adrs];
+	instruct ram2_write ram2[ram2_adrs] := ram2_din;
+	instruct ram3_read ram3_dout := ram3[ram3_adrs];
+	instruct ram3_write ram3[ram3_adrs] := ram3_din;
+
+	if(reset | sw_texcache_off){
+		generate clear_all_stg.do();
+		reset := 0b0;
+	}
+
+	if(read){
+		tag = adrs<18:10>;
+		index = adrs<9:2>;
+		offset = adrs<1:0>;
+	}
+	else{
+		tag = adrs_reg<18:10>;
+		index = adrs_reg<9:2>;
+		offset = adrs_reg<1:0>;
+	}
+
+	instruct read par{
+		tag_read(index);
+		// È“d—Í‚ğl—¶‚µ1‚Â‚©‚çread
+		switch(offset){
+			case 0: ram0_read(index);
+			case 1: ram1_read(index);
+			case 2: ram2_read(index);
+			case 3: ram3_read(index);
+		}
+		if(sw_texcache_off) vram_read(adrs, 1);
+		else generate read_line_stg.do(adrs);
+	}
+
+	switch(offset){
+		case 0: ram_dout = ram0_dout;
+		case 1: ram_dout = ram1_dout;
+		case 2: ram_dout = ram2_dout;
+		case 3: ram_dout = ram3_dout;
+	}
+
+	hit = (^sw_texcache_off & (tag_dout==tag) & ram_dout<16>) | in_hit;
+
+	if(in_hit | sw_texcache_off) dout = vram_dout<15:0>;
+	else dout = ram_dout<15:0>;
+
+	reg_wr vram_ack_wait;
+	if(vram_read){
+		vram_read_req();
+		vram_adrs_reg := vram_adrs;
+		vram_burst_reg := vram_burst;
+		vram_ack_wait := 0b1;
+	}
+	else{
+		vram_adrs = vram_adrs_reg;
+		vram_burst = vram_burst_reg;
+	}
+	if(vram_ack_wait & ^vram_ack) vram_read_req();
+	if(vram_ack) vram_ack_wait := 0b0;
+
+	doing = read_line_stg.do | (vram_ack_wait & ^vram_ack);
+
+	ack = hit | ^doing;
+
+	stage read_line_stg {
+		first_state st1;
+		state st1 par{
+			if(hit) finish;
+			else{
+				switch(offset){
+					case 0: vram_read(adrs_reg, 4);
+					case 1: vram_read(adrs_reg, 3);
+					case 2: vram_read(adrs_reg, 2);
+					case 3: vram_read(adrs_reg, 1);
+				}
+				goto st2;
+			}
+		}
+		state st2 if(vram_ack){
+			tag_write(index, tag);
+// offset
+//  0 R R R R
+//  1 C R R R
+//  2 C C R R
+//  3 C C C R
+			sel din_line<64>;
+			switch(offset){
+				case 0: din_line = vram_dout;
+				case 1: din_line = vram_dout << 16;
+				case 2: din_line = vram_dout << 32;
+				case 3: din_line = vram_dout << 48;
+			}
+			ram0_write(index, (offset==0) || din_line<15:0>);
+			ram1_write(index, ((offset==0)|(offset==1)) || din_line<31:16>);
+			ram2_write(index, ((offset==0)|(offset==0)|(offset==2)) || din_line<47:32>);
+			ram3_write(index, 0b1 || din_line<63:48>);
+			in_hit();
+			goto st1;
+			finish;
+		}
+	}
+
+	stage clear_all_stg {
+		par{
+			reg_wr ca<8>;
+			tag_write(ca, 9#0b0);
+			ram0_write(ca, 17#0x0);
+			ram1_write(ca, 17#0x0);
+			ram2_write(ca, 17#0x0);
+			ram3_write(ca, 17#0x0);
+			ca++;
+			if(/&ca) finish;
+		}
+	}
+
+}

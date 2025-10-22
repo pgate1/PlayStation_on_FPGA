@@ -40,6 +40,9 @@ circuit drawFillRect
 	instrself vram_write(vram_write_adrs, vram_write_data);
 	instrout vram_write_req;
 	instrin vram_ack;
+	instrself vram_flush;
+	reg_wr vram_flush_reg;
+	instrout vram_flush_req;
 
 	stage_name draw_stg { task do(); }
 
@@ -59,7 +62,15 @@ circuit drawFillRect
 		vram_write_data = vram_write_data_reg;
 	}
 	if(vram_write_wait & ^vram_ack) vram_write_req();
-	if(vram_ack) vram_write_wait := 0b0;
+	if(vram_flush){
+		vram_flush_req();
+		vram_flush_reg := 0b1;
+	}
+	if(vram_flush_reg & ^vram_ack) vram_flush_req();
+	if(vram_ack){
+		vram_write_wait := 0b0;
+		vram_flush_reg := 0b0;
+	}
 
 	sel col<16>;
 	col = 0b0 || vc1<23:19> || vc1<15:11> || vc1<7:3>;
@@ -115,6 +126,7 @@ circuit drawFillRect
 			){
 				if(sw_view_half_height) y += 2;
 				else y++;
+				vram_flush();
 				goto st2;
 			}
 			else{

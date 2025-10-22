@@ -3,14 +3,6 @@
 		by pgate1
 */
 
-declare mul_u16 interface
-{
-	input a<16>, b<16>;
-	output dout<32>;
-	instrin con;
-	instr_arg con(a, b);
-}
-
 circuit DMA_CDR
 {
 	input DmaMADR_3<32>, DmaBCR_3<32>, DmaCHCR_3<32>;

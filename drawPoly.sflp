@@ -12,8 +12,6 @@
 
 %i "inv_table.h"
 
-%i "drawpoly_cache.h"
-
 declare mul_s26s16 interface
 {
 	input a<26>, b<16>;
@@ -88,6 +86,8 @@ circuit drawPoly
 	reg x<11>, y<11>;
 	compare_s11 cmp_ex, cmp_ey, cmp_x, cmp_y, cmp_w, cmp_h;
 
+	sel u<8>, v<8>;
+
 	input f_dither;
 	mem dither_table[16]<4> = {	// Dither
 		-4,  0, -3,  1,
@@ -110,14 +110,19 @@ circuit drawPoly
 
 	// VRAM
 	output vram_adrs<19>, vram_write_data<16>;
-	reg_wr vram_adrs_reg<19>, vram_write_data_reg<16>;
+	reg vram_adrs_reg<19>, vram_write_data_reg<16>;
 	instrself vram_write(vram_adrs, vram_write_data), vram_read(vram_adrs);
 	instrout vram_write_req, vram_read_req;
 	instrin vram_ack;
 	input vram_read_data<16>;
-//	reg_wr vram_read_data_reg<16>;
+	instrself vram_flush;
+	reg_wr vram_flush_reg;
+	instrout vram_flush_req;
 
-	drawpoly_cache tcache;
+	// TextureCache
+	instrout tcache_read(tcache_adrs);
+	output tcache_adrs<19>;
+	input tcache_dout<16>, tcache_ack;
 
 input dbg_in<16>;
 output dbg<32>;
@@ -230,11 +235,31 @@ dbg = dbg_reg;
 	}
 	if(vram_write_wait & ^vram_ack) vram_write_req();
 	if(vram_read_wait & ^vram_ack) vram_read_req();
+	if(vram_flush){
+		vram_flush_req();
+		vram_flush_reg := 0b1;
+	}
+	if(vram_flush_reg & ^vram_ack) vram_flush_req();
 	if(vram_ack){
 		vram_write_wait := 0b0;
 		vram_read_wait := 0b0;
-	//	vram_read_data_reg := vram_read_data;
+		vram_flush_reg := 0b0;
 	}
+
+	sel clut_p<19>, tadjust_y<19>, tpage_col<2>;
+	sel clut_x<10>, clut_y<9>;
+	clut_x = clut<5:0> || 0b0000;
+	clut_y = clut<14:6>;
+	clut_p = clut_y || clut_x;
+
+	sel tbase_x<10>, tbase_y<9>;
+	tbase_x = tpage<3:0> || 0b000000;
+	tbase_y = tpage<4> || 0b00000000;
+	tadjust_y = tbase_y || tbase_x;
+	tpage_col = tpage<8:7>;
+
+	u = vu<16:9>;
+	v = vv<16:9>;
 
 	if(f_dither){ // Dither tpage<9>==0b1
 		sel d<4>;
@@ -357,6 +382,7 @@ dbg = dbg_reg;
 			){
 				y++;
 				generate bilinear_hbase.do();
+				vram_flush();
 				goto st3;
 			}
 			else{ // x < ex
@@ -366,7 +392,15 @@ dbg = dbg_reg;
 				){
 					any{
 						f_texture : par{
-						//	tcache.check(vv<16:9>||vu<16:9>);
+							sel vadrs<19>;
+							any{
+								tpage_col==0 : vadrs = (0b0||v||10#0b0) + tadjust_y + (13#0b0||u<7:2>);
+								tpage_col==1 : vadrs = (0b0||v||10#0b0) + tadjust_y + (12#0b0||u<7:1>);
+								else : par{ // tpage_col==2,3
+									vadrs = (0b0||v||10#0b0) + tadjust_y + (11#0b0||u);
+								}
+							}
+							tcache_read(vadrs);
 							generate texdraw.do();
 						}
 /*
@@ -401,86 +435,41 @@ dbg = dbg_reg;
 	}
 
 	stage texdraw {
-		sel clut_p<19>, tadjust_y<19>, tpage_col<2>;
-		sel u<8>, v<8>;
-		first_state st_init;
-		par{
-			sel clut_x<10>, clut_y<9>;
-			clut_x = clut<5:0> || 0b0000;
-			clut_y = clut<14:6>;
-			clut_p = clut_y || clut_x;
-
-			sel tbase_x<10>, tbase_y<9>;
-			tbase_x = tpage<3:0> || 0b000000;
-			tbase_y = tpage<4> || 0b00000000;
-			tadjust_y = tbase_y || tbase_x;
-
-			tpage_col = tpage<8:7>;
-
-			u = vu<16:9>;
-			v = vv<16:9>;
-		}
-		state st_init if(^vram_read_wait){
-			any{
-				tpage_col==0 : par{
-					if(tcache.hit) goto st00_2;
-					else{
-						vram_read((0b0||v||10#0b0) + tadjust_y + ((13#0b0)||u<7:2>));
-						goto st00_1;
+		if(tcache_ack){
+			reg_wr tex_st;
+			if(tex_st==0b0){
+				any{
+					tpage_col==0 : par{
+						sel tci<4>;
+						tci = (tcache_dout >> (u<1:0>||0b00))<3:0>;
+						vram_read(clut_p + ((15#0b0)||tci));
+						tex_st := 0b1;
+					}
+					tpage_col==1 : par{
+						sel tci<8>;
+						tci = (tcache_dout >> (u<0>||0b000))<7:0>;
+						vram_read(clut_p + ((11#0b0)||tci));
+						tex_st := 0b1;
 					}
 				}
-				tpage_col==1 : par{
-					if(tcache.hit) goto st00_2;
-					else{
-						vram_read((0b0||v||10#0b0) + tadjust_y + ((12#0b0)||u<7:1>));
-						goto st01_1;
-					}
-				}
-				tpage_col==2 : par{
-					if(tcache.hit) goto st00_2;
-					else{
-						vram_read((0b0||v||10#0b0) + tadjust_y + ((11#0b0)||u));
-						goto st00_2;
-					}
-				}
-				else : par{
-				//	delta_add();
-					finish;
-				}
-			}
-		}
-
-		state st00_1 if(vram_ack){ //^vram_read_wait){
-			sel tci<4>;
-			tci = (vram_read_data >> (u<1:0>||0b00))<3:0>;
-			vram_read(clut_p + ((15#0b0)||tci));
-			goto st00_2;
-		}
-		state st01_1 if(vram_ack){ // ^vram_read_wait){
-			sel tci<8>;
-			tci = (vram_read_data >> (u<0>||0b000))<7:0>;
-			vram_read(clut_p + ((11#0b0)||tci));
-			goto st00_2;
-		}
-
-		state st00_2 if(vram_ack | tcache.hit){ // ^vram_read_wait){
-			sel data<16>;
-			if(tcache.hit) data = tcache.dout;
-			else{
-				data = vram_read_data;
-			//	tcache.update(v||u, vram_read_data);
 			}
 
-			if((data<14:0>!=0) | (data==0x8000)){
-				view_on(x<9:0>, y<8:0>);
-				tr = data< 4: 0> || 0b000;
-				tg = data< 9: 5> || 0b000;
-				tb = data<14:10> || 0b000;
-			}
+			if(tpage_col<1> | (tex_st & vram_ack)){
+				sel tex_data<16>;
+				if(tpage_col<1>) tex_data = tcache_dout;
+				else tex_data = vram_read_data;
+				if((tex_data<14:0>!=0) | (tex_data==0x8000)){
+					view_on(x<9:0>, y<8:0>);
+					tr = tex_data< 4: 0> || 0b000;
+					tg = tex_data< 9: 5> || 0b000;
+					tb = tex_data<14:10> || 0b000;
+				}
 
-			delta_add();
-			goto st_init;
-			finish;
+				delta_add();
+
+				tex_st := 0b0;
+				finish;
+			}
 		}
 	}
 /*

@@ -66,7 +66,6 @@ circuit gte_DIVIDE
 		unr_table_read((d - 0x7FC0)<14:7>);
 	}
 
-// Ç»Ç∫Ç©M10KÇ…Ç»ÇÁÇ»Ç¢ÅH
 	instruct unr_table_read unr_table_dout := unr_table[unr_table_adrs];
 
 	sel index<9>, u0<12>;

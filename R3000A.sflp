@@ -53,6 +53,8 @@ circuit R3000A
 	output Dout<32>;
 	reg Dout_reg<32>;
 
+	output is_c;
+
 	instrself stage_IF;
 	reg_wr stall_mem;
 
@@ -67,7 +69,7 @@ circuit R3000A
 	sel rd<5>, shift<5>;
 	sel funct<8>; // 6bit
 	reg_wr rt_data_reg<32>;
-	sel rs_data<32>, rt_data<32>, sa;
+	sel rs_data<32>, rt_data<32>, result<32>, adrs<32>;
 	reg_wr mem_op<8>; // 6bit;
 	reg_wr mem_rt<5>;
 	reg_wr cop_rs<5>;
@@ -193,9 +195,11 @@ dbg32 = 0;//dbg32_reg;//gte.dbg32;
 	else ir_read = rid_reg==READ_OP;
 
 	instruct write par{
-		// if(cpu->SR->is_c) return;
-		if(cpr0[12]<16>==0b0) write_req(); // [0x0C]
+		/*if(cpr0[12]<16>==0b0)*/ write_req();
 	}
+
+	// 0b1:ƒLƒƒƒbƒVƒ…•ª—£
+	is_c = cpr0[12]<16>;
 
 	reg_wr id_delay_slot, ex_delay_slot;
 //	sel id_cop;
@@ -389,33 +393,37 @@ if(in_syscall) halt(0x0A);
 
 		gte_op := ex_opcode;
 
-		sel adrs<32>, result<32>;
-
 		any{
 			op==0x00 : any{ // SPECIAL
 				funct==0x00 : par{ // SLL
 					// gpr[opcode.reg.rd] = gpr[opcode.reg.rt] << opcode.reg.sa;
-					set_gpr(rd, rt_data << shift);
+					result = rt_data << shift;
+					set_gpr(rd, result);
 				}
 				funct==0x02 : par{ // SRL
 					// gpr[opcode.reg.rd] = gpr[opcode.reg.rt] >> opcode.reg.sa;
-					set_gpr(rd, rt_data >> shift);
+					result = rt_data >> shift;
+					set_gpr(rd, result);
 				}
 				funct==0x03 : par{ // SRA
 					// gpr[opcode.reg.rd] = (s32)gpr[opcode.reg.rt] >> opcode.reg.sa;
-					set_gpr(rd, sra.con(rt_data, shift).dout);
+					result = sra.con(rt_data, shift).dout;
+					set_gpr(rd, result);
 				}
 				funct==0x04 : par{ // SLLV
 					// gpr[opcode.reg.rd] = gpr[opcode.reg.rt] << (gpr[opcode.reg.rs] & 0x1F);
-					set_gpr(rd, rt_data << rs_data<4:0>);
+					result = rt_data << rs_data<4:0>;
+					set_gpr(rd, result);
 				}
 				funct==0x06 : par{ // SRLV
 					// gpr[opcode.reg.rd] = gpr[opcode.reg.rt] >> (gpr[opcode.reg.rs] & 0x1F);
-					set_gpr(rd, rt_data >> rs_data<4:0>);
+					result = rt_data >> rs_data<4:0>;
+					set_gpr(rd, result);
 				}
 				funct==0x07 : par{ // SRAV
 					// gpr[opcode.reg.rd] = (s32)gpr[opcode.reg.rt] >> (gpr[opcode.reg.rs] & 0x1F);
-					set_gpr(rd, sra.con(rt_data, rs_data<4:0>).dout);
+					result = sra.con(rt_data, rs_data<4:0>).dout;
+					set_gpr(rd, result);
 				}
 				funct==0x08 : par{ // JR
 					// delay_pc = gpr[opcode.reg.rs];
@@ -512,7 +520,8 @@ if(in_syscall) halt(0x0A);
 				}
 				funct==0x21 : par{ // ADDU
 					// gpr[opcode.reg.rd] = gpr[opcode.reg.rs] + gpr[opcode.reg.rt];
-					set_gpr(rd, rs_data + rt_data);
+					result = rs_data + rt_data;
+					set_gpr(rd, result);
 				}
 				funct==0x22: par{ // SUB
 					// gpr[opcode.reg.rd] = gpr[opcode.reg.rs] - gpr[opcode.reg.rt];
@@ -525,33 +534,40 @@ if(in_syscall) halt(0x0A);
 				}
 				funct==0x23: par{ // SUBU
 					// gpr[opcode.reg.rd] = gpr[opcode.reg.rs] - gpr[opcode.reg.rt];
-					set_gpr(rd, rs_data - rt_data);
+					result = rs_data - rt_data;
+					set_gpr(rd, result);
 				}
 				funct==0x24 : par{ // AND
 					// gpr[opcode.reg.rd] = gpr[opcode.reg.rs] & gpr[opcode.reg.rt];
-					set_gpr(rd, rs_data & rt_data);
+					result = rs_data & rt_data;
+					set_gpr(rd, result);
 				}
 				funct==0x25 : par{ // OR
 					// gpr[opcode.reg.rd] = gpr[opcode.reg.rs] | gpr[opcode.reg.rt];
-					set_gpr(rd, rs_data | rt_data);
+					result = rs_data | rt_data;
+					set_gpr(rd, result);
 				}
 				funct==0x26 : par{ // XOR
 					// gpr[opcode.reg.rd] = gpr[opcode.reg.rs] ^ gpr[opcode.reg.rt];
-					set_gpr(rd, rs_data @ rt_data);
+					result = rs_data @ rt_data;
+					set_gpr(rd, result);
 				}
 				funct==0x27 : par{ // NOR
 					// gpr[opcode.reg.rd] = ~(gpr[opcode.reg.rs] | gpr[opcode.reg.rt]);
-					set_gpr(rd, ^(rs_data | rt_data));
+					result = ^(rs_data | rt_data);
+					set_gpr(rd, result);
 				}
 				funct==0x2A : par{ // SLT
 					// gpr[opcode.reg.rd] = (s32)gpr[opcode.reg.rs] < (s32)gpr[opcode.reg.rt];
-					sa = ((33#rs_data) - (33#rt_data))<32>;
-					set_gpr(rd, 31#0b0||sa);
+				//	sa = ((33#rs_data) - (33#rt_data))<32>;
+					result = 31#0b0 || ((33#rs_data) - (33#rt_data))<32>;
+					set_gpr(rd, result);
 				}
 				funct==0x2B : par{ // SLTU
 					// gpr[opcode.reg.rd] = (u32)gpr[opcode.reg.rs] < (u32)gpr[opcode.reg.rt];
-					sa = ((0b0 || rs_data) - (0b0 || rt_data))<32>;
-					set_gpr(rd, 31#0b0||sa);
+				//	sa = ((0b0 || rs_data) - (0b0 || rt_data))<32>;
+					result = 31#0b0 || ((0b0 || rs_data) - (0b0 || rt_data))<32>;
+					set_gpr(rd, result);
 				}
 				else : par{
 dbg_reg := funct; halt(0x02);
@@ -662,12 +678,14 @@ dbg_reg := funct; halt(0x02);
 			}
 			op==0x09 : par{ // ADDIU
 				// gpr[opcode.imm.rt] = gpr[opcode.imm.rs] + (s32)(s16)opcode.imm.immediate;
-				set_gpr(rt, rs_data + (32#immediate));
+				result = rs_data + (32#immediate);
+				set_gpr(rt, result);
 			}
 			op==0x0A : par{ // SLTI
 				// gpr[opcode.imm.rt] = (s32)gpr[opcode.imm.rs] < (s32)(s16)opcode.imm.immediate;
-				sa = ((33#rs_data) - (33#immediate))<32>;
-				set_gpr(rt, 31#0b0||sa);
+			//	sa = ((33#rs_data) - (33#immediate))<32>;
+				result = 31#0b0 || ((33#rs_data) - (33#immediate))<32>;
+				set_gpr(rt, result);
 			}
 			op==0x0B : par{ // SLTIU
 				// gpr[opcode.imm.rt] = (u32)gpr[opcode.imm.rs] < (u32)(u16)opcode.imm.immediate;
@@ -677,24 +695,29 @@ dbg_reg := funct; halt(0x02);
 			//	sa = ((33#rs_data)   - (33#immediate))<32>; // NG
 			//	sa = ((33#rs_data)   - (0b0||32#immediate))<32>; // NG
 			//	sa = ((0b0||rs_data) - (33#immediate))<32>; // NG
-				sa = ((0b0||rs_data) - (0b0||32#immediate))<32>; // OK
-				set_gpr(rt, 31#0b0||sa);
+			//	sa = ((0b0||rs_data) - (0b0||32#immediate))<32>; // OK
+				result = 31#0b0 || ((0b0||rs_data) - (0b0||32#immediate))<32>; // OK
+				set_gpr(rt, result);
 			}
 			op==0x0C : par{ // ANDI
 				// gpr[opcode.imm.rt] = (u32)(u16)opcode.imm.immediate & gpr[opcode.imm.rs];
-				set_gpr(rt, (0x0000||immediate) & rs_data);
+				result = (0x0000||immediate) & rs_data;
+				set_gpr(rt, result);
 			}
 			op==0x0D : par{ // ORI
 				// gpr[opcode.imm.rt] = (u32)(u16)opcode.imm.immediate | gpr[opcode.imm.rs];
-				set_gpr(rt, (0x0000||immediate) | rs_data);
+				result = (0x0000||immediate) | rs_data;
+				set_gpr(rt, result);
 			}
 			op==0x0E : par{ // XORI
 				// gpr[opcode.imm.rt] = (u32)(u16)opcode.imm.immediate ^ gpr[opcode.imm.rs];
-				set_gpr(rt, (0x0000||immediate) @ rs_data);
+				result = (0x0000||immediate) @ rs_data;
+				set_gpr(rt, result);
 			}
 			op==0x0F : par{ // LUI
 				// gpr[opcode.imm.rt] = (u32)(u16)opcode.imm.immediate << 16;
-				set_gpr(rt, immediate || 0x0000);
+				result = immediate || 0x0000;
+				set_gpr(rt, result);
 			}
 
 			op==0x10 : any{ // COP0

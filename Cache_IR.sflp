@@ -1,70 +1,132 @@
 /*
 	IR Cache
 		by pgate1
+
+	4kByte
 */
 
 circuit Cache_IR
 {
-	input A<21>, Din<32>;
-	instrin read(A), write(A, Din);
-	output hit, Dout<32>;
-	instrin flag_clear(A);
-
-	instrin clear;
+	input adrs<21>, din<128>;
+	instrin read(adrs), write(adrs, din), write_line(adrs, din), clear(adrs);
+	output hit, dout<32>;
+	instrin clear_all;
 	output doing;
 
-	mem ram_tag[1024]<10>;
-	sel ram_tag_adrs<10>, ram_tag_din<10>;
-	reg_wr ram_tag_dout<10>;
-	instrself ram_tag_read(ram_tag_adrs);
-	instrself ram_tag_write(ram_tag_adrs, ram_tag_din);
+	// 2MByte adrs<21> t_tttt_tttt_iiii_iiii_oo--
+	sel tag<9>, index<8>, offset<2>;
+	reg tag_reg<9>, offset_reg<2>;
 
-	mem ram_data[1024]<32>;
-	sel ram_data_adrs<10>, ram_data_din<32>;
-	reg_wr ram_data_dout<32>;
-	instrself ram_data_read(ram_data_adrs);
-	instrself ram_data_write(ram_data_adrs, ram_data_din);
+	mem tag_ram[256]<9>;
+	sel tag_adrs<8>, tag_din<9>;
+	reg tag_dout<9>;
+	instrself tag_read(tag_adrs);
+	instrself tag_write(tag_adrs, tag_din);
 
-	sel index<10>, tag<9>;
-	reg_wr tag_reg<9>;
+	// valid + data
+	mem ram0[256]<1+32>, ram1[256]<1+32>, ram2[256]<1+32>, ram3[256]<1+32>;
+	sel ram0_adrs<8>, ram1_adrs<8>, ram2_adrs<8>, ram3_adrs<8>;
+	sel ram0_din<33>, ram1_din<33>, ram2_din<33>, ram3_din<33>;
+	reg ram0_dout<33>, ram1_dout<33>, ram2_dout<33>, ram3_dout<33>;
+	instrself ram0_read(ram0_adrs), ram0_write(ram0_adrs, ram0_din);
+	instrself ram1_read(ram1_adrs), ram1_write(ram1_adrs, ram1_din);
+	instrself ram2_read(ram2_adrs), ram2_write(ram2_adrs, ram2_din);
+	instrself ram3_read(ram3_adrs), ram3_write(ram3_adrs, ram3_din);
+	sel ram_dout<33>;
 
-	stage_name clear_stg { task do(); }
+	stage_name clear_all_stg { task do(); }
 
-	instruct ram_tag_read ram_tag_dout := ram_tag[ram_tag_adrs];
-	instruct ram_tag_write ram_tag[ram_tag_adrs] := ram_tag_din;
-	instruct ram_data_read ram_data_dout := ram_data[ram_data_adrs];
-	instruct ram_data_write ram_data[ram_data_adrs] := ram_data_din;
+	instruct tag_read tag_dout := tag_ram[tag_adrs];
+	instruct tag_write tag_ram[tag_adrs] := tag_din;
+	instruct ram0_read ram0_dout := ram0[ram0_adrs];
+	instruct ram0_write ram0[ram0_adrs] := ram0_din;
+	instruct ram1_read ram1_dout := ram1[ram1_adrs];
+	instruct ram1_write ram1[ram1_adrs] := ram1_din;
+	instruct ram2_read ram2_dout := ram2[ram2_adrs];
+	instruct ram2_write ram2[ram2_adrs] := ram2_din;
+	instruct ram3_read ram3_dout := ram3[ram3_adrs];
+	instruct ram3_write ram3[ram3_adrs] := ram3_din;
 
-	index = A<11:2>;
-	tag = A<20:12>;
+	tag = adrs<20:12>;
+	index = adrs<11:4>;
+	offset = adrs<3:2>;
 
 	instruct read par{
 		tag_reg := tag;
-		ram_tag_read(index);
-		ram_data_read(index);
+		offset_reg := offset;
+		tag_read(index);
+		// È“d—Í‚ğl—¶‚µ1‚Â‚©‚çread
+		switch(offset){
+			case 0: ram0_read(index);
+			case 1: ram1_read(index);
+			case 2: ram2_read(index);
+			case 3: ram3_read(index);
+		}
 	}
 
-	hit = ram_tag_dout<9> & (ram_tag_dout<8:0>==tag_reg);
-	Dout = ram_data_dout;
+	switch(offset_reg){
+		case 0: ram_dout = ram0_dout;
+		case 1: ram_dout = ram1_dout;
+		case 2: ram_dout = ram2_dout;
+		case 3: ram_dout = ram3_dout;
+	}
+
+	hit = (tag_dout==tag_reg) & ram_dout<32>;
+	dout = ram_dout<31:0>;
 
 	instruct write par{
-		ram_tag_write(index, 0b1 || tag);
-		ram_data_write(index, Din);
+		tag_write(index, tag);
+		switch(offset){
+			case 0: ram0_write(index, 0b1 || din<31:0>);
+			case 1: ram1_write(index, 0b1 || din<31:0>);
+			case 2: ram2_write(index, 0b1 || din<31:0>);
+			case 3: ram3_write(index, 0b1 || din<31:0>);
+		}
 	}
 
-	instruct flag_clear par{
-		ram_tag_write(index, 0b0000000000);
+	instruct write_line par{
+		tag_write(index, tag);
+// offset
+//  0 R R R R
+//  1 C R R R
+//  2 C C R R
+//  3 C C C R
+		sel din_line<128>;
+		switch(offset){
+			case 0: din_line = din;
+			case 1: din_line = din << 32;
+			case 2: din_line = din << 64;
+			case 3: din_line = din << 96;
+		}
+		ram0_write(index, (offset==0) || din_line<31:0>);
+		ram1_write(index, ((offset==0)|(offset==1)) || din_line<63:32>);
+		ram2_write(index, ((offset==0)|(offset==0)|(offset==2)) || din_line<95:64>);
+		ram3_write(index, 0b1 || din_line<127:96>);
 	}
 
-	instruct clear generate clear_stg.do();
-	doing = clear_stg.do;
+	instruct clear par{
+		tag_write(index, 9#0b0);
+		switch(offset){
+			case 0: ram0_write(index, 0b0 || 32#0b0);
+			case 1: ram1_write(index, 0b0 || 32#0b0);
+			case 2: ram2_write(index, 0b0 || 32#0b0);
+			case 3: ram3_write(index, 0b0 || 32#0b0);
+		}
+	}
 
-	stage clear_stg {
+	instruct clear_all generate clear_all_stg.do();
+	doing = clear_all_stg.do;
+
+	stage clear_all_stg {
 		par{
-			reg_wr adrs<10>;
-			adrs++;
-			ram_tag_write(adrs, 0b0000000000);
-			if(/&adrs) finish;
+			reg_wr ca<8>;
+			tag_write(ca, 9#0b0);
+			ram0_write(ca, 33#0x0);
+			ram1_write(ca, 33#0x0);
+			ram2_write(ca, 33#0x0);
+			ram3_write(ca, 33#0x0);
+			ca++;
+			if(/&ca) finish;
 		}
 	}
 }

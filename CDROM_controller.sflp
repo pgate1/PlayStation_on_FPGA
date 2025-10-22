@@ -3,6 +3,7 @@
 		by pgate1
 */
 
+/*
 declare mul_u32 interface
 {
 	input a<32>, b<32>;
@@ -10,6 +11,7 @@ declare mul_u32 interface
 	instrin con;
 	instr_arg con(a, b);
 }
+*/
 
 declare bcd_btoi interface
 {
@@ -27,8 +29,9 @@ declare bcd_itob interface
 	instr_arg con(bin);
 }
 
-%i "ram_8x4k.h"
+%i "ram_8x2352.h"
 
+/*
 declare mul_u8 interface
 {
 	input a<8>, b<8>;
@@ -44,6 +47,7 @@ declare mul_u16 interface
 	instrin con;
 	instr_arg con(a, b);
 }
+*/
 
 circuit CDROM_controller
 {
@@ -103,7 +107,7 @@ circuit CDROM_controller
 	sel stat_stopcdda, stat_reading;
 	reg_wr ReadRescheduled;
 
-	ram_8x4k Transfer;
+	ram_8x2352 Transfer; // 2352Byte
 	reg_wr transferIndex<12>;
 	sel transferIndex_add<12>;
 	instrself adjustTransferIndex(transferIndex_add);
@@ -120,7 +124,7 @@ circuit CDROM_controller
 
 	sel time_min<8>, time_sec<8>, time_frac<8>, time2sector_ret<24>;
 	instrself time2sector(time_min, time_sec, time_frac);
-	mul_u8 t2s_mul_min; mul_u16 t2s_mul_sec;
+//	mul_u8 t2s_mul_min; mul_u16 t2s_mul_sec;
 
 	sel getTD_track<8>, getTD_ret2<8>, getTD_ret1<8>, getTD_ret0<8>;
 	instrself getTD(getTD_track);
@@ -394,9 +398,13 @@ dbg32 = dbg32_reg;
 		if(stat_reading) StatP &= ^0x60;//~(STATUS_READ|STATUS_SEEK);
 	}
 
-	// time2sector(time_min, time_sec, time_frac);
+	// time2sector(time_min<8>, time_sec<8>, time_frac<8>);
 	instruct time2sector par{
-		time2sector_ret = t2s_mul_sec.con(t2s_mul_min.con(time_min,60).dout + (0x00||time_sec), 75).dout<23:0> + (0x0000||time_frac);
+	//	time2sector_ret = t2s_mul_sec.con(t2s_mul_min.con(time_min,60).dout + (0x00||time_sec), 75).dout<23:0> + (0x0000||time_frac);
+		sel min2sec<16>; // <14> x60 = 64-4
+		min2sec = ((8#0b0 || time_min) << 6) - ((8#0b0 || time_min) << 2) + (8#0b0 || time_sec);
+	//	sel sec2frac<24>; // <21> x75
+		time2sector_ret = ((8#0b0 || min2sec) << 6) + ((8#0b0 || min2sec) << 3) + ((8#0b0 || min2sec) << 1) + (8#0b0 || min2sec) + (16#0b0 || time_frac);
 	}
 
 	instruct getTD par{
@@ -644,6 +652,15 @@ if(Irq_==0x0109) count++;
 					Channel := Param[1];
 				}
 				Irq_==14 : par{ // CdlSetmode:
+					no_busy_error := 0b1;
+				}
+				Irq_==15 : par{
+					SetResultSize(6);
+					Result[1] := Mode;
+					Result[2] := File;
+					Result[3] := Channel;
+					Result[4] := 0;
+					Result[5] := 0;
 					no_busy_error := 0b1;
 				}
 				Irq_==16 : par{
@@ -921,7 +938,7 @@ dbg_reg := 0x0000 || Irq_;
 	stage ReadTrack {
 		mem Prev[3]<8>;
 		reg_wr sector<24>, seek_point<32>;
-		mul_u32 readtrack_mul;
+	//	mul_u32 readtrack_mul;
 		reg_wr readtrack_transfer_index<12>;
 		first_state st1;
 		state st1 par{
@@ -937,7 +954,9 @@ dbg_reg := 0x0000 || Irq_;
 		}
 		state st2 par{
 //dbg32_reg := 0x00 || Prev[0] || Prev[1] || Prev[2];
-			seek_point := readtrack_mul.con(0x00||sector, 2352).dout<31:0>;
+		//	seek_point := readtrack_mul.con(0x00||sector, 2352).dout<31:0>;
+			// * 2352 = 2048 + 256 + 16 + 8
+			seek_point := ((0x00||sector)<<11) + ((0x00||sector)<<8) + ((0x00||sector)<<5) + ((0x00||sector)<<4);
 			readtrack_transfer_index := -12; // 同期12バイトを除外
 			if(sector<23>){
 				RErr := 0b1;

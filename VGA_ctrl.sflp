@@ -1,5 +1,6 @@
 
 // PSX 59.94Hz, 25MHz V524H796(59.938Hz), V525H794(59.998Hz)
+// 59.817  59.823 Hz 25MHz V525H796
 
 circuit VGA_ctrl
 {

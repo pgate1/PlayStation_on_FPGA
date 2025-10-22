@@ -3,14 +3,6 @@
 
 %i "ram_320x240x15_dp.h"
 
-declare mul_u9 interface
-{
-	input a<9>, b<9>;
-	output dout<18>;
-	instrin con;
-	instr_arg con(a, b);
-}
-
 circuit view_ram_ctrl
 {
 	input in_x<9>, in_y<8>, in_R<5>, in_G<5>, in_B<5>;
@@ -27,7 +19,6 @@ circuit view_ram_ctrl
 	ram_320x240x15_dp ram0, ram1;
 	reg_wr radrs_x<9>, radrs_y<9>, bank;
 	sel col<15>;
-	mul_u9 wmul, rmul;
 
 	stage_name clear_stg { task do(); }
 
@@ -68,8 +59,9 @@ circuit view_ram_ctrl
 
 	// insert reg
 	reg_wr write_adrs<17>, write_data<15>, fill_view_on_reg, write_req;
-	instruct write par{
-		write_adrs := wmul.con(0b0||in_y, 320).dout<16:0> + (0b00000000||in_x);
+	instruct write if(^clear_stg.do){
+		// y * 320 + x
+		write_adrs := ((9#0b0||in_y)<<8) + ((9#0b0||in_y)<<6) + (8#0b0||in_x);
 		write_data := in_R || in_G || in_B;
 		fill_view_on_reg := fill_view_on;
 		write_req := 0b1;
@@ -93,7 +85,8 @@ circuit view_ram_ctrl
 
 	instruct read if(^clear_stg.do){
 		sel radrs<17>;
-		radrs = rmul.con(0b0||radrs_y<8:1>, 320).dout<16:0> + (0b00000000||radrs_x);
+		// y * 320 + x
+		radrs = ((9#0b0||radrs_y<8:1>)<<8) + ((9#0b0||radrs_y<8:1>)<<6) + (8#0b0||radrs_x);
 		if(^bank) ram0.read(radrs);
 		else      ram1.read(radrs);
 		if(radrs_x==319){
@@ -104,17 +97,11 @@ circuit view_ram_ctrl
 	}
 /*
 	stage clear_stg {
-		sel pa<17>;
 		par{
-			pa = rmul.con(0b0||radrs_y<7:0>, 320).dout<16:0> + (0b00000000||radrs_x);
-			ram0.write(pa, 0);
-			ram1.write(pa, 0);
-			if(radrs_x==319){
-				radrs_x := 0;
-				if(radrs_y==239) finish;
-				else radrs_y++;
-			}
-			else radrs_x++;
+			ram0.write(write_adrs, 0);
+			ram1.write(write_adrs, 0);
+			write_adrs++;
+			if(/&write_adrs) finish;
 		}
 	}
 */

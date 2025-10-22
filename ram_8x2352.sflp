@@ -1,0 +1,49 @@
+
+// CDR RAM
+// 8bit 2352 depth
+// 4096Byte‚¾‚ÆM10K‚ğ4ŒÂg—p‚µ‚Ä‚µ‚Ü‚¤
+
+circuit ram_8x2352
+{
+	input adrs<12>, din<8>;
+	output dout<8>;
+	instrin read(adrs), write(adrs, din);
+
+	mem ram2k[2048]<8>;
+	instrself ram2k_write(ram2k_adrs, ram2k_din);
+	sel ram2k_adrs<11>, ram2k_din<8>;
+	instrself ram2k_read(ram2k_adrs);
+	reg ram2k_dout<8>;
+
+	mem ram512[512]<8>;
+	instrself ram512_write(ram512_adrs, ram512_din);
+	sel ram512_adrs<9>, ram512_din<8>;
+	instrself ram512_read(ram512_adrs);
+	reg ram512_dout<8>;
+
+	reg adrs11;
+
+	instruct ram2k_write ram2k[ram2k_adrs] := ram2k_din;
+	instruct ram2k_read ram2k_dout := ram2k[ram2k_adrs];
+	instruct ram512_write ram512[ram512_adrs] := ram512_din;
+	instruct ram512_read ram512_dout := ram512[ram512_adrs];
+
+	instruct write any{
+		adrs<11>==0b0 : ram2k_write(adrs<10:0>, din);
+		else : ram512_write(adrs<8:0>, din);
+	}
+
+	instruct read par{
+		any{
+			adrs<11>==0b0 : ram2k_read(adrs<10:0>);
+			else : ram512_read(adrs<8:0>);
+		}
+		adrs11 := adrs<11>;
+	}
+
+	any{
+		adrs11==0b0 : dout = ram2k_dout;
+		else : dout = ram512_dout;
+	}
+
+}

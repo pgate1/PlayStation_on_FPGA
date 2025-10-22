@@ -5,9 +5,9 @@ DDS_50to33868800.sflp DMA_SPU.sflp SoundProcessingUnit.sflp DigitalSignalProcess
 bsr_s24.sflp ADSR.sflp reverb.sflp ram_16x32k.sflp dsdac10.sflp GraphicProcessingUnit.sflp \
 DMA_OTC.sflp DMA_GPU.sflp VGA_ctrl.sflp ram_320x240x15_dp.sflp inv_table.sflp drawPoly.sflp \
 drawFillRect.sflp view_ram_ctrl.sflp view_ram_ctrl_one.sflp CDROM_controller.sflp PAD_controller.sflp PAD.sflp drawRect.sflp \
-gamma_correction.sflp ram_8x4k.sflp DMA_CDR.sflp \
+ram_8x2352.sflp DMA_CDR.sflp \
 GeometryTransformationEngine.sflp gte_DIVIDE.sflp gte_LIMIT.sflp Scratchpad.sflp \
-pseudo_cdrom_data.sflp drawpoly_cache.sflp MDEC.sflp
+pseudo_cdrom_data.sflp MDEC.sflp Cache_Texture.sflp
 
 SFLS = $(SFLP:.sflp=.sfl)
 HEAD = $(SFLP:.sflp=.h)

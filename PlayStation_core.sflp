@@ -28,10 +28,9 @@ circuit PlayStation_core
 	R3000A cpu;
 	Cache_IR ir_cache;
 	reg_wr cache_control<12>;
-//	reg_wr cache_A<21>;
 
 	output A<21>;
-	input Din<32>;
+	input Din<128>;
 
 	instrout WRAM_READ(A, Word);
 	instrin wram_ack;
@@ -40,7 +39,8 @@ circuit PlayStation_core
 	instrin bios_ack;
 
 	instrout WRAM_WRITE(A, Dout, Word);
-	output Dout<32>, Word<3>;
+	output Dout<32>;
+	output Word<5>; // 1～16 Byte
 
 	instrin exe_set(header_adrs, header_data);
 	input header_adrs<12>, header_data<8>;
@@ -52,7 +52,7 @@ circuit PlayStation_core
 
 	reg_ws reset;
 
-	reg_wr cpu_A<32>, cpu_Dout<32>, cpu_Word<3>;
+	reg cpu_A<32>, cpu_Dout<32>, cpu_Word<3>;
 	reg_wr pio_reg<32>, io_reg<32>;
 
 	Scratchpad scratch;
@@ -95,11 +95,13 @@ circuit PlayStation_core
 	output dispW, dispH;
 	instrout display_flip, draw_notdisp_side;
 
-	output vram_write_adrs<19>, vram_read_adrs<19>, vram_write_data<16>;
-	instrout vram_write_req(vram_write_adrs, vram_write_data);
-	instrout vram_read_req(vram_read_adrs);
+	output vram_adrs<19>, vram_write_data<16>, vram_burst<3>;
+	instrout vram_write_req(vram_adrs, vram_write_data);
+	instrout vram_read_req(vram_adrs, vram_burst);
 	instrin vram_read_ack, vram_write_ack;
-	input vram_read_data<16>;
+	input vram_read_data<64>;
+	instrout vram_flush;
+	instrin sw_texcache_off;
 
 	instrin sw_kernel_run;
 	instrin vblank_begin, vblank_end;
@@ -144,7 +146,8 @@ output dbg32<32>;
 //reg_wr dbg32_reg<32>;
 output dbg_pad<8>;
 
-	stage_name ir_cache_check { task do(cpu_A); }
+	stage_name ir_cache_read { task do(cpu_A); }
+//	stage_name ir_cache_write { task do(cpu_A, cpu_Dout); }
 //	stage_name ir_cache_flag_clear { task do(cache_A); }
 	stage_name cpu_read { task do(cpu_A, cpu_Word); }
 	stage_name cpu_write { task do(cpu_A, cpu_Dout, cpu_Word); }
@@ -156,7 +159,7 @@ output dbg_pad<8>;
 	stage_name write_wram_wait { task do(); }
 
 	if(reset){
-		ir_cache.clear();
+		ir_cache.clear_all();
 		reset := 0b0;
 	}
 
@@ -178,7 +181,7 @@ dbg32 = cdr.dbg32;//dbg32_reg;dma_CDR.dbg32;cpu.dbg32;
 		mdec.running |
 		dma_CDR.running | dma_SPU.running | dma_OTC.running |
 		cdr.running | pad.running |
-		ir_cache.doing | ir_cache_check.do | cpu_read.do | cpu_write.do |
+		ir_cache.doing | ir_cache_read.do /*| ir_cache_write.do*/ | cpu_read.do | cpu_write.do |
 		read_wram_wait.do | read_bios_wait.do | read_io_wait.do |
 		read_gpu_wait.do | read_cdr_wait.do |
 		write_wram_wait.do;
@@ -195,10 +198,11 @@ dbg32 = cdr.dbg32;//dbg32_reg;dma_CDR.dbg32;cpu.dbg32;
 	// for PS-X EXE
 	if(sw_cdrom_ctrl==0b01){
 		reg_wr exe_running;
-		if(cpu_read.do & (cpu_A==0x80030000) & ^exe_running){
+	//	if(cpu_read.do & (cpu_A==0x80030000) & ^exe_running){
+		if(cpu.read_req & (cpu.A==0x80030000) & ^exe_running){ // キャッシュ先読み時
 			exe_running := 0b1;
 			kernel_ok();
-			ir_cache.clear();
+		//	ir_cache.clear_all();
 		}
 	}
 
@@ -219,14 +223,15 @@ dbg32 = cdr.dbg32;//dbg32_reg;dma_CDR.dbg32;cpu.dbg32;
 	}
 
 	any{
-		map_ram : any{
-			ir_cache_check.do & ir_cache.hit : mapped_Din = ir_cache.Dout;
-			else : mapped_Din = Din;
+		map_ram : alt{
+			ir_cache_read.do & ir_cache.hit : mapped_Din = ir_cache.dout;
+		//	^sw_cache_off & cpu.is_c : mapped_Din = 0x00000000; // 未定義
+			else : mapped_Din = Din<31:0>;
 		}
 		map_pio : mapped_Din = pio_reg;
 		map_scratchpad : mapped_Din = scratch.Dout;
 		map_io : mapped_Din = io_reg;
-		map_bios : mapped_Din = Din;
+		map_bios : mapped_Din = Din<31:0>;
 		else : mapped_Din = 0x00000000;
 	}
 	cpu.Din = mapped_Din;
@@ -298,7 +303,7 @@ if(spu.halt_code!=0) dbg_reg := spu.dbg;
 		dma_GPU.Din = gpu.dout;
 	}
 	else{
-		dma_GPU.Din = Din;
+		dma_GPU.Din = Din<31:0>;
 	}
 	instruct dma_GPU.gpu_dma_write_req if(gpu.halt_code==0x00) gpu.WriteData(dma_GPU.Dout);
 	dma_GPU.gpu_busy = gpu.busy | (gpu.halt_code!=0);
@@ -307,9 +312,6 @@ if(spu.halt_code!=0) dbg_reg := spu.dbg;
 	gpu.busy_recieve_dmablock = dma_GPU.running;
 	instruct dma_GPU.wram_write par{
 		WRAM_WRITE(dma_GPU.A, dma_GPU.Dout, 4);
-		// クリアするとホーム画面に移行しない？
-	//	ir_cache.flag_clear(dma_GPU.A);
-	//	generate ir_cache_flag_clear.do(dma_GPU.A);
 	}
 	instruct dma_GPU.interrupt par{
 		// gpuInterrupt()
@@ -331,8 +333,6 @@ dma_running = dma_GPU.running;
 	if(wram_ack) dma_CDR.wram_ack();
 	instruct dma_CDR.wram_write par{
 		WRAM_WRITE(dma_CDR.A, dma_CDR.Dout, 4);
-		ir_cache.flag_clear(dma_CDR.A);
-	//	generate ir_cache_flag_clear.do(dma_CDR.A);
 	}
 	instruct dma_CDR.interrupt par{
 		// cdrDmaInterrupt()
@@ -349,7 +349,7 @@ dma_running = dma_GPU.running;
 	dma_SPU.DmaBCR_4 = DmaBCR_4;
 	instruct dma_SPU.wram_read WRAM_READ(dma_SPU.A, 4);
 	instruct wram_ack dma_SPU.wram_ack();
-	dma_SPU.Din = Din;
+	dma_SPU.Din = Din<31:0>;
 	instruct dma_SPU.spu_dma_write_req spu.dma_write_req(dma_SPU.Dout);
 	instruct spu.dma_ack dma_SPU.spu_dma_ack();
 	spu.dma_doing = dma_SPU.running;
@@ -365,7 +365,6 @@ dma_running = dma_GPU.running;
 	dma_OTC.DmaBCR_6 = DmaBCR_6;
 	instruct dma_OTC.wram_write par{
 		WRAM_WRITE(dma_OTC.A, dma_OTC.D, 4);
-	//	ir_cache.flag_clear(dma_OTC.A); クリアしない
 	}
 	instruct wram_ack dma_OTC.wram_ack();
 	instruct dma_OTC.interrupt par{
@@ -421,25 +420,45 @@ dbg_pad = pad.dbg;
 				|| /|dma_CDR.halt_code || /|dma_GPU.halt_code || /|dma_OTC.halt_code || /|cdr.halt_code || /|pad.halt_code;
 
 	instruct halt halt_code_reg := h_code;
-dbg_cpu = cpu.dbg;
+if(cpu.halt_code!=0) dbg_reg := 0x000000 || cpu.dbg;
 drawing = gpu.drawing;
 vraming = gpu.vram_busy;
 
 	instruct cpu.read_req par{
-		if((^sw_cache_off) & ((cpu.A<31:24>==0x00) | (cpu.A<31:24>==0x80)) /*& cpu.ir_read*/){
+	//	generate cpu_read.do(cpu.A, cpu.Word);
+
+		// アクセスを速くするためここでキャッシュチェック
+		if((^sw_cache_off) & ((cpu.A<31:24>==0x00) | (cpu.A<31:24>==0x80)) & cpu.ir_read){
+			// 命令フェッチのみ対象
 			ir_cache.read(cpu.A<20:0>);
-			generate ir_cache_check.do(cpu.A);
+			generate ir_cache_read.do(cpu.A);
 		}
 		else{
 			generate cpu_read.do(cpu.A, cpu.Word);
 		}
+
 //if(cpu.ir_read) opcount++;
 	}
 
 	instruct cpu.write_req par{
 		generate cpu_write.do(cpu.A, cpu.Dout, cpu.Word);
+/*
+		if((^sw_cache_off) & ((cpu.A<31:24>==0x00) | (cpu.A<31:24>==0x80)) & cpu.is_c){
+		//	ir_cache.write(cpu.A<20:0>, cpu.Dout);
+			ir_cache.clear(cpu.A<20:0>);
+		}
+		else{
+			generate cpu_write.do(cpu.A, cpu.Dout, cpu.Word);
+		}
+*/
 	}
-
+/*
+	// キャッシュ分離解除時にクリア？
+	// BIOSのループでクリアするから回路は不要そう？
+	reg_wr is_c_old;
+	is_c_old := cpu.is_c;
+	if(^cpu.is_c & is_c_old) ir_cache.clear_all();
+*/
 	alt{
 		halt_code!=0x00 : ;
 		sw_kernel_run : par{
@@ -533,36 +552,54 @@ gpu.dbg_in = dbg_in;
 if(gpu.halt_code!=0) dbg_reg := gpu.dbg;
 
 	instruct sw_outview_on gpu.sw_outview_on();
-	instruct sw_view_half gpu.sw_view_half();
+//	instruct sw_view_half gpu.sw_view_half();
+	instruct sw_texture_off gpu.sw_texture_off();
 
 	instruct gpu.vram_write_req par{
-		vram_write_req(gpu.vram_write_adrs, gpu.vram_write_data);
+		vram_write_req(gpu.vram_adrs, gpu.vram_write_data);
 	}
 	instruct gpu.vram_read_req par{
-		vram_read_req(gpu.vram_read_adrs);
+		vram_read_req(gpu.vram_adrs, gpu.vram_burst);
 	}
 	instruct vram_write_ack gpu.vram_write_ack();
 	instruct vram_read_ack gpu.vram_read_ack();
 	gpu.vram_read_data = vram_read_data;
 	instruct gpu.display_flip display_flip();
-dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
+	instruct gpu.vram_flush_req vram_flush();
+	instruct sw_texcache_off gpu.sw_texcache_off();
+dbg_gpu = gpu.dbg_gpu;
 
 	// ir_readの時に起動
-	stage ir_cache_check {
-		first_state st1;
-		state st1 par{
+	stage ir_cache_read {
+		first_state st_check;
+		state st_check par{
 			if(ir_cache.hit){
 				cpu.read_ack();
 				finish;
 			}
 			else{
-				generate cpu_read.do(cpu_A, 4);
-				goto st2;
+				if(cpu.is_c){ // 未定義
+					cpu.read_ack(); // とりあえずack返す
+					finish;
+				}
+				else{
+					sel offset<2>;
+					offset = cpu_A<3:2>;
+					switch(offset){
+						case 0: WRAM_READ(cpu_A<20:0>, 16);
+						case 1: WRAM_READ(cpu_A<20:0>, 12);
+						case 2: WRAM_READ(cpu_A<20:0>, 8);
+						case 3: WRAM_READ(cpu_A<20:0>, 4);
+					}
+					generate read_wram_wait.do();
+					goto st_write;
+				}
 			}
 		}
-		state st2 if(read_wram_wait.do & wram_ack){
-			ir_cache.write(cpu_A<20:0>, Din);
-			goto st1;
+		state st_write if(read_wram_wait.do & wram_ack){
+			// ここでDinはoffsetが反映されたものになっている
+			ir_cache.write_line(cpu_A<20:0>, Din);
+			goto st_check;
 			finish;
 		}
 	}
@@ -571,8 +608,20 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 		par{
 			any{
 				map_ram : par{
-					WRAM_READ(cpu_A<20:0>, cpu_Word);
+
+					WRAM_READ(cpu_A<20:0>, 0b00||cpu_Word);
 					generate read_wram_wait.do();
+/*
+					if((^sw_cache_off) & ((cpu_A<31:24>==0x00) | (cpu_A<31:24>==0x80)) & cpu.ir_read){
+						// 命令フェッチのみ対象
+						ir_cache.read(cpu_A<20:0>);
+						generate ir_cache_read.do(cpu_A);
+					}
+					else{
+						WRAM_READ(cpu_A<20:0>, cpu_Word);
+						generate read_wram_wait.do();
+					}
+*/
 				}
 				map_pio : par{
 					pio_reg := 0x00000000;
@@ -587,6 +636,7 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 				map_io : par{ // 0x1F80
 					any{
 						cpu_A<15:0>==0x1014 : io_reg := spuDmaWait;
+					//	cpu_A<15:0>==0x1030 : ; // ?
 						cpu_A<15:0>==0x1040 : par{ // パッドデータ
 						//	io_reg := 0x000000 || pad.ReadData().io_dout<7:0>;
 							pad.ReadData();
@@ -599,6 +649,7 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 						}
 						cpu_A<15:0>==0x104A : io_reg := pad.ReadCtrl().io_dout || 0x0000; // パッドコントロール
 						cpu_A<15:0>==0x104E : io_reg := pad.ReadBaud().io_dout || 0x0000; // パッドボーレート
+						cpu_A<15:0>==0x1054 : io_reg := 0; // test
 						cpu_A<15:0>==0x1058 : io_reg := 0; // test
 						cpu_A<15:0>==0x105A : io_reg := 0; // test
 						cpu_A<15:0>==0x105C : io_reg := 0; // test
@@ -609,6 +660,7 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 						cpu_A<15:0>==0x1080 : io_reg := DmaMADR_0; // DMACチャネル0(MDECin)メモリアドレス
 						cpu_A<15:0>==0x1088 : io_reg := DmaCHCR_0; // DMACチャネル0(MDECin)チャネルコントロール
 						cpu_A<15:0>==0x1090 : io_reg := DmaMADR_1; // DMACチャネル1(MDECout)メモリアドレス
+						cpu_A<15:0>==0x1094 : io_reg := DmaBCR_1;  // DMACチャネル1(MDECout)ブロックカウント
 						cpu_A<15:0>==0x1098 : io_reg := DmaCHCR_1; // DMACチャネル1(MDECout)チャネルコントロール
 						cpu_A<15:0>==0x10A0 : io_reg := DmaMADR_2; // DMACチャネル2(GPU)メモリアドレス
 						cpu_A<15:0>==0x10A8 : io_reg := DmaCHCR_2; // DMACチャネル2(GPU)チャネルコントロール
@@ -652,7 +704,7 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 					generate read_io_wait.do();
 				}
 				map_bios : par{
-					BIOS_READ(0b00||cpu_A<18:0>, cpu_Word);
+					BIOS_READ(0b00||cpu_A<18:0>, 0b00||cpu_Word);
 					generate read_bios_wait.do();
 				}
 				map_cctrl : if(cpu_A<15:0>==0x0130){
@@ -721,9 +773,19 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 		par{
 			any{
 				map_ram : par{
-					WRAM_WRITE(cpu_A<20:0>, cpu_Dout, cpu_Word);
-					generate write_wram_wait.do();
-					ir_cache.flag_clear(cpu_A<20:0>);
+				//	WRAM_WRITE(cpu_A<20:0>, cpu_Dout, cpu_Word);
+				//	generate write_wram_wait.do();
+
+					if((^sw_cache_off) & cpu.is_c){// & ((cpu_A<31:24>==0x00) | (cpu_A<31:24>==0x80))){
+						ir_cache.clear(cpu_A<20:0>);
+					//	ir_cache.write(cpu_A<20:0>, cpu_Dout);
+					}
+					else{
+						WRAM_WRITE(cpu_A<20:0>, cpu_Dout, 0b00||cpu_Word);
+						generate write_wram_wait.do();
+					//	ir_cache.clear(cpu_A<20:0>); // いずれも不要
+					}
+
 				}
 				map_pio : par{
 					halt(0x53);
@@ -746,6 +808,7 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 					cpu_A<15:0>==0x1040 : pad.WriteData(0x00||cpu_Dout<7:0>); // パッドデータ
 					cpu_A<15:0>==0x1048 : pad.WriteMode(cpu_Dout<15:0>); // パッドモード
 					cpu_A<15:0>==0x104A : pad.WriteCtrl(cpu_Dout<15:0>); // パッドコントロール
+					cpu_A<15:0>==0x104C : ;
 					cpu_A<15:0>==0x104E : pad.WriteBaud(cpu_Dout<15:0>); // パッドボーレート
 					cpu_A<15:0>==0x1058 : ; // test
 					cpu_A<15:0>==0x105A : ; // test
@@ -857,8 +920,8 @@ dbg_gpu = gpu.dbg;//gpu.dbg_gpu;
 				}
 				map_cctrl : if(cpu_A<15:0>==0x0130){
 					cache_control := cpu_Dout<11:0>;
-					if((cpu_Dout==0x00000800) /*| (cpu_Dout==0x00000804)*/){
-						ir_cache.clear();
+					if((cpu_Dout==0x0001E988)/*(cpu_Dout==0x00000800) | (cpu_Dout==0x00000804)*/){
+						ir_cache.clear_all();
 					}
 				}
 				//else : halt(0xDE);

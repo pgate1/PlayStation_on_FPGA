@@ -6,6 +6,7 @@
 %i "drawFillRect.h"
 %i "drawPoly.h"
 %i "drawRect.h"
+%i "Cache_Texture.h"
 
 circuit GraphicProcessingUnit
 {
@@ -73,6 +74,9 @@ circuit GraphicProcessingUnit
 	drawPoly poly;
 	drawRect rect;
 
+	Cache_Texture tcache;
+	instrin sw_texcache_off;
+
 	instrin sw_outview_on, sw_view_half, sw_texture_off, sw_kernel_run;
 
 	instrout view_on;
@@ -83,20 +87,22 @@ circuit GraphicProcessingUnit
 	output dispW, dispH;
 
 	// for VRAM
-	output vram_write_adrs<19>, vram_write_data<16>;
-	instrout vram_write_req(vram_write_adrs, vram_write_data);
-	output vram_read_adrs<19>;
-	instrout vram_read_req(vram_read_adrs);
+	output vram_adrs<19>, vram_write_data<16>, vram_burst<3>;
+	instrout vram_write_req(vram_adrs, vram_write_data);
+	instrout vram_read_req(vram_adrs, vram_burst);
 	instrin vram_write_ack, vram_read_ack;
-	input vram_read_data<16>;
-	reg_wr vram_read_data_reg<16>;
+	input vram_read_data<64>;
+	reg vram_read_data_reg<16>;
+	instrself vram_flush;
+	reg_wr vram_flush_reg;
+	instrout vram_flush_req;
 
 	// WriteData—p
 	reg_wr io_write_data<32>;
 
 	// WriteData,ReadData—p
 	sel io_vram_write_adrs<19>, io_vram_read_adrs<19>, io_vram_din<16>;
-	reg_wr io_vram_write_adrs_reg<19>, io_vram_read_adrs_reg<19>, io_vram_din_reg<16>;
+	reg io_vram_write_adrs_reg<19>, io_vram_read_adrs_reg<19>, io_vram_din_reg<16>;
 	instrself vram_write(io_vram_write_adrs, io_vram_din);
 	instrself vram_read(io_vram_read_adrs);
 	reg_wr vram_read_wait, vram_write_wait;
@@ -575,33 +581,39 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 		clut, tpage, drawX, drawY, drawW, drawH);
 	poly.f_dither = tpage<9>;
 	poly.f_texture = ^sw_texture_off & (
-		(cmd==0x24) | (cmd==0x25) | (cmd==0x26) | (cmd==0x27) | // 0b0010_01--
-		(cmd==0x2C) | (cmd==0x2D) | (cmd==0x2E) | (cmd==0x2F) | // 0b0010_11--
-		(cmd==0x34) | (cmd==0x35) | (cmd==0x36) | (cmd==0x37) | // 0b0011_01--
-		(cmd==0x3C) | (cmd==0x3D) | (cmd==0x3E) | (cmd==0x3F)); // 0b0011_11--
+		cmd<2>);
+	//	(cmd==0x24) | (cmd==0x25) | (cmd==0x26) | (cmd==0x27) | // 0b0010_01--
+	//	(cmd==0x2C) | (cmd==0x2D) | (cmd==0x2E) | (cmd==0x2F) | // 0b0010_11--
+	//	(cmd==0x34) | (cmd==0x35) | (cmd==0x36) | (cmd==0x37) | // 0b0011_01--
+	//	(cmd==0x3C) | (cmd==0x3D) | (cmd==0x3E) | (cmd==0x3F)); // 0b0011_11--
 
 	poly.f_texblend =
-		(cmd==0x24) | (cmd==0x26) | (cmd==0x2C) | (cmd==0x2E) |
-		(cmd==0x34) | (cmd==0x36) | (cmd==0x3C) | (cmd==0x3E);
+		(cmd<0>==0b0);
+	//	(cmd==0x24) | (cmd==0x26) | (cmd==0x2C) | (cmd==0x2E) |
+	//	(cmd==0x34) | (cmd==0x36) | (cmd==0x3C) | (cmd==0x3E);
 	poly.f_semitrans =
-		(cmd==0x22) | (cmd==0x2A) | (cmd==0x26) | (cmd==0x27) | (cmd==0x2E) | (cmd==0x2F) |
-		(cmd==0x32) | (cmd==0x3A) | (cmd==0x36) | ((cmd==0x37)) | (cmd==0x3E) | ((cmd==0x3F));
+		cmd<1>;
+	//	(cmd==0x22) | (cmd==0x2A) | (cmd==0x26) | (cmd==0x27) | (cmd==0x2E) | (cmd==0x2F) |
+	//	(cmd==0x32) | (cmd==0x3A) | (cmd==0x36) | ((cmd==0x37)) | (cmd==0x3E) | ((cmd==0x3F));
 
 	rect.con(
 		px1+drawOffsetX, py1+drawOffsetY,
 		px2+drawOffsetX, py2+drawOffsetY,
 		pc1, clut, tpage, pu1, pv1, pu2, pv2, drawX, drawY, drawW, drawH);
 	rect.f_texture =
-		(cmd==0x64) | (cmd==0x65) | (cmd==0x66) | (cmd==0x67) |
-		(cmd==0x6C) | (cmd==0x6D) | (cmd==0x6E) | (cmd==0x6F) |
-		(cmd==0x74) | (cmd==0x75) | (cmd==0x76) | (cmd==0x77) |
-		(cmd==0x7C) | (cmd==0x7D) | (cmd==0x7E) | (cmd==0x7F);
+		cmd<2>;
+	//	(cmd==0x64) | (cmd==0x65) | (cmd==0x66) | (cmd==0x67) |
+	//	(cmd==0x6C) | (cmd==0x6D) | (cmd==0x6E) | (cmd==0x6F) |
+	//	(cmd==0x74) | (cmd==0x75) | (cmd==0x76) | (cmd==0x77) |
+	//	(cmd==0x7C) | (cmd==0x7D) | (cmd==0x7E) | (cmd==0x7F);
 	rect.f_texblend =
-		(cmd==0x64) | (cmd==0x66) | (cmd==0x6C) | (cmd==0x6E) |
-		(cmd==0x74) | (cmd==0x76) | (cmd==0x7C) | (cmd==0x7E);
+		(cmd<0>==0b0);
+	//	(cmd==0x64) | (cmd==0x66) | (cmd==0x6C) | (cmd==0x6E) |
+	//	(cmd==0x74) | (cmd==0x76) | (cmd==0x7C) | (cmd==0x7E);
 	rect.f_semitrans =
-		(cmd==0x62) | (cmd==0x6A) | (cmd==0x66) | (cmd==0x67) | (cmd==0x6E) | (cmd==0x6F) |
-		(cmd==0x72) | (cmd==0x7A) | (cmd==0x76) | (cmd==0x77) | (cmd==0x7E) | (cmd==0x7F);
+		cmd<1>;
+	//	(cmd==0x62) | (cmd==0x6A) | (cmd==0x66) | (cmd==0x67) | (cmd==0x6E) | (cmd==0x6F) |
+	//	(cmd==0x72) | (cmd==0x7A) | (cmd==0x76) | (cmd==0x77) | (cmd==0x7E) | (cmd==0x7F);
 
 	drawing = draw_stg.do;
 	vram_busy = VramData_image.write_vram | VramData_image.read_vram;
@@ -677,14 +689,16 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 	instruct fill.vram_write_req par{
 		vram_write_req(fill.vram_write_adrs, fill.vram_write_data);
 	}
+	instruct fill.vram_flush_req vram_flush_req();
 	instruct poly.vram_write_req par{
 		vram_write_req(poly.vram_adrs, poly.vram_write_data);
 	}
+	instruct poly.vram_flush_req vram_flush_req();
 	instruct poly.vram_read_req par{
-		vram_read_req(poly.vram_adrs);
+		vram_read_req(poly.vram_adrs, 1);
 	}
 	instruct rect.vram_read_req par{
-		vram_read_req(rect.vram_read_adrs);
+		vram_read_req(rect.vram_adrs, 1);
 	}
 
 //if(vram_write_req & vram_read_req) halt(0xAF); // ‚±‚ê
@@ -700,8 +714,24 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 		poly.vram_ack();
 		rect.vram_ack();
 	}
-	poly.vram_read_data = vram_read_data;
-	rect.vram_read_data = vram_read_data;
+	poly.vram_read_data = vram_read_data<15:0>;
+	rect.vram_read_data = vram_read_data<15:0>;
+
+	instruct poly.tcache_read tcache.read(poly.tcache_adrs);
+	instruct rect.tcache_read tcache.read(rect.tcache_adrs);
+
+	instruct tcache.vram_read_req par{
+		vram_read_req(tcache.vram_adrs, tcache.vram_burst);
+	}
+	tcache.vram_dout = vram_read_data;
+	if(vram_read_ack) tcache.vram_ack();
+
+	poly.tcache_dout = tcache.dout;
+	poly.tcache_ack = tcache.ack;
+	rect.tcache_dout = tcache.dout;
+	rect.tcache_ack = tcache.ack;
+
+	instruct sw_texcache_off tcache.sw_texcache_off();
 
 	instruct vram_write par{
 		vram_write_req(io_vram_write_adrs, io_vram_din);
@@ -710,20 +740,25 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 		vram_write_wait := 0b1;
 	}
 	if(vram_write_wait & ^vram_write_ack) vram_write_req(io_vram_write_adrs_reg, io_vram_din_reg);
+	if(vram_flush){
+		vram_flush_req();
+		vram_flush_reg := 0b1;
+	}
+	if(vram_flush_reg & ^vram_write_ack) vram_flush_req();
 	if(vram_write_ack){
 		vram_write_wait := 0b0;
+		vram_flush_reg := 0b0;
 	}
 	instruct vram_read par{
-		vram_read_req(io_vram_read_adrs);
+		vram_read_req(io_vram_read_adrs, 1);
 		io_vram_read_adrs_reg := io_vram_read_adrs;
 		vram_read_wait := 0b1;
 	}
-	if(vram_read_wait & ^vram_read_ack) vram_read_req(io_vram_read_adrs_reg);
+	if(vram_read_wait & ^vram_read_ack) vram_read_req(io_vram_read_adrs_reg, 1);
 	if(vram_read_ack){
 		vram_read_wait := 0b0;
-		vram_read_data_reg := vram_read_data;
+		vram_read_data_reg := vram_read_data<15:0>;
 	}
-
 
 	stage VramData_image {
 		reg_wr pix, curPixel<19>, f_write_end, f_read_end;
@@ -741,17 +776,21 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 			if(VramData_image.write_vram){
 				vram_write(vram_p + curPixel, io_write_data<15:0>);
 				io_write_data := io_write_data >> 16;
-/*
+
 // test.exe‚ÌŽž
-if(^sw_kernel_run){
-view_on();
-view_x = CommandBuffer[1]<9:0> + VramPosX<9:0>;
-view_y = CommandBuffer[1]<24:16> + VramPosY<8:0>;
-view_R = io_write_data<4:0> || 0b111;
-view_G = io_write_data<9:5> || 0b111;
-view_B = io_write_data<14:10> || 0b111;
+if(^sw_kernel_run) any{
+	status_color_depth==0b1 : par{ // 24bit color
+	}
+	status_color_depth==0b0 : par{ // 15bit color
+		view_on();
+		view_x = CommandBuffer[1]<9:0> + VramPosX<9:0>;
+		view_y = CommandBuffer[1]<24:16> + VramPosY<8:0>;
+		view_R = io_write_data<4:0> || 0b111;
+		view_G = io_write_data<9:5> || 0b111;
+		view_B = io_write_data<14:10> || 0b111;
+	}
 }
-*/
+
 			}
 			if(VramData_image.read_vram){
 				vram_read(vram_p + curPixel);
@@ -760,6 +799,7 @@ view_B = io_write_data<14:10> || 0b111;
 
 			if(((VramPosX+1)-vram_width)<15>==0b0){ // VramPosX+1 >= vram_width
 				VramPosX := 0;
+				vram_flush(); // for write
 				if(((VramPosY+1)-vram_height)<15>==0b0){ // VramPosY+1 >= vram_height
 					BufferOffset := 0;
 					VramPosY := 0;
@@ -772,7 +812,7 @@ view_B = io_write_data<14:10> || 0b111;
 					}
 				}
 				else{
-					curPixel += 0b0000000010000000001 - (0b000||vram_width); // +1024+1
+					curPixel += 0b000000001_0000000001 - (0b000||vram_width); // +1024+1
 					VramPosY++;
 				}
 			}
@@ -994,19 +1034,23 @@ view_B = io_write_data<14:10> || 0b111;
 					py1 := CommandBuffer[1]<26:16>;
 					sel w<11>, h<11>;
 					any{
-						(cmd==0x60) | (cmd==0x61) | (cmd==0x62) | (cmd==0x63) : par{
+					//	(cmd==0x60) | (cmd==0x61) | (cmd==0x62) | (cmd==0x63) : par{
+						cmd<4:3>==0b00 : par{
 							w = 0b0 || CommandBuffer[2]<9:0>;
 							h = 0b00 || CommandBuffer[2]<24:16>;
 						}
-						(cmd==0x68) | (cmd==0x69) | (cmd==0x6A) | (cmd==0x6B) : par{
+					//	(cmd==0x68) | (cmd==0x69) | (cmd==0x6A) | (cmd==0x6B) : par{
+						cmd<4:3>==0b01 : par{
 							w = 1;
 							h = 1;
 						}
-						(cmd==0x70) | (cmd==0x71) | (cmd==0x72) | (cmd==0x73) : par{
+					//	(cmd==0x70) | (cmd==0x71) | (cmd==0x72) | (cmd==0x73) : par{
+						cmd<4:3>==0b10 : par{
 							w = 8;
 							h = 8;
 						}
-						(cmd==0x78) | (cmd==0x79) | (cmd==0x7A) | (cmd==0x7B) : par{
+					//	(cmd==0x78) | (cmd==0x79) | (cmd==0x7A) | (cmd==0x7B) : par{
+						cmd<4:3>==0b11 : par{
 							w = 16;
 							h = 16;
 						}
@@ -1028,19 +1072,23 @@ view_B = io_write_data<14:10> || 0b111;
 					pv1 := CommandBuffer[2]<15:8>;
 					sel w<11>, h<11>;
 					any{
-						(cmd==0x64) | (cmd==0x65) | (cmd==0x66) | (cmd==0x67) : par{
+					//	(cmd==0x64) | (cmd==0x65) | (cmd==0x66) | (cmd==0x67) : par{
+						cmd<4:3>==0b00 : par{
 							w = 0b0 || CommandBuffer[3]<9:0>;
 							h = 0b00 || CommandBuffer[3]<24:16>;
 						}
-						(cmd==0x6C) | (cmd==0x6D) | (cmd==0x6E) | (cmd==0x6F) : par{
+					//	(cmd==0x6C) | (cmd==0x6D) | (cmd==0x6E) | (cmd==0x6F) : par{
+						cmd<4:3>==0b01 : par{
 							w = 1;
 							h = 1;
 						}
-						(cmd==0x74) | (cmd==0x75) | (cmd==0x76) | (cmd==0x77) : par{
+					//	(cmd==0x74) | (cmd==0x75) | (cmd==0x76) | (cmd==0x77) : par{
+						cmd<4:3>==0b10 : par{
 							w = 8;
 							h = 8;
 						}
-						(cmd==0x7C) | (cmd==0x7D) | (cmd==0x7E) | (cmd==0x7F) : par{
+					//	(cmd==0x7C) | (cmd==0x7D) | (cmd==0x7E) | (cmd==0x7F) : par{
+						cmd<4:3>==0b11 : par{
 							w = 16;
 							h = 16;
 						}
