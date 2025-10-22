@@ -1,0 +1,696 @@
+
+/*
+	PlayStation on FPGA feat. DE0-CV
+	Copyright (c)2022 pgate1
+*/
+
+/*
+0 bin/BIOS/scph5500.bin
+1 dev/test_exe/PSX-master/Demo/PSXNICCC/PSXNICCC.exe
+2 Ridge Racer.bin
+*/
+
+// core_sdram128.sflp
+
+%i "../../../DE0-CV/seg7_ctrl.h"
+%i "../../../DE0-CV/chatmask.h"
+%i "../../../DE0-CV/sdcard_ctrl_sdmode.h"
+%i "../../../hdl/fat16.h"
+
+%i "../PlayStation_core.h"
+%i "../DDS_50to33868800.h"
+%i "../VGA_ctrl.h"
+%i "../../dev/polygon/polyzsortshading_vblank/sfl/DE0-CV/Dithering_5to4.h"
+%i "../view_ram_ctrl.h"
+//%i "../view_ram_ctrl_one.h"
+
+circuit core
+{
+	input KEY<4>, SW<10>;
+	chatmask kcmask_0, kcmask_1, kcmask_2, kcmask_3;
+	sel key0, key1, key2, key3;
+	output LEDR<10>;
+	seg7_ctrl seg7_0, seg7_1, seg7_2, seg7_3, seg7_4, seg7_5;
+	output HEX0<7>, HEX1<7>, HEX2<7>, HEX3<7>, HEX4<7>, HEX5<7>;
+	sel seg<24>;
+//--------------------- SDRAM Interface --------------------
+	instrout sdram_write(sdram_adrs, sdram_din, sdram_enable, sdram_burst);
+	output sdram_adrs<25>, sdram_din<128>, sdram_enable<16>, sdram_burst<4>;
+	instrout sdram_read(sdram_adrs, sdram_burst);
+	input sdram_dout<128>, sdram_ack_100; reg sdram_ack;
+//--------------------- SD_Card Interface ------------------
+	sdcard_ctrl_sdmode sdcard;
+	output SD_CLK;    // SD Card Clock
+	output SD_CMD_en; // SD Card CMD Enable
+	output SD_CMD;    // SD Card Command
+	input  SD_RES;    // SD Card Response
+	input  SD_DAT<4>; // SD Card Data
+	fat16 fat;
+//--------------------- VGA --------------------------------
+	VGA_ctrl vga;
+	output VGA_HS, VGA_VS;
+	output VGA_R<4>, VGA_G<4>, VGA_B<4>;
+	Dithering_5to4 dither_R, dither_G, dither_B;
+//----------------------------------------------------------
+
+	reg_ws reset;
+
+	PlayStation_core psx;
+	DDS_50to33868800 dds;
+
+	view_ram_ctrl view_ram;
+
+	reg_wr exe_read_ok, psx_run_ok;
+	reg_wr chksum<8>, dbg_data<32>;
+
+	reg_wr bA<19>; // bios 512kB
+	reg_wr tA<21>; // ram 2MB
+	reg_wr iA<22>; // img 4MB
+	reg_wr d0<8>, d1<8>, d2<8>;
+
+	instrself halt(halt_sel);
+	sel halt_sel<8>;
+	reg_wr halt_code<8>;
+
+//	stage_name kernel_sum { task do(); }
+	stage_name bios_sdcard2ram { task do(); }
+	stage_name wram_clear { task do(); }
+//	stage_name kernel_sdcard2ram { task do(); }
+	stage_name exe_sdcard2ram { task do(); }
+	stage_name img_sdcard2ram { task do(); }
+	stage_name img_read { task do(); }
+	stage_name vram_clear { task do(); }
+
+	if(reset){
+		generate bios_sdcard2ram.do();
+		reset := 0b0;
+	}
+
+	instruct halt halt_code := halt_sel;
+
+	kcmask_0.bin = ^KEY<0>; key0 = kcmask_0.bout;
+	kcmask_1.bin = ^KEY<1>; key1 = kcmask_1.bout;
+	kcmask_2.bin = ^KEY<2>; key2 = kcmask_2.bout;
+	kcmask_3.bin = ^KEY<3>; key3 = kcmask_3.bout;
+
+	HEX5 = seg7_5.con(seg<23:20>).oSEG;
+	HEX4 = seg7_4.con(seg<19:16>).oSEG;
+	HEX3 = seg7_3.con(seg<15:12>).oSEG;
+	HEX2 = seg7_2.con(seg<11: 8>).oSEG;
+	HEX1 = seg7_1.con(seg< 7: 4>).oSEG;
+	HEX0 = seg7_0.con(seg< 3: 0>).oSEG;
+
+	SD_CLK    = sdcard.CLK;
+	SD_CMD_en = sdcard.CMD_en;
+	SD_CMD    = sdcard.CMD;
+	sdcard.RES = SD_RES;
+	sdcard.DAT = SD_DAT;
+
+	fat.sack = sdcard.ack;
+	fat.sdata = sdcard.rdata;
+	instruct fat.sread sdcard.read(fat.sadrs);
+
+	// 必要
+	sdram_ack := sdram_ack_100;
+
+	reg_wr clock25M_div;
+	clock25M_div := ^clock25M_div;
+	if(clock25M_div) vga.htiming();
+	reg_wr vga_en_reg, vga_hsync_reg, vga_vsync_reg;
+//	vga_en_reg := vga.en; VGA_BLANKn = vga_en_reg;
+	vga_hsync_reg := vga.h_sync; VGA_HS = vga_hsync_reg;
+	vga_vsync_reg := vga.v_sync; VGA_VS = vga_vsync_reg;
+/*
+	if((vga.h_count==0) | (vga.h_count==639) |
+	   (vga.v_count==0) | (vga.v_count==479)){
+		vga.iR = 0xFF; vga.iG = 0xFF; vga.iB = 0xFF;
+	}
+*/
+if(SW<2>){
+	vga.iR = view_ram.out_R || 0b000;
+	vga.iG = view_ram.out_G || 0b000;
+	vga.iB = view_ram.out_B || 0b000;
+}
+else{
+	vga.iR = dither_R.col_out || 0b0000;
+	vga.iG = dither_G.col_out || 0b0000;
+	vga.iB = dither_B.col_out || 0b0000;
+}
+	reg_wr vga_R_reg<4>, vga_G_reg<4>, vga_B_reg<4>;
+	vga_R_reg := vga.oR<7:4>;
+	vga_G_reg := vga.oG<7:4>;
+	vga_B_reg := vga.oB<7:4>;
+	VGA_R = vga_R_reg;
+	VGA_G = vga_G_reg;
+	VGA_B = vga_B_reg;
+
+	dither_R.col_in = view_ram.out_R;
+	dither_G.col_in = view_ram.out_G;
+	dither_B.col_in = view_ram.out_B;
+	instruct vga.vsync par{
+		dither_R.vsync();
+		dither_G.vsync();
+		dither_B.vsync();
+	}
+	instruct vga.hsync par{
+		dither_R.hsync();
+		dither_G.hsync();
+		dither_B.hsync();
+	}
+	instruct vga.dsync par{
+		dither_R.dsync();
+		dither_G.dsync();
+		dither_B.dsync();
+	}
+
+	reg_wr count_1sec<26>, pass_1sec;
+	reg_wr fps<8>, fps_count<8>;
+	if(count_1sec==50000000){
+		pass_1sec := 0b1;
+		count_1sec := 1;
+		fps := fps_count;
+		fps_count := 0;
+	}
+	else count_1sec++;
+
+	instruct psx.view_on par{
+		sel psx_view_x<9>, psx_view_y<8>;
+
+		if(psx.dispW /*| psx.sw_view_half*/) psx_view_x = psx.view_x<9:1>; // 640->320
+		else psx_view_x = psx.view_x<8:0>; // 320->320
+		if(psx.dispH /*| psx.sw_view_half*/) psx_view_y = psx.view_y<8:1>; // 480->240
+		else psx_view_y = psx.view_y<7:0>; // 240->240
+//if((psx.view_R!=0) | (psx.view_G!=0) | (psx.view_B!=0))
+		view_ram.write(psx_view_x, psx_view_y,
+			psx.view_R<7:3>, psx.view_G<7:3>, psx.view_B<7:3>);
+	}
+	instruct vga.view view_ram.read();
+
+reg_wr sw_1; sw_1 := SW<1>;
+
+	instruct vga.vblank_begin par{
+		view_ram.read_adrs_reset();
+		reg_wr vblank_wait;
+		if(exe_read_ok & (^vblank_wait) & pass_1sec){
+			psx_run_ok := 0b1;
+			vblank_wait := 0b1;
+		}
+		if(/*(^psx.drawing) &*/ (^psx.stop)){
+			if(psx_run_ok) psx.vblank_begin();
+			//reg_wr flip; flip := ^flip; // 30fps
+			if(/*sw_1 | flip |*/ ^psx.sw_kernel_run){
+				view_ram.bank_change();
+				fps_count++;
+			}
+		}
+	}
+	instruct vga.vblank_end psx.vblank_end();
+//	if(psx.sw_kernel_run) view_ram.frame_rate = 1;
+//	else view_ram.frame_rate = 0;
+	instruct psx.display_flip if(psx.sw_kernel_run){
+		view_ram.bank_change();
+		fps_count++;
+	}
+	instruct psx.fill_view_on view_ram.fill_view_on();
+//	instruct psx.draw_notdisp_side view_ram.draw_notdisp_side();
+
+	if(exe_read_ok & psx_run_ok & (halt_code==0x00) & (^psx.stop)){
+		instruct dds.run psx.run33();
+		psx.cpu_run();
+	}
+
+reg_wr sw_0; sw_0 := SW<0>;
+
+	// PS : □,×,○,△,R,L,R2,L2,←,↓,→,↑,St,0,0,Sl
+	psx.key_in = (0b0 || key0 || key1 || sw_0 || 0b0000_0 || key2 || 0b0 || key3 || 0b0000);
+
+psx.sw_reverb_off();
+psx.sw_spu_off();
+psx.sw_spuenv_off();
+if(SW<3>) psx.sw_texcache_off();
+	reg_wr sw_9; sw_9 := SW<9>;
+	reg_wr sw_8; sw_8 := SW<8>;
+	psx.sw_cdrom_ctrl = sw_9 || sw_8;
+	if(psx.sw_cdrom_ctrl!=0b01) psx.sw_kernel_run();
+	reg_wr sw_7; sw_7 := SW<7>;
+	if(sw_7) psx.stop();
+	reg_wr sw_6; sw_6 := SW<6>;
+	if(sw_6) psx.sw_view_half(); // 640や480のとき1飛ばしで描画
+reg_wr sw_30<4>; sw_30 := SW<3:0>;
+//psx.dbg_in = 0x000||sw_30;
+
+reg_wr count_cpu<24>, count_gpu<24>, count_cdr<24>;
+
+	any{
+		bios_sdcard2ram.do : seg = 0x00||bA<18:3>;
+		exe_sdcard2ram.do : seg = 0x00||tA<20:5>;
+		img_sdcard2ram.do : seg = 0x00||iA<21:6>;
+		key3 : seg = psx.dbg_cpu || halt_code || psx.halt_code;
+		key2 : seg = psx.dbg<23:0>;
+		key1 : seg = psx.dbg32<23:0>;//0x0000 || psx.dbg_gpu<31:24>;
+		key0 : seg = count_cpu<23:12> || count_cdr<23:12>;//psx.dbg_gpu<23:0>;
+		else : seg = psx.pc_out<31:28> || psx.pc_out<11:0> || fps;
+	}
+
+	LEDR = (/|halt_code || psx.halt_part)
+		| psx.key_in<13:4>;
+
+/*
+SDRAM 64MB 16bit 32MWord<25>
+0b00000   || psx.A<20:2> || 0b0      WorkRAM  2MB 32bit 512kWord<19>
+0b000010  || psx.vram_adrs<18:0>     VideoRAM 1MB 16bit 512kWord<19>
+0b0100000 || psx.A<18:2> || 0b0      BIOS   512kB 32bit 128kWord<17>
+0b10                                 未使用  16MB<22>
+0b1100 || psx.file_adrs<21:2> || 0b0 ImageROM 4MB<22>
+*/
+	reg_wr psx_Word<5>, psx_A<21>;
+
+	instruct psx.WRAM_READ par{
+		any{
+			(psx.Word==1) | (psx.Word==2) : par{
+				sdram_read(0b00000 || psx.A<20:1>, 1);
+			}
+			else : par{// byte 16,12,8,4 -> burst 8,6,4,2
+				sdram_read(0b00000 || psx.A<20:2> || 0b0, psx.Word<4:1>);
+			}
+		}
+		psx_Word := psx.Word;
+		psx_A := psx.A;
+count_cpu++;
+	}
+	if(sdram_ack) psx.wram_ack();
+
+	any{
+		((psx_Word==1) | (psx_Word==2)) & (psx_A<1>==0b1) : par{
+			psx.Din = sdram_dout << 16;
+		}
+		else : par{
+			psx.Din = sdram_dout;
+		}
+	}
+
+	instruct psx.WRAM_WRITE par{
+		any{
+			psx.Word==1 : any{
+				psx.A<0>==0b0 : sdram_write(0b00000 || psx.A<20:1>, 128#psx.Dout<7:0>,      0x0001, 1);
+				psx.A<0>==0b1 : sdram_write(0b00000 || psx.A<20:1>, (128#psx.Dout<7:0>)<<8, 0x0002, 1);
+			}
+			psx.Word==2 : par{
+				sdram_write(0b00000 || psx.A<20:1>, 128#psx.Dout<15:0>, 0x0003, 1);
+			}
+			else/*psx.Word==4*/ : sdram_write(0b00000 || psx.A<20:2> || 0b0, 128#psx.Dout, 0x000F, 2);
+		}
+count_cpu++;
+	}
+
+	instruct psx.BIOS_READ par{
+		any{
+			(psx.Word==1) | (psx.Word==2) : par{
+				sdram_read(0b0100000 || psx.A<18:1>, 1);
+			}
+			else : par{// byte 4 -> burst 2
+				sdram_read(0b0100000 || psx.A<18:2> || 0b0, 2);//psx.Word<4:1>);
+			}
+		}
+		psx_Word := psx.Word;
+		psx_A := psx.A;
+count_cpu++;
+	}
+	if(sdram_ack) psx.bios_ack();
+
+	reg_wr gpu_read_wait_ack, gpu_write_wait_ack;
+	reg_wr spu_wait_ack;
+
+	reg_wr f_sdram_read_vram;
+	reg_wr vram_read_adrs<19>, vram_read_data_buf<32>, vram_read_data_buf_valid;
+	reg_wr vram_write_adrs<19>, vram_write_data_buf<16>, vram_write_data_buf_valid;
+
+	alt{
+		// テクスチャ描画時にアクセスがくるので、img読み込みアクセスと排他制御する
+		gpu_read_wait_ack | gpu_write_wait_ack |
+		spu_wait_ack /*| psx.file_read_req*/ | ^sdram_ack : ;
+/*
+		psx.vram_read_req : par{
+// ランダム読み出しありと思われる
+// テクスチャキャッシュはシーケンシャル
+// adrs<0>
+// n0(r) s0(c)
+// n0(r) s1(c)
+// n1(r)
+			if(psx.vram_adrs<18:1>!=vram_read_adrs<18:1>){
+				sdram_read(0b000010 || psx.vram_adrs<18:1> || 0b0, 2);
+count_gpu++;
+			}
+			vram_read_adrs := psx.vram_adrs;
+			f_sdram_read_vram := sdram_read;
+			gpu_read_wait_ack := 0b1;
+		}
+*/
+/*
+		psx.vram_write_req : par{
+// シーケンシャル書き込みのみ想定
+// write
+// adrs<0>
+// n0 wa f(w) 0011
+// n0(b) wa s1(w) 11bb
+// n0(b) wa s1f(w) 11bb
+// n1f(w) 1100
+// n1(w) 1100
+			if(psx.vram_adrs<0>==0b0){
+				// バッファ
+				if(vram_write_data_buf_valid){ // n0 n0
+					sdram_write(0b000010 || vram_write_adrs<18:1> || 0b0, 128#vram_write_data_buf, 0x0003, 1);
+					gpu_write_wait_ack := 0b1;
+count_gpu++;
+				}
+				vram_write_data_buf := psx.vram_write_data;
+				vram_write_data_buf_valid := 0b1;
+			}
+			else{
+				if(vram_write_data_buf_valid){
+					sdram_write(0b000010 || psx.vram_adrs<18:1> || 0b0, 128#(psx.vram_write_data||vram_write_data_buf), 0x000F, 2);
+					vram_write_data_buf_valid := 0b0;
+				}
+				else{
+					sdram_write(0b000010 || psx.vram_adrs<18:1> || 0b1, 128#psx.vram_write_data, 0x0003, 1);
+				}
+				gpu_write_wait_ack := 0b1;
+count_gpu++;
+			}
+			vram_write_adrs := psx.vram_adrs;
+		}
+*/
+
+		psx.vram_read_req : par{
+			sdram_read(0b000010 || psx.vram_adrs, 0b0 || psx.vram_burst);
+			gpu_read_wait_ack := 0b1;
+count_gpu++;
+		}
+
+		psx.vram_write_req : par{
+			sdram_write(0b000010 || psx.vram_adrs, 128#psx.vram_write_data, 0x0003, 1);
+			gpu_write_wait_ack := 0b1;
+count_gpu++;
+		}
+
+/*
+		psx.spu_mem_read_req : par{
+halt(0x95);
+			sdram_read_L(0b000100||psx.spu_mem_A);
+			spu_wait_ack := 0b1;
+		}
+
+		psx.spu_mem_write_req : par{
+halt(0x96);
+			sdram_write_L(0b000100||psx.spu_mem_A, 0x0000||psx.spu_mem_Din, 0b0011);
+			spu_wait_ack := 0b1;
+		}
+*/
+	}
+
+	psx.vram_read_data = sdram_dout<63:0>;
+
+/*
+	if(vram_read_data_buf_valid){
+		any{
+			vram_read_adrs<0>==0b0 : psx.vram_read_data = vram_read_data_buf<15:0>;
+			vram_read_adrs<0>==0b1 : psx.vram_read_data = vram_read_data_buf<31:16>;
+		}
+	}
+	else{
+		any{
+			vram_read_adrs<0>==0b0 : psx.vram_read_data = sdram_dout<15:0>;
+			vram_read_adrs<0>==0b1 : psx.vram_read_data = sdram_dout<31:16>;
+		}
+	}
+*/
+	if(gpu_read_wait_ack & sdram_ack){
+	//	if(f_sdram_read_vram) vram_read_data_buf := sdram_dout<31:0>;
+	//	vram_read_data_buf_valid := f_sdram_read_vram;
+		psx.vram_read_ack();
+		gpu_read_wait_ack := 0b0;
+	}
+/*
+	if(vram_write_data_buf_valid){
+		if(psx.vram_flush & sdram_ack){
+			sdram_write(0b000010 || vram_write_adrs<18:1> || 0b0, 128#vram_write_data_buf, 0x0003, 1);
+			vram_write_data_buf_valid := 0b0;
+			gpu_write_wait_ack := 0b1;
+count_gpu++;
+		}
+	}
+*/
+	if(gpu_write_wait_ack & sdram_ack){
+		psx.vram_write_ack();
+		gpu_write_wait_ack := 0b0;
+	}
+
+/*
+	psx.spu_mem_Dout = sdram_dout<15:0>;
+
+	if(spu_wait_ack){
+		if(sdram_ack){
+			psx.spu_mem_ack();
+			spu_wait_ack := 0b0;
+		}
+	}
+*/
+//	if(psx.sw_spu_off) psx.spu_mem_ack();
+
+	instruct psx.kernel_ok par{
+		exe_read_ok := 0b0;
+		generate exe_sdcard2ram.do();
+	//	generate kernel_sum.do();
+	}
+/*
+	stage kernel_sum {
+		reg_wr kA<16>;
+		first_state st1;
+		state st1 if(sdram_ack){
+			sdram_read(0);
+			kA := 4;
+			goto st2;
+		}
+		state st2 if(sdram.ack){
+			chksum += sdram_dout<31:24> + sdram.rdata<23:16> + sdram.rdata<15:8> + sdram.rdata<7:0>;
+			sdram.read(0b0000000000||kA<15:2>);
+			kA += 4;
+			if(kA==0) goto st3;
+		}
+		state st3 ;
+	}
+*/
+	stage bios_sdcard2ram {
+		first_state st_open;
+		state st_open if(fat.ack){
+		//	bA := 0;
+			fat.fopen(0x00);
+			goto st_preread;
+		}
+		state st_preread if(fat.ack){
+			fat.read();
+			bA++;
+			goto st_rw;
+		}
+		state st_rw if(fat.ack & sdram_ack){
+			sel adrs<19>;
+			adrs = bA - 1;
+			switch(adrs<1:0>){
+				case 0b00: d0 := fat.fdata;
+				case 0b01: d1 := fat.fdata;
+				case 0b10: d2 := fat.fdata;
+				case 0b11: sdram_write(0b0100000 || adrs<18:2> || 0b0, 128#(fat.fdata||d2||d1||d0), 0x000F, 2);
+			}
+			fat.read();
+			bA++;
+			if(bA==0) goto st_end;
+		}
+		state st_end if(sdram_ack){
+			generate wram_clear.do();
+			finish;
+		}
+	}
+
+	stage wram_clear {
+		reg_wr wA<19>;
+		first_state sst;
+		state sst par{
+		//	wA := 0; // kernel領域もクリアしておく
+			goto st1;
+		}
+		state st1 if(sdram_ack){
+			sdram_write(0b00000 || wA || 0b0, 128#0b0, 0x000F, 2);
+			wA++;
+			if(/&wA) goto st2;
+		}
+		state st2 if(sdram_ack){
+			if(psx.sw_cdrom_ctrl==0b00){ // for ROM-image
+				generate img_sdcard2ram.do();
+			}
+			else{ // for BIOS
+				generate vram_clear.do();
+			}
+			finish;
+		}
+	}
+
+	stage exe_sdcard2ram {
+		reg_wr text_end<21>; // 2MB
+		first_state st_open;
+		state st_open if(fat.ack){
+			fat.fopen(0x01);
+			goto st_hpre;
+		}
+		state st_hpre if(fat.ack){
+			fat.read();
+			goto st_head;
+		}
+		state st_head if(fat.ack){
+			reg_wr hA<12>; // 0x800
+			reg_wr text_sec_0<8>, text_sec_1<8>, text_sec_2<8>;
+			reg_wr text_size_0<8>, text_size_1<8>, text_size_2<8>;
+			psx.exe_set(hA, fat.fdata);
+			any{
+				hA==0x018 : text_sec_0 := fat.fdata;
+				hA==0x019 : text_sec_1 := fat.fdata;
+				hA==0x01A : text_sec_2 := fat.fdata;
+				hA==0x01B : tA := text_sec_2<4:0> || text_sec_1 || text_sec_0;
+				hA==0x01C : text_size_0 := fat.fdata;
+				hA==0x01D : text_size_1 := fat.fdata;
+				hA==0x01E : text_size_2 := fat.fdata;
+				hA==0x01F : text_end := tA + (text_size_2<4:0> || text_size_1 || text_size_0);
+			}
+			fat.read();
+			hA++;
+			if(hA==0x7FF) goto st_text;
+		}
+		state st_text if(fat.ack & sdram_ack){
+			switch(tA<1:0>){
+				case 0b00: d0 := fat.fdata;
+				case 0b01: d1 := fat.fdata;
+				case 0b10: d2 := fat.fdata;
+				case 0b11: sdram_write(0b00000 || tA<20:2> || 0b0, 128#(fat.fdata||d2||d1||d0), 0x000F, 2);
+			}
+			fat.read();
+			tA++;
+			if(tA==(text_end-1)) goto st_end;
+		//	if(/&tA) goto st_end; // 2MB最後まで無理やりロード(時間稼ぎのため)
+		}
+		state st_end if(sdram_ack){
+			generate vram_clear.do();
+			finish;
+		}
+	}
+
+	stage img_sdcard2ram {
+		first_state st_fopen;
+		state st_fopen if(fat.ack){
+			fat.fopen(0x02);
+			goto st_preread;
+		}
+		state st_preread if(fat.ack){
+			fat.read();
+			goto st_rw;
+		}
+		state st_rw if(fat.ack & sdram_ack){
+		//	sdram_write(0b110 || iA, 128#fat.fdata, 0x0001, 1); // 1NG?
+			sdram_write(0b11 || iA || 0b0, 128#fat.fdata, 0x0001, 2); // 一応2にしとく
+
+			switch(iA<1:0>){
+				case 0b00: d0 := fat.fdata;
+				case 0b01: d1 := fat.fdata;
+				case 0b10: d2 := fat.fdata;
+			//	case 0b11: sdram_write(0b1100 || iA<21:2> || 0b0, 128#(fat.fdata||d2||d1||d0), 0x000F, 2);
+			}
+
+			fat.read();
+			iA++;
+		//	if(fat.eof) goto st_end;
+			if(/&iA) goto st_end;
+		}
+		state st_end if(sdram_ack){
+			generate img_read.do();
+			generate vram_clear.do();
+			finish;
+		}
+	}
+
+	stage img_read {
+		reg_wr img_read_error;
+		reg f_sdram_read_file, psx_file_adrs<22>=-1, img_dout_buf<32>;
+		first_state st_read;
+		par{
+			psx.file_error = img_read_error;
+		}
+		state st_read if(psx.file_read_req & sdram_ack
+			& ^psx.vram_read_req & ^psx.vram_write_req
+		//	& ^vram_read_data_buf_valid & ^vram_write_data_buf_valid
+			& ^psx.spu_mem_read_req & ^psx.spu_mem_write_req
+		){
+			alt{
+				/|psx.file_adrs<31:22> : img_read_error := 0b1; //halt(0x93);
+			//	(0b00||psx.file_adrs<21:0> - 0x37F350)<23>==0b0 : img_read_error := 0b1;
+				else : img_read_error := 0b0;
+			}
+		//	sdram_read(0b110 || psx.file_adrs<21:0>, 1); // 1NG?
+			sdram_read(0b11 || psx.file_adrs<21:0> || 0b0, 2); // 一応2にしとく
+		//	sdram_read(0b11 || psx.file_adrs<21:0> || 0b0, 1); //
+
+		//	if(psx.file_adrs<21:2>!=psx_file_adrs<21:2>){
+			//	sdram_read(0b1100 || psx.file_adrs<21:2> || 0b0, 2);
+				psx_file_adrs := psx.file_adrs<21:0>;
+count_cdr++;
+		//	}
+			f_sdram_read_file := sdram_read;
+
+			goto st_data;
+		}
+		state st_data if(sdram_ack){
+			psx.file_data = sdram_dout<7:0>;
+/*
+			if(f_sdram_read_file){
+				switch(psx.file_adrs<1:0>){
+					case 0b00: psx.file_data = sdram_dout< 7: 0>;
+					case 0b01: psx.file_data = sdram_dout<15: 8>;
+					case 0b10: psx.file_data = sdram_dout<23:16>;
+					case 0b11: psx.file_data = sdram_dout<31:24>;
+				}
+				img_dout_buf := sdram_dout<31:0>;
+			}
+			else{
+				switch(psx.file_adrs<1:0>){
+					case 0b00: psx.file_data = img_dout_buf< 7: 0>;
+					case 0b01: psx.file_data = img_dout_buf<15: 8>;
+					case 0b10: psx.file_data = img_dout_buf<23:16>;
+					case 0b11: psx.file_data = img_dout_buf<31:24>;
+				}
+			}
+*/
+			psx.file_ack();
+			goto st_read;
+		}
+	}
+
+	stage vram_clear {
+		first_state st1;
+		state st1 par{
+			// Sound RAM clear
+			reg_wr sA<18>; // 256kW(512kB)
+		//	sram.write(0b00||sA, 0x0000, 0b11);
+			sA++;
+			if(/&sA) goto st2;
+		}
+		state st2 par{
+			// Video RAM clear
+			reg_wr vA<15>;
+		//	vram.write(vA, 16#0b0);
+			vA++;
+			if(/&vA) goto st3;
+		}
+		state st3 par{
+			exe_read_ok := 0b1;
+			finish;
+		}
+	}
+
+}
