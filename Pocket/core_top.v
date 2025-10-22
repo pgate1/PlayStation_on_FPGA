@@ -295,13 +295,14 @@ assign dram_ras_n = 'h1;
 assign dram_cas_n = 'h1;
 assign dram_we_n = 'h1;
 */
+/*
 assign sram_a = 'h0;
 assign sram_dq = {16{1'bZ}};
 assign sram_oe_n  = 1;
 assign sram_we_n  = 1;
 assign sram_ub_n  = 1;
 assign sram_lb_n  = 1;
-
+*/
 assign dbg_tx = 1'bZ;
 assign user1 = 1'bZ;
 assign aux_scl = 1'bZ;
@@ -311,17 +312,17 @@ assign vpll_feed = 1'bZ;
 // for bridge write data, we just broadcast it to all bus devices
 // for bridge read data, we have to mux it
 // add your own devices here
-always @(*) begin
-    casex(bridge_addr)
-    default: begin
-        // all unmapped addresses are zero
-        bridge_rd_data <= 0;
-    end
-    32'hF8xxxxxx: begin
-        bridge_rd_data <= cmd_bridge_rd_data;
-    end
-    endcase
-end
+	always @(*) begin
+		casex(bridge_addr)
+		default: begin
+			// all unmapped addresses are zero
+			bridge_rd_data <= 0;
+		end
+		32'hF8xxxxxx: begin
+			bridge_rd_data <= cmd_bridge_rd_data;
+		end
+		endcase
+	end
 
 
 //
@@ -332,8 +333,8 @@ end
     
 // bridge host commands
 // synchronous to clk_74a
-    wire            status_boot_done = pll_core_locked; 
-    wire            status_setup_done = pll_core_locked; // rising edge triggers a target command
+    wire            status_boot_done = pll_core_locked_s; 
+    wire            status_setup_done = pll_core_locked_s; // rising edge triggers a target command
     wire            status_running = reset_n; // we are running as soon as reset_n goes high
 
     wire            dataslot_requestread;
@@ -382,7 +383,9 @@ end
 
     reg             target_dataslot_read;       
     reg             target_dataslot_write;
-
+    reg             target_dataslot_getfile;    // require additional param/resp structs to be mapped
+    reg             target_dataslot_openfile;   // require additional param/resp structs to be mapped
+    
     wire            target_dataslot_ack;        
     wire            target_dataslot_done;
     wire    [2:0]   target_dataslot_err;
@@ -391,6 +394,9 @@ end
     reg     [31:0]  target_dataslot_slotoffset;
     reg     [31:0]  target_dataslot_bridgeaddr;
     reg     [31:0]  target_dataslot_length;
+    
+    wire    [31:0]  target_buffer_param_struct; // to be mapped/implemented when using some Target commands
+    wire    [31:0]  target_buffer_resp_struct;  // to be mapped/implemented when using some Target commands
     
 // bridge data slot access
 // synchronous to clk_74a
@@ -459,7 +465,9 @@ core_bridge_cmd icb (
     
     .target_dataslot_read       ( target_dataslot_read ),
     .target_dataslot_write      ( target_dataslot_write ),
-
+    .target_dataslot_getfile    ( target_dataslot_getfile ),
+    .target_dataslot_openfile   ( target_dataslot_openfile ),
+    
     .target_dataslot_ack        ( target_dataslot_ack ),
     .target_dataslot_done       ( target_dataslot_done ),
     .target_dataslot_err        ( target_dataslot_err ),
@@ -469,6 +477,9 @@ core_bridge_cmd icb (
     .target_dataslot_bridgeaddr ( target_dataslot_bridgeaddr ),
     .target_dataslot_length     ( target_dataslot_length ),
 
+    .target_buffer_param_struct ( target_buffer_param_struct ),
+    .target_buffer_resp_struct  ( target_buffer_resp_struct ),
+    
     .datatable_addr         ( datatable_addr ),
     .datatable_wren         ( datatable_wren ),
     .datatable_data         ( datatable_data ),
@@ -487,6 +498,7 @@ core_bridge_cmd icb (
 //  wire            ram1_word_busy;
 
 	reg             bram_word_wr;
+	reg             sram_word_wr;
 
    reg     [2:0]   reload_state;
    reg             ram_reloading;
@@ -496,16 +508,19 @@ core_bridge_cmd icb (
    wire    [31:0]  target_bridgeaddr;
    wire    [31:0]  target_length;
    
-   reg set_sdram_in, set_bram_in;
+   reg set_sdram_in, set_bram_in, set_sram_in;
    
    wire set_sdram, set_sdram_s, set_sdram_r;
 synch_3 s_setsdram(set_sdram, set_sdram_s, clk_74a, set_sdram_r);
    wire set_bram, set_bram_s, set_bram_r;
 synch_3 s_setbram(set_bram, set_bram_s, clk_74a, set_bram_r);
+   wire set_sram, set_sram_s, set_sram_r;
+synch_3 s_setsram(set_sram, set_sram_s, clk_74a, set_sram_r);
 
 initial begin
 	set_sdram_in <= 0;
 	set_bram_in <= 0;
+	set_sram_in <= 0;
 
     ram_reloading <= 0;
     
@@ -514,110 +529,111 @@ initial begin
 end
 
 
-always @(posedge clk_74a) begin
-    ram1_word_wr <= 0;
-    bram_word_wr <= 0;
-    // handle memory mapped I/O from pocket
+	always @(posedge clk_74a) begin
+		ram1_word_wr <= 0;
+		bram_word_wr <= 0;
+		sram_word_wr <= 0;
+		// handle memory mapped I/O from pocket
 
-    if(bridge_wr) begin
-        casex(bridge_addr[31:24])
-        8'b000000xx: begin
-            // 64mbyte sdram mapped at 0x0
+		if(bridge_wr) begin
+			casex(bridge_addr[31:24])
+			8'b000000xx: begin
+				// 64mbyte sdram mapped at 0x0
 
-            // the ram controller's word port is 32bit aligned
-            if(set_sdram_in) ram1_word_wr <= 1;
-            if(set_bram_in) bram_word_wr <= 1;
+				// the ram controller's word port is 32bit aligned
+				if(set_sdram_in) ram1_word_wr <= 1;
+				if(set_bram_in) bram_word_wr <= 1;
+				if(set_sram_in) sram_word_wr <= 1;
 
-            ram1_word_wrmask <= 2'b00;
-            ram1_word_addr <= bridge_addr[25:2];
-            ram1_word_data <= bridge_wr_data;
-        end
-        endcase
-    end
+				ram1_word_wrmask <= 2'b00;
+				ram1_word_addr <= bridge_addr[25:2];
+				ram1_word_data <= bridge_wr_data;
+			end
+			endcase
+		end
 
-    case(reload_state)
-    0: begin
-        if(set_sdram_r | set_bram_r) begin
-        	if(set_sdram_r) set_sdram_in <= 1;
-        	if(set_bram_r) set_bram_in <= 1;
+		case(reload_state)
+		0: begin
+			if(set_sdram_r | set_bram_r | set_sram_r) begin
+				if(set_sdram_r) set_sdram_in <= 1;
+				if(set_bram_r) set_bram_in <= 1;
+				if(set_sram_r) set_sram_in <= 1;
 
-            ram_reloading <= 1;
+				ram_reloading <= 1;
 
-            // start the command
-            target_dataslot_id <= target_id;
-            target_dataslot_slotoffset <= target_slotoffset;
-            target_dataslot_bridgeaddr <= target_bridgeaddr;
-            target_dataslot_length <= target_length;
-            target_dataslot_read <= 1;
+				// start the command
+				target_dataslot_id <= target_id;
+				target_dataslot_slotoffset <= target_slotoffset;
+				target_dataslot_bridgeaddr <= target_bridgeaddr;
+				target_dataslot_length <= target_length;
+				target_dataslot_read <= 1;
 
-            reload_state <= 1;
-        end
-
-    end
-    1: begin
-        // wait for ack
-        if(target_dataslot_ack) begin
-            target_dataslot_read <= 0;
-        //    target_dataslot_write <= 0;
-            
-            reload_state <= 2;
-        end
-    end
-    2: begin
-        if(target_dataslot_done) begin
-        	set_sdram_in <= 0;
-        	set_bram_in <= 0;
-
-            ram_reloading <= 0;
-            
-            reload_state <= 0;
-        end
-    end
-    endcase
-
-end
+				reload_state <= 1;
+			end
+		end
+		1: begin
+			// wait for ack
+			if(target_dataslot_ack) begin
+				target_dataslot_read <= 0;
+			//	target_dataslot_write <= 0;
+				reload_state <= 2;
+			end
+		end
+		2: begin
+			if(target_dataslot_done) begin
+				set_sdram_in <= 0;
+				set_bram_in <= 0;
+				set_sram_in <= 0;
+				ram_reloading <= 0;
+				reload_state <= 0;
+			end
+		end
+    	endcase
+	end
 
    wire target_dataslot_read_s;
 synch_3 sread(target_dataslot_read, target_dataslot_read_s, clk_50);
    wire ram_reloading_s;
 synch_3 sreload(ram_reloading, ram_reloading_s, clk_50);
 
-
     wire word_wr_s, word_wr_r;
 synch_3 s3(ram1_word_wr, word_wr_s, dram_ctrl_clk, word_wr_r);
 
-
-	reg [1:0] bram_word_wr_hold;
+	reg [1:0] ram_word_wr_hold;
 always @(negedge reset_n or posedge clk_74a) begin
 	if(reset_n==1'b0) begin
-		bram_word_wr_hold <= 0;
+		ram_word_wr_hold <= 0;
 	end
-	else if(bram_word_wr) begin
-		bram_word_wr_hold <= 1;
+	else if(bram_word_wr | sram_word_wr) begin
+		ram_word_wr_hold <= 1;
 	end
-	else if(bram_word_wr_hold!=0) begin
-		bram_word_wr_hold <= bram_word_wr_hold + 1;
+	else if(ram_word_wr_hold!=0) begin
+		ram_word_wr_hold <= ram_word_wr_hold + 1;
 	end
 end
 
-	wire bram_word_wr_hold_s, bram_word_wr_hold_r;
-synch_3 swrhold(|bram_word_wr_hold, bram_word_wr_hold_s, clk_50, bram_word_wr_hold_r);
+	wire ram_word_wr_hold_s, ram_word_wr_hold_r;
+synch_3 swrhold(|ram_word_wr_hold, ram_word_wr_hold_s, clk_50, ram_word_wr_hold_r);
 
 	wire [15:0] key_s;
 synch_3 #(.WIDTH(16)) synch_controler(cont1_key[15:0], key_s, clk_50);
 
 ////////////////////////////////////////////////////////////////////////////////////////
 
-	wire [15:0] dram_Dout;
-	wire dram_Dout_En;
+	wire [15:0] dram_Din;
+	wire dram_Din_En;
 
-	wire sdram_write;
-	wire [23:0] sdram_adrs;
-	wire [31:0] sdram_wdata;
-	wire [3:0] sdram_enable;
-	wire sdram_read;
-	wire [31:0] sdram_rdata;
-	wire sdram_ack;
+	wire [24:0] core_sdram_adrs;
+	wire core_sdram_write;
+	wire [127:0] core_sdram_din;
+	wire [15:0] core_sdram_enable;
+	wire [3:0] core_sdram_burst;
+	wire core_sdram_read;
+	wire [127:0] sdram_dout;
+	wire sdram_ack_100;
+
+	wire [15:0] sram_Din;
+	wire sram_DEn;
 
 	core CU (
 		.p_reset(~reset_n),
@@ -625,45 +641,68 @@ synch_3 #(.WIDTH(16)) synch_controler(cont1_key[15:0], key_s, clk_50);
 //--------------------- Pad --------------------------------
 		.key(key_s),
 //--------------------- SDRAM Interface --------------------
-		.sdram_write(sdram_write), .sdram_wdata(sdram_wdata), .sdram_enable(sdram_enable),
-		.sdram_adrs(sdram_adrs), .sdram_read(sdram_read), .sdram_rdata(sdram_rdata),
-		.sdram_ack_100(sdram_ack),
-		
+		.sdram_write(core_sdram_write), .sdram_adrs(core_sdram_adrs), .sdram_din(core_sdram_din),
+		.sdram_enable(core_sdram_enable), .sdram_burst(core_sdram_burst),
+		.sdram_read(core_sdram_read), .sdram_dout(sdram_dout),
+		.sdram_ack_100(sdram_ack_100),
+//--------------------- SRAM -------------------------------
+		.SRAM_OEn(sram_oe_n), .SRAM_WEn(sram_we_n), .SRAM_UBn(sram_ub_n), .SRAM_LBn(sram_lb_n),
+		.SRAM_ADDR(sram_a), .SRAM_Din(sram_Din), .SRAM_DEn(sram_DEn), .SRAM_Dout(sram_dq),
 //--------------------- VGA --------------------------------
 		.VGA_HS(video_hs), .VGA_VS(video_vs), .VGA_DE(video_de),
 		.VGA_R(video_rgb[23:16]), .VGA_G(video_rgb[15:8]), .VGA_B(video_rgb[7:0]),
 		
-		.set_sdram(set_sdram), .set_bram(set_bram),
+		.set_sdram(set_sdram), .set_sram(set_sram),
 		.target_id(target_id), .target_slotoffset(target_slotoffset),
 		.target_bridgeaddr(target_bridgeaddr), .target_length(target_length),
-		.bram_word_wr(bram_word_wr_hold_r), .bram_wdata(ram1_word_data),
+	//	.bram_word_wr(ram_word_wr_hold_r), .bram_wdata(ram1_word_data),
+		.sram_word_wr(ram_word_wr_hold_r), .sram_wdata(ram1_word_data),
 		.target_dataslot_read(target_dataslot_read_s), .ram_reloading(ram_reloading_s)
 	);
 
 	assign dram_cke = 1'b1;
-	assign dram_dq = dram_Dout_En==1'b0 ? dram_Dout : 16'hzzzz;
+	assign dram_dq = dram_Din_En==1'b0 ? dram_Din : 16'hzzzz;
 
-	sdram32_burst2_ctrl_100 sdram_ctrl_inst (
+	wire sdram_write;
+	wire [24:0] sdram_adrs;
+	wire [127:0] sdram_din;
+	wire [15:0] sdram_enable;
+	wire [3:0] sdram_burst;
+	wire sdram_read;
+	
+	assign sdram_write = word_wr_r | core_sdram_write;
+	assign sdram_adrs = (word_wr_r ? {ram1_word_addr, 1'b0} : 25'b0) | ((core_sdram_write | core_sdram_read) ? core_sdram_adrs : 25'b0);
+	assign sdram_din = (word_wr_r ? {96'b0, ram1_word_data} : 128'b0) | (core_sdram_write ? core_sdram_din : 128'b0);
+	assign sdram_enable = (word_wr_r ? 16'h000F : 16'b0) | (core_sdram_write ? core_sdram_enable : 16'b0);
+	assign sdram_burst = (word_wr_r ? 2 : 0) | ((core_sdram_write | core_sdram_read) ? core_sdram_burst : 0);
+	assign sdram_read = core_sdram_read;
+
+	sdram128_burstn_ctrl_100 sdram_ctrl_inst (
 		.p_reset(~pll_core_locked),
 		.m_clock(dram_ctrl_clk),
 		.RASn(dram_ras_n),
 		.CASn(dram_cas_n),
 		.WEn(dram_we_n),
 		.DQM(dram_dqm),
-		.DEn(dram_Dout_En),
+		.DEn(dram_Din_En),
 		.BA(dram_ba),
 		.A(dram_a),
-		.Din(dram_dq),
-		.Dout(dram_Dout),
+		.Din(dram_Din),
+		.Dout(dram_dq),
 
-		.write(word_wr_r | sdram_write),
-		.wdata( ({32{word_wr_r}} & ram1_word_data) | ({32{sdram_write}} & sdram_wdata) ),
-		.adrs( ({24{word_wr_r}} & ram1_word_addr) | ({24{sdram_write | sdram_read}} & sdram_adrs) ),
-		.enable( ({4{word_wr_r}} & 4'b1111) | ({4{sdram_write}} & sdram_enable) ),
+		.write(sdram_write),
+		.adrs(sdram_adrs),
+		.din(sdram_din),
+		.enable(sdram_enable),
+		.burst(sdram_burst),
 		.read(sdram_read),
-		.rdata(sdram_rdata),
-		.ack(sdram_ack)
+		.dout(sdram_dout),
+		.manual_refresh(1'b0),
+		.refresh_go(1'b0),
+		.ack(sdram_ack_100)
 	);
+
+	assign sram_dq = sram_DEn==1'b0 ? sram_Din : 16'hzzzz;
 
 
 assign video_rgb_clock = clk_25;
@@ -675,6 +714,54 @@ assign video_skip = 0;//vidout_skip;
 //assign video_hs = vidout_hs;
 
 
+
+//
+// audio i2s silence generator
+// see other examples for actual audio generation
+//
+
+assign audio_mclk = audgen_mclk;
+assign audio_dac = audgen_dac;
+assign audio_lrck = audgen_lrck;
+
+// generate MCLK = 12.288mhz with fractional accumulator
+    reg         [21:0]  audgen_accum;
+    reg                 audgen_mclk;
+    parameter   [20:0]  CYCLE_48KHZ = 21'd122880 * 2;
+always @(posedge clk_74a) begin
+    audgen_accum <= audgen_accum + CYCLE_48KHZ;
+    if(audgen_accum >= 21'd742500) begin
+        audgen_mclk <= ~audgen_mclk;
+        audgen_accum <= audgen_accum - 21'd742500 + CYCLE_48KHZ;
+    end
+end
+
+// generate SCLK = 3.072mhz by dividing MCLK by 4
+    reg [1:0]   aud_mclk_divider;
+    wire        audgen_sclk = aud_mclk_divider[1] ;// synthesis keep;
+    reg         audgen_lrck_1;
+always @(posedge audgen_mclk) begin
+    aud_mclk_divider <= aud_mclk_divider + 1'b1;
+end
+
+// shift out audio data as I2S 
+// 32 total bits per channel, but only 16 active bits at the start and then 16 dummy bits
+//
+    reg     [4:0]   audgen_lrck_cnt;    
+    reg             audgen_lrck;
+    reg             audgen_dac;
+always @(negedge audgen_sclk) begin
+    audgen_dac <= 1'b0;
+    // 48khz * 64
+    audgen_lrck_cnt <= audgen_lrck_cnt + 1'b1;
+    if(audgen_lrck_cnt == 31) begin
+        // switch channels
+        audgen_lrck <= ~audgen_lrck;
+        
+    end 
+end
+
+
 ///////////////////////////////////////////////
 
 	wire clk_50;
@@ -682,6 +769,8 @@ assign video_skip = 0;//vidout_skip;
     wire clk_25;
     wire clk_25_90deg;
     wire pll_core_locked;
+    wire pll_core_locked_s;
+synch_3 s01(pll_core_locked, pll_core_locked_s, clk_74a);
 
 	main_pll_0002 mpll (
 		.refclk(clk_74a),
