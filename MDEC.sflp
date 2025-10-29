@@ -5,12 +5,21 @@
 
 circuit MDEC
 {
+	input DmaMADR_0<32>;
+
 	input din<32>;
 	instrin WriteCmd(din), WriteCtrl(din);
 	instrin ReadData, ReadStatus;
 	output dout<32>;
 
+	output wram_adrs<21>;
+	instrout wram_write(wram_adrs, wram_din);
+	output wram_din<32>;
+	instrin wram_ack;
+
 	reg_wr reg0<32>, reg1<32>;
+
+	reg_wr rl<21>;
 
 	instrin DMAin_Execute, DMAout_Execute;
 	output running;
@@ -18,6 +27,8 @@ circuit MDEC
 	instrin run33;
 	reg_wr count0_rst, count1_rst;
 	instrout mdec0_interrupt, mdec1_interrupt;
+
+	instrout end_of_data;
 
 	stage_name run_dma0 { task do(); }
 	stage_name int_wait0 { task do(count0_rst); }
@@ -44,7 +55,6 @@ circuit MDEC
 		dout = reg1;
 	}
 
-
 	running = run_dma0.do | run_dma1.do;
 
 	instruct DMAin_Execute par{
@@ -62,18 +72,20 @@ circuit MDEC
 			goto st2;
 		}
 		state st2 par{
-			switch(reg0<31:28>){
-				case 3: par{
-					reg1 |= 0x20000000;
-				}
-				case 4: par{
-					generate int_wait0.do(1);
-				}
-				case 6: par{
-					generate int_wait0.do(1);
-				}
-				default: par{
+			switch(reg0<31:29>){
+				case 0: par{
 					mdec0_interrupt();
+				}
+				case 1: par{
+					// & 0x001FFFFF
+					rl := DmaMADR_0<20:0>;
+					reg1 |= 0x20000000; // BUSY
+				}
+				case 2: par{
+					generate int_wait0.do(1);
+				}
+				case 3: par{
+					generate int_wait0.do(1);
 				}
 			}
 
@@ -105,10 +117,18 @@ circuit MDEC
 		first_state st1;
 		state st1 par{
 			if(reg1<29>==0b0){
+				finish;
 			}
 			else{
-				generate int_wait1.do(1);
+				wram_write(rl, 0xFE000400);
+				goto st2;
 			}
+		}
+		state st2 if(wram_ack){
+			end_of_data();
+			reg1 &= ^0x20800000;
+			generate int_wait1.do(1);
+			goto st1;
 			finish;
 		}
 	}

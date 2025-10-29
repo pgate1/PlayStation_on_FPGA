@@ -178,9 +178,9 @@ dbg32 = cdr.dbg32;//dbg32_reg;dma_CDR.dbg32;cpu.dbg32;
 	peripheral_running =
 		(dma_GPU.running /*& (gpu.ref_dma_direction!=0b00) & ^gpu.drawing*/) |
 		(/*(gpu.ref_dma_direction==0b00) &*/ gpu.drawing) | gpu.vram_busy |
-		mdec.running |
 		dma_CDR.running | dma_SPU.running | dma_OTC.running |
 		cdr.running | pad.running |
+		mdec.running |
 		ir_cache.doing | ir_cache_read.do /*| ir_cache_write.do*/ | cpu_read.do | cpu_write.do |
 		read_wram_wait.do | read_bios_wait.do | read_io_wait.do |
 		read_gpu_wait.do | read_cdr_wait.do |
@@ -275,24 +275,6 @@ if(spu.halt_code!=0) dbg_reg := spu.dbg;
 	demo.voice_L = voice_L;
 	demo.voice_R = voice_R;
 #endif
-
-	instruct mdec.mdec0_interrupt par{
-		// mdec0Interrupt()
-		DmaCHCR_0 &= ^0x01000000;
-		if(DmaDICR<16>){
-			DmaDICR |= 0x01000000;
-			IREG |= 0x0008;
-		}
-	}
-
-	instruct mdec.mdec1_interrupt par{
-		// mdec1Interrupt()
-		DmaCHCR_1 &= ^0x01000000;
-		if(DmaDICR<17>){
-			DmaDICR |= 0x02000000;
-			IREG |= 0x0008;
-		}
-	}
 
 	dma_GPU.DmaMADR_2 = DmaMADR_2;
 	dma_GPU.DmaBCR_2 = DmaBCR_2;
@@ -401,8 +383,34 @@ dbg_cdr = cdr.dbg_irq;
 	instruct pad.interrupt_off par{
 		IREG &= ^0x0080;
 	}
-pad.dbg_in = dbg_in;
-dbg_pad = pad.dbg;
+
+	mdec.DmaMADR_0 = DmaMADR_0;
+//	mdec.DmaBCR_0 = DmaBCR_0;
+	instruct mdec.wram_write WRAM_WRITE(mdec.wram_adrs, mdec.wram_din, 4);
+	instruct wram_ack mdec.wram_ack();
+	instruct mdec.mdec0_interrupt par{
+		// mdec0Interrupt()
+		DmaCHCR_0 &= ^0x01000000;
+		if(DmaDICR<16>){
+			DmaDICR |= 0x01000000;
+			IREG |= 0x0008;
+		}
+	}
+	instruct mdec.end_of_data par{
+		DmaCHCR_0 &= ^0x01000000;
+		if(DmaDICR<16>){
+			DmaDICR |= 0x01000000;
+			IREG |= 0x0008;
+		}
+	}
+	instruct mdec.mdec1_interrupt par{
+		// mdec1Interrupt()
+		DmaCHCR_1 &= ^0x01000000;
+		if(DmaDICR<17>){
+			DmaDICR |= 0x02000000;
+			IREG |= 0x0008;
+		}
+	}
 
 #ifdef DEMO
 	instruct demo.gpu_write_req gpu.WriteData(demo.Dout);
