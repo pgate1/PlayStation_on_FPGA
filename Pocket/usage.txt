@@ -64,8 +64,10 @@ The game won't start after the PS logo.
   -> The movie is probably being processed, so hit the Start button repeatedly after the PS logo to skip the movie. If you time it right, you might be able to skip the movie.
      If it still doesn't start, it's still not supported.
 
-During play, a red line appeared on all four sides and the game stopped.
+During play, red or white line appeared on all four sides and the game stopped.
   -> PlayStatoin Core has issued a HALT code. Insufficient functionality. Sorry.
+     Red lines : CPU runaway for unknown reasons.
+     White lines : Some feature implementation is missing.
 
 
 2023/11/28 pgate1

@@ -128,9 +128,13 @@ circuit core
 	vga_vsync_reg := vga.v_sync; VGA_VS = vga_vsync_reg;
 
 	if(((vga.h_count==10) | (vga.h_count==630) |
-	   (vga.v_count==10) | (vga.v_count==470)) & /|psx.halt_code){
-	//	vga.iR = 0xFF; vga.iG = 0xFF; vga.iB = 0xFF;
-		vga.iR = 0xFF; vga.iG = 0x00; vga.iB = 0x00;
+	    (vga.v_count==10) | (vga.v_count==470)) & /|psx.halt_code){
+		if(psx.halt_part<7>){ // CPU–\‘–
+			vga.iR = 0xFF; vga.iG = 0x00; vga.iB = 0x00;
+		}
+		else{ // ‚»‚êˆÈŠO‚Ì’âŽ~
+			vga.iR = 0xFF; vga.iG = 0xFF; vga.iB = 0xFF;
+		}
 	}
 	else{
 		vga.iR = view_ram.out_R || view_ram.out_R<4:2>;
