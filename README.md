@@ -64,19 +64,20 @@ Here's a list of games that work a little. There may be other games that work as
 - Einhander
 - Ridge Racer
 - Tobal No.1
-- Ace Combat 2
-- XI
-- Vagrant Story
-- Love & Destroy
 - iS internal section
 - Saga Frontier 2
 - Dewprism
-- Metal Gear Solid Integral VR disc
-- Ray Storm
+- Vagrant Story
+- RayStorm
 - Raycrisis
 - Rockman X4
 - Rockman X5
 - Rockman X6
+
+- Ace Combat 2
+- XI
+- Love & Destroy
+- Metal Gear Solid Integral VR disc
 - Valkyrie Profile
 - Omega Boost
 - Final Fantasy Tactics
