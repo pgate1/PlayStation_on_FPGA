@@ -46,7 +46,6 @@ The FPS is low because the main memory and VRAM are shared.
 6. Have fun until your Pocket's battery runs out.
 
 If it works happily, please take a video of it and upload it to Twitter. I will be delighted.
-/* Select button? to enter disable texture cache mode. */
 
 
 * What to do when it doesn't work.
