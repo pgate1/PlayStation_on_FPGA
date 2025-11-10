@@ -62,8 +62,6 @@ circuit core
 	sel halt_sel<8>;
 	reg_wr halt_code<8>;
 
-reg_wr dbg_reg<32>;
-
 	stage_name apf2sdram { task do(target_id_reg, target_slotoffset_reg, target_bridgeaddr_reg, target_length_reg); }
 	stage_name check_file { task do(); }
 	stage_name wram_clear { task do(); }
@@ -92,7 +90,6 @@ reg_wr dbg_reg<32>;
 	sel vj_data<32>;
 	if(radrs<2>==0b0) vj_data = 0x00 || fps || halt_code || psx.halt_code;
 	if(radrs<2>==0b1) vj_data = psx.dbg;
-//	vj_data = dbg_reg;
 	instruct vjtag.send_init par{
 		radrs := 0;
 	}
@@ -228,7 +225,7 @@ psx.sw_spuenv_off();
 	if(key<9> & ^key_9_push) key_9_push := 0b1;
 	if(key_9_push & ^key<9>){ key_9_push := 0b0; key_9_hold := ^key_9_hold; }
 //	if(key_14_hold) psx.sw_texture_off();
-	if(key_14_hold /*& key_9_hold*/) psx.sw_texcache_off();
+	if(key_14_hold /*& key_9_hold*/) ;//psx.sw_texcache_off();
 
 /*
 SDRAM 64MB 16bit 32Mword<25>
@@ -378,10 +375,6 @@ halt(0x96);
 		}
 	}
 
-// bin 0x12345678
-// wdata 78 56 34 12
-// sram0 34 12
-// sram2 78 56
 	stage check_file {
 		first_state st1;
 		state st1 par{
@@ -390,9 +383,6 @@ halt(0x96);
 			goto st2;
 		}
 		state st2 if(^apf2sram.do & sram.ack){
-// 0 0x5350
-// 1 0x2D53
-// 2 0x582D
 			if(sram.dout==0x3C08) f_bios := 0b1; // 0x1300083C
 			if(sram.dout==0x582D) f_exe := 0b1; // "PS-X" 0x50532D58
 			generate wram_clear.do();
@@ -494,7 +484,7 @@ halt(0x96);
 	}
 
 	stage exe_read {
-		reg_wr text_start<21>, text_size<21>; // ram 2MB
+		reg text_start<21>, text_size<21>; // ram 2MB
 		first_state st_open;
 		state st_open par{
 			generate apf2sram.do(0x0040, 0, 0x00000100);
