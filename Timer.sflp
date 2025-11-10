@@ -107,8 +107,7 @@ circuit Timer
 				}
 			}
 			if(index==3){
-			//	if(hSyncCount==270){ // IRキャッシュオフでも通る
-				if(hSyncCount==263){ // IRキャッシュオフ時に無効命令
+				if(hSyncCount==240){
 					hSyncCount := 1;
 					irq_out();
 				}

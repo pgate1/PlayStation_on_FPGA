@@ -12,7 +12,7 @@ circuit GraphicProcessingUnit
 {
 	input din<32>;
 	output dout<32>;
-	reg_wr dout_reg<32>;
+	reg dout_reg<32>;
 	instrout read_ack;
 
 	instrin read_status;

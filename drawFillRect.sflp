@@ -36,7 +36,7 @@ circuit drawFillRect
 
 	// VRAM
 	output vram_write_adrs<19>, vram_write_data<16>;
-	reg_wr vram_write_adrs_reg<19>, vram_write_data_reg<16>;
+	reg vram_write_adrs_reg<19>, vram_write_data_reg<16>;
 	instrself vram_write(vram_write_adrs, vram_write_data);
 	instrout vram_write_req;
 	instrin vram_ack;

@@ -3,14 +3,6 @@
 		by pgate1
 */
 
-declare mul_u16 interface
-{
-	input a<16>, b<16>;
-	output dout<32>;
-	instrin con;
-	instr_arg con(a, b);
-}
-
 circuit DMA_SPU
 {
 	input DmaMADR_4<32>, DmaBCR_4<32>;
@@ -18,10 +10,10 @@ circuit DMA_SPU
 	output A<21>;
 	instrout wram_read(A);
 	input Din<32>;
-	reg_wr Din_reg<32>;
+	reg Din_reg<32>;
 
 	output Dout<16>;
-	reg_wr Dout_reg<16>;
+	reg Dout_reg<16>;
 	instrself spu_dma_write(Dout);
 	instrout spu_dma_write_req;
 	instrin spu_dma_ack;
@@ -34,9 +26,8 @@ circuit DMA_SPU
 	reg_wr count_rst;
 	instrout interrupt;
 
-	mul_u16 size_mul;
 	sel dma_size<32>;
-	reg_wr bcr<32>;
+	reg bcr<16>;
 
 	stage_name run { task do(); }
 	stage_name int_wait { task do(count_rst); }
@@ -66,8 +57,7 @@ circuit DMA_SPU
 //カーネル実行では使用していない
 	stage run {
 		reg_wr wait_count<5>;
-		reg_wr madr<21>;
-		reg_wr dma_count<32>;
+		reg madr<21>, dma_count<16>;
 		first_state st1;
 		state st1 par{
 			// uint32 madr = DmaMADR[n] & 0x1FFFFF;
@@ -112,16 +102,16 @@ circuit DMA_SPU
 	}
 
 	stage int_wait {
-		reg_wr int_wait_count<8>;
+		reg int_wait_count<8>;
 		first_state st1;
 		state st1 par{
-			int_wait_count := 0;
+			int_wait_count := 32;
 			count_rst := 0b0;
-			goto st2;
+			if(count_rst) goto st2;
 		}
 		state st2 if(run33){
-			int_wait_count++;
-			if(int_wait_count==16){
+			int_wait_count--;
+			if(int_wait_count==0){
 				interrupt();
 				goto st1;
 				finish;

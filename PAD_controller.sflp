@@ -105,7 +105,7 @@ dbg16 = dbg16_reg;
 					parp==132 : data = 0x00;
 					parp==133 : data = 0x47;
 					else : data = 0x00;
-				} 
+				}
 				bufcount==131 : any{
 					parp<7:1>==0b0000000 : data = data_buf[parp<2:0>];
 					parp==129 : data = 0x5C;
@@ -368,16 +368,16 @@ dbg16 = dbg16_reg;
 	}
 
 	stage interrupt_wait {
-		reg_wr int_wait_count<19>;
+		reg int_wait_count<19>;
 		first_state st1;
 		state st1 par{
-			int_wait_count := 0;
+			int_wait_count := BaudReg || 0b000;
 			count_rst := 0b0;
-			goto st2;
+			if(count_rst) goto st2;
 		}
 		state st2 if(run33){
-			int_wait_count++;
-			if(int_wait_count==(BaudReg||0b000)){
+			int_wait_count--;
+			if(int_wait_count==0){
 				StatReg |= 0x0200; //IRQ;
 				interrupt_out();
 				goto st1;

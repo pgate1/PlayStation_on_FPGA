@@ -18,7 +18,8 @@ circuit DMA_CDR
 	output running;
 
 	instrin run33;
-	reg_wr int_wait_max<32>, count_rst;
+	sel int_wait_max<16>;
+	reg_wr count_rst;
 	instrout interrupt;
 //	output int_waiting;
 
@@ -29,11 +30,13 @@ sel h_code<8>;
 reg_wr halt_code_reg<8>;
 output halt_code<8>;
 
-output dbg32<32>;
-reg_wr dbg32_reg<32>;
+output dbg<32>;
+reg_wr dbg_reg<32>;
+output dbg_sum<32>;
+reg_wr sum<32>;
 
 	stage_name run_dma { task do(); }
-	stage_name int_wait { task do(int_wait_max, count_rst); }
+	stage_name int_wait { task do(count_rst); }
 
 	instruct halt halt_code_reg := h_code;
 	halt_code = halt_code_reg;
@@ -43,69 +46,60 @@ dbg32 = dbg32_reg;
 	running = /*Execute |*/ run_dma.do;
 
 	instruct Execute par{
-//if(int_wait.do) halt(0xB3);
 		generate run_dma.do();
 	}
 
 	dma_size = DmaBCR_3<15:0> || 0b00;
 
+	any{
+		DmaCHCR_3==0x11000000 : int_wait_max = dma_size<17:2>;
+		DmaCHCR_3==0x11400100 : int_wait_max = dma_size<17:2> >> 2;
+	}
+
 	stage run_dma {
-		reg_wr madr<21>, dma_count<18>;
+		reg madr<21>, dma_count<18>;
 		mem dma_data[4]<8>;
-		first_state st1;
-		state st1 par{
-/*
-			if((DmaMADR_3<31:28>==0x0) | (DmaMADR_3<31:28>==0x8) | (DmaMADR_3<31:28>==0xA));
-			else halt(0xB4);
-*/
+		first_state st_init;
+		state st_init par{
 			madr := DmaMADR_3<20:0>;
 			dma_count := 0;
-			goto st2;
+			goto st_read;
 		}
-		state st2 par{
-//if(dma_size!=2048) halt(0xB5);
+		state st_read par{
 			dma_read_req();
-			goto st2w;
+			goto st_readw;
 		}
-		state st2w par{
+		state st_readw par{
 			any(i=0;i<4;i++){
 				dma_count<1:0>==i : dma_data[i] := dma_read_data;
 			}
 			dma_count++;
-			goto st3;
+			goto st_write;
 		}
-		state st3 if(wram_ack){
+		state st_write if(wram_ack){
 			if(madr<1:0>==3) wram_write(madr, dma_data[3]||dma_data[2]||dma_data[1]||dma_data[0]);
 			madr++;
-			goto st3w;
+			if(dma_count==dma_size) goto st_end;
+			else goto st_read;
 		}
-		state st3w if(wram_ack){
-			if(dma_count==dma_size) goto st4;
-			else goto st2;
-		}
-		state st4 par{
-			sel wait_count<16>;
-			any{
-				DmaCHCR_3==0x11000000 : wait_count = 8;// dma_size<17:2>;
-				DmaCHCR_3==0x11400100 : wait_count = 2;// 0b00 || dma_size<17:4>;
-			}
-			generate int_wait.do(0x0000||wait_count, 0b1);
-			goto st1;
+		state st_end if(wram_ack){
+			generate int_wait.do(0b1);
+			goto st_init;
 			finish;
 		}
 	}
 
 	stage int_wait {
-		reg_wr int_wait_count<32>;
+		reg int_wait_count<16>;
 		first_state st1;
 		state st1 par{
-			int_wait_count := 0;
+			int_wait_count := int_wait_max;
 			count_rst := 0b0;
-			goto st2;
+			if(count_rst) goto st2;
 		}
 		state st2 if(run33){
-			int_wait_count++;
-			if(int_wait_count==int_wait_max){
+			int_wait_count--;
+			if(int_wait_count==0){
 				interrupt();
 				goto st1;
 				finish;

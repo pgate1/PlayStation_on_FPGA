@@ -15,7 +15,8 @@ circuit DMA_OTC
 	output running;
 
 	instrin run33;
-	reg_wr int_wait_max<32>, count_rst;
+	sel int_wait_max<16>;
+	reg_wr count_rst;
 	instrout interrupt;
 	output int_waiting;
 
@@ -29,7 +30,7 @@ output dbg<32>;
 //input dbg_in<16>;
 
 	stage_name run_dma { task do(); }
-	stage_name int_wait { task do(int_wait_max, count_rst); }
+	stage_name int_wait { task do(count_rst); }
 
 	running = 
 	//	Execute |
@@ -41,19 +42,19 @@ output dbg<32>;
 //dbg = 0x0000||count;
 
 	instruct Execute par{
-//if(int_wait.do) halt(0xB1);
-//if(run_dma.do) halt(0xB2);
 		generate run_dma.do();
 	}
+
+	int_wait_max = DmaBCR_6<15:0>;
 
 	int_waiting = int_wait.do;
 
 	stage run_dma {
-		reg_wr bcr<32>, madr<21>;
+		reg bcr<16>, madr<21>;
 		first_state st1;
 		state st1 par{
 			madr := DmaMADR_6<20:0>;
-			bcr := DmaBCR_6;
+			bcr := DmaBCR_6<15:0>;
 			if(DmaBCR_6==0) goto st3;
 			else goto st2;
 		}
@@ -68,24 +69,23 @@ output dbg<32>;
 			goto st4;
 		}
 		state st4 if(wram_ack){
-//if(DmaBCR_6<31>) halt(0x48);
-			generate int_wait.do(4/*DmaBCR_6*/, 0b1);
+			generate int_wait.do(0b1);
 			goto st1;
 			finish;
 		}
 	}
 
 	stage int_wait {
-		reg_wr int_wait_count<32>;
+		reg int_wait_count<16>;
 		first_state st1;
 		state st1 par{
-			int_wait_count := 0;
+			int_wait_count := int_wait_max;
 			count_rst := 0b0;
-			goto st2;
+			if(count_rst) goto st2;
 		}
 		state st2 if(run33){
-			int_wait_count++;
-			if(int_wait_count==int_wait_max){
+			int_wait_count--;
+			if(int_wait_count==0){
 				interrupt();
 				goto st1;
 				finish;

@@ -27,11 +27,11 @@ circuit GeometryTransformationEngine
 	input rt_data<32>, rd<5>, op<32>;
 	instrin MFC2(rd), CFC2(rd), MTC2(rt_data, rd), CTC2(rt_data, rd);
 	output dout<32>;
-	reg_wr dout_reg<32>;
+	reg dout_reg<32>;
 
 	instrin RTPS, RTPT, MVMVA, DPCS, DPCT, INTPL, SQR, NCS, NCT, NCDS, NCDT, NCCS, NCCT, CC, NCLIP, AVSZ3, AVSZ4, OP, GPF, GPL;
 
-	reg_wr rt_value<32>, rd_reg<5>;
+	reg rt_value<32>, rd_reg<5>;
 	output running;
 
 	reg_ws reset;

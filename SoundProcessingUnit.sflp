@@ -18,7 +18,7 @@ circuit SoundProcessingUnit
 	instrin dma_write_req(dma_din);
 	instrout mem_write_req(mem_A, mem_Din);
 	output mem_A<18>, mem_Din<16>;
-	reg_wr mem_A_reg<18>, mem_Din_reg<16>;
+	reg mem_A_reg<18>, mem_Din_reg<16>;
 	instrin mem_ack;
 	instrout dma_ack;
 

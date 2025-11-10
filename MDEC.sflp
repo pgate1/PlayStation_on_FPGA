@@ -5,7 +5,8 @@
 
 circuit MDEC
 {
-	input DmaMADR_0<32>;
+	input DmaMADR_0<32>, DmaBCR_0<32>;
+	input DmaMADR_1<32>, DmaBCR_1<32>;
 
 	input din<32>;
 	instrin WriteCmd(din), WriteCtrl(din);
@@ -17,6 +18,9 @@ circuit MDEC
 	output wram_din<32>;
 	instrin wram_ack;
 
+	reg bcr<32>;
+	sel dma_size<16>;
+
 	reg_wr reg0<32>, reg1<32>;
 
 	reg_wr rl<21>;
@@ -25,16 +29,16 @@ circuit MDEC
 	output running;
 
 	instrin run33;
+	reg int_wait_max<16>;
 	reg_wr count0_rst, count1_rst;
 	instrout mdec0_interrupt, mdec1_interrupt;
 
 	instrout end_of_data;
 
 	stage_name run_dma0 { task do(); }
-	stage_name int_wait0 { task do(count0_rst); }
+	stage_name int_wait0 { task do(int_wait_max, count0_rst); }
 	stage_name run_dma1 { task do(); }
-	stage_name int_wait1 { task do(count1_rst); }
-
+	stage_name int_wait1 { task do(int_wait_max, count1_rst); }
 
 	instruct WriteCmd par{
 		reg0 := din;
@@ -55,6 +59,10 @@ circuit MDEC
 		dout = reg1;
 	}
 
+	// uint32 size = (bcr >> 16) * (bcr & 0xFFFF);
+	// 16 * 16 = 32;
+	dma_size = 64;//size_mul.con(bcr<31:16>, bcr<15:0>).dout;
+
 	running = run_dma0.do | run_dma1.do;
 
 	instruct DMAin_Execute par{
@@ -69,6 +77,7 @@ circuit MDEC
 		first_state st1;
 		state st1 par{
 			reg1 |= 0x00800000;
+			bcr := DmaBCR_0;
 			goto st2;
 		}
 		state st2 par{
@@ -82,10 +91,10 @@ circuit MDEC
 					reg1 |= 0x20000000; // BUSY
 				}
 				case 2: par{
-					generate int_wait0.do(1);
+					generate int_wait0.do(dma_size >> 2, 1);
 				}
 				case 3: par{
-					generate int_wait0.do(1);
+					generate int_wait0.do(dma_size >> 2, 1);
 				}
 			}
 
@@ -95,16 +104,16 @@ circuit MDEC
 	}
 
 	stage int_wait0 {
-		reg_wr int_wait_count0<8>;
+		reg int_wait_count0<16>;
 		first_state st1;
 		state st1 par{
-			int_wait_count0 := 0;
+			int_wait_count0 := int_wait_max;
 			count0_rst := 0b0;
-			goto st2;
+			if(count0_rst) goto st2;
 		}
 		state st2 if(run33){
-			int_wait_count0++;
-			if(int_wait_count0==20){
+			int_wait_count0--;
+			if(int_wait_count0==0){
 				mdec0_interrupt();
 				goto st1;
 				finish;
@@ -116,34 +125,35 @@ circuit MDEC
 	stage run_dma1 {
 		first_state st1;
 		state st1 par{
+			bcr := DmaBCR_1;
 			if(reg1<29>==0b0){
 				finish;
 			}
 			else{
-				wram_write(rl, 0xFE000400);
+			//	wram_write(rl, 0xFE000400);
 				goto st2;
 			}
 		}
-		state st2 if(wram_ack){
+		state st2 par{//if(wram_ack){
 			end_of_data();
 			reg1 &= ^0x20800000;
-			generate int_wait1.do(1);
+			generate int_wait1.do(dma_size << 2, 1);
 			goto st1;
 			finish;
 		}
 	}
 
 	stage int_wait1 {
-		reg_wr int_wait_count1<8>;
+		reg int_wait_count1<16>;
 		first_state st1;
 		state st1 par{
-			int_wait_count1 := 0;
+			int_wait_count1 := int_wait_max;
 			count1_rst := 0b0;
-			goto st2;
+			if(count1_rst) goto st2;
 		}
 		state st2 if(run33){
 			int_wait_count1++;
-			if(int_wait_count1==20){
+			if(int_wait_count1==0){
 				mdec1_interrupt();
 				goto st1;
 				finish;

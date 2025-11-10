@@ -33,7 +33,7 @@ sfl2vl:
 #	verilator --cc CDROM_controller.v --compiler msvc --public --l2-name v
 #	verilator --cc PAD_controller.v --compiler msvc --public --l2-name v
 
-	verilator --lint-only PlayStation_core.v -y demo
+	verilator --lint-only PlayStation_core.v --quiet-stats -y demo
 #	verilator --lint-only core.v -y demo -y ../../hdl -y ../../DE2-115
 #	verilator --cc core_sim.v --compiler msvc --public --l2-name v
 	# ok

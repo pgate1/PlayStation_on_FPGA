@@ -60,13 +60,13 @@ circuit dsp_ch
 
 	instrout read_req;
 	output vA<18>;
-	reg_wr vA_reg<18>;
+	reg vA_reg<18>;
 	instrin read_ack;
 	input vDin<16>;
 
 	instrself read(rid_sel, vA_sel);
 	sel rid_sel, vA_sel<18>;
-	reg_wr rid_reg;
+	reg rid_reg;
 
 	reg_wr filter<3>, shift<4>, f_loop, f_copy_loop, f_keep, looping;
 	reg_wr dec_rot<2>, src_ok, src_data<16>;
