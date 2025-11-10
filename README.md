@@ -73,7 +73,6 @@ Here's a list of games that work a little. There may be other games that work as
 - Rockman X4
 - Rockman X5
 - Rockman X6
-
 - Ace Combat 2
 - XI
 - Love & Destroy
