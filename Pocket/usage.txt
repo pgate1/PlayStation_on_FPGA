@@ -3,6 +3,9 @@ PlayStation on FPGA feat. Analogue Pocket
 
 
 [ CAUTION, the screen flickering, protect your eyes. ]
+If the screen is flickering, do not leave it for a long time, but turn off the power.
+If the flickering remains on the screen, turn off the power and leave it for a few hours.
+
 
 This is a port of the basic functions of the first PlayStation to Analogue Pocket.
 Sound and movie functions have been left out to fit in Pocket's FPGA.
