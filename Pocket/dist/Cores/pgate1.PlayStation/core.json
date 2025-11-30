@@ -7,8 +7,8 @@
             "description": "PlayStation on FPGA feat. Pocket",
             "author": "pgate1",
             "url": "https://github.com/pgate1/PlayStation_on_FPGA",
-            "version": "0.1.3",
-            "date_release": "2023-02-03"
+            "version": "0.3.1",
+            "date_release": "2025-11-30"
         },
         "framework": {
             "target_product": "Analogue Pocket",
