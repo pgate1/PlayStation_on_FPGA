@@ -9,7 +9,7 @@ circuit div_u32
 	instrin con(n, d);
 
 	instrself run;
-	reg_wr dr<32>, zr<64>, count<5>;
+	reg dr<32>, zr<64>, count<5>;
 	reg_ws ack_reg;
 	sel sub<33>;
 

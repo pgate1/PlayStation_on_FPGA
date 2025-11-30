@@ -173,10 +173,14 @@ dbg = 0;//brr_loop_adrs<<3;
 		io_A==0xA : SR_reg := io_Din; // Sustain rate, Release Rate
 		io_A==0xC : ; // Current ADSR volume
 		io_A==0xE : brr_loop_adrs := io_Din; // Loop address
-		else : halt(0x33);
+	//	else : halt(0x33);
 	}
 
 	instruct io_get any{
+		io_A==0x0 : io_Dout = 0b0 || vol_L;
+		io_A==0x2 : io_Dout = 0b0 || vol_R;
+		io_A==0x4 : io_Dout = 0b00 || pitch;
+		io_A==0x6 : io_Dout = brr_start_adrs;
 		io_A==0x8 : io_Dout = ADS_reg;
 		io_A==0xA : io_Dout = SR_reg;
 		io_A==0xC : par{ // Current ADSR volume
@@ -186,7 +190,8 @@ dbg = 0;//brr_loop_adrs<<3;
 				else io_Dout = 0b0 || env.Env;
 			}
 		}
-		else : halt(0x34);
+		io_A==0xE : io_Dout = brr_loop_adrs;
+	//	else : halt(0x34);
 	}
 
 	instruct run par{

@@ -241,9 +241,7 @@ dbg_reg := 0x0000000 || din<3:0>;
 	dispW = (dispWidth==512) | (dispWidth==640);
 	dispH = (dispHeight==480);
 
-	instruct vblank_begin par{
-		vblank := 0b1;
-	}
+	instruct vblank_begin vblank := 0b1;
 	instruct vblank_end vblank := 0b0;
 /*
 	instruct hsync par{
@@ -267,7 +265,7 @@ dbg_reg := 0x0000000 || din<3:0>;
 		}
 
 		dout =
-			(status_drawing_evenodd /*& ^vblank*/) || // bit 31
+			(status_drawing_evenodd & ^vblank) || // bit 31
 			status_dma_direction || // bit 30-29
 			(BufferOffset==0) || // busy_recieve_dmablock || // bit 28
 			status_ready_send_vramtocpu || // bit 27
@@ -619,6 +617,7 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 	vram_busy = VramData_image.write_vram | VramData_image.read_vram;
 	busy = (halt_code!=0x00) | (draw_stg.do | VramData_image.write_vram | VramData_image.read_vram);
 
+	// 左右画面
 	sel view_offset_x<10>;
 	any{
 		// for width 320 of メタルギアソリッド
@@ -636,6 +635,7 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 		else : view_offset_x = 0;
 	}
 
+	// 上下画面
 	sel view_offset_y<9>;
 	any{
 		// for height 240 of アインハンダー
@@ -649,6 +649,10 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 		// for height 224 of レイストーム
 		(dispHeight==240) & (DispStartY_pre==224) /*((drawOffsetY-240)<10>==0b0)*/ : par{ // drawOffsetY >= 240
 			view_offset_y = -224;
+		}
+		// for height 232 of 聖剣伝説LoM
+		(dispHeight==240) & (DispStartY_pre==232) /*((drawOffsetY-240)<10>==0b0)*/ : par{ // drawOffsetY >= 240
+			view_offset_y = -232;
 		}
 		else : view_offset_y = 0;
 	}
@@ -778,8 +782,34 @@ dbg_gpu = 0x0000 || poly.dbg<7:0> || cmd;
 				io_write_data := io_write_data >> 16;
 
 // test.exeの時
+// ムービー再生時も描画するようにしたい
 if(^sw_kernel_run) any{
 	status_color_depth==0b1 : par{ // 24bit color
+		reg_wr t<2>;
+		sel col<24>;
+		reg_wr pre_data<16>;
+		pre_data := io_write_data<15:0>;
+		any{
+			t==0 : par{ // ggrr
+				t := 1;
+			}
+			t==1 : par{ // rr(bb_ggrr)
+				col = io_write_data<7:0> || pre_data;
+				t := 2;
+			}
+			t==2 : par{ // (bbgg_rr)(bb_ggrr)
+				col = io_write_data<15:0> || pre_data<15:8>;
+				t := 0;
+			}
+		}
+		if((t==1) | (t==2)){
+		view_on();
+		view_x = CommandBuffer[1]<9:0> + VramPosX<9:0>;
+		view_y = CommandBuffer[1]<24:16> + VramPosY<8:0>;
+		view_R = col<7:0>;
+		view_G = col<15:8>;
+		view_B = col<23:16>;
+		}
 	}
 	status_color_depth==0b0 : par{ // 15bit color
 		view_on();

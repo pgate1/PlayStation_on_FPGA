@@ -13,9 +13,10 @@ circuit MDEC
 	instrin ReadData, ReadStatus;
 	output dout<32>;
 
-	output wram_adrs<21>;
-	instrout wram_write(wram_adrs, wram_din);
-	output wram_din<32>;
+	output wram_adrs<21>, wram_din<24>, wram_word<2>;
+	instrout wram_write(wram_adrs, wram_din, wram_word);
+	instrout wram_read(wram_adrs);
+	input wram_dout<16>;
 	instrin wram_ack;
 
 	reg bcr<32>;
@@ -26,7 +27,7 @@ circuit MDEC
 	reg_wr rl<21>;
 
 	instrin DMAin_Execute, DMAout_Execute;
-	output running;
+	output running, waiting;
 
 	instrin run33;
 	reg int_wait_max<16>;
@@ -64,6 +65,7 @@ circuit MDEC
 	dma_size = 64;//size_mul.con(bcr<31:16>, bcr<15:0>).dout;
 
 	running = run_dma0.do | run_dma1.do;
+	waiting = running | int_wait0.do | int_wait1.do;
 
 	instruct DMAin_Execute par{
 		generate run_dma0.do();
@@ -86,8 +88,7 @@ circuit MDEC
 					mdec0_interrupt();
 				}
 				case 1: par{
-					// & 0x001FFFFF
-					rl := DmaMADR_0<20:0>;
+					rl := DmaMADR_0<20:2> || 0b00;
 					reg1 |= 0x20000000; // BUSY
 				}
 				case 2: par{
@@ -123,22 +124,56 @@ circuit MDEC
 	}
 
 	stage run_dma1 {
-		first_state st1;
-		state st1 par{
+		reg block_count<5>;
+		reg col<8>;
+		reg image_adrs<21>;
+		reg image_count<8>;
+		first_state st_init;
+		state st_init par{
 			bcr := DmaBCR_1;
-			if(reg1<29>==0b0){
-				finish;
+			block_count := 1;
+			image_adrs := DmaMADR_1<20:2> || 0b00;
+			goto st_end;
+		//	goto st_read;
+		}
+/*
+		state st_read if(wram_ack){
+			wram_read(rl);
+			rl += 2;
+			goto st_readw;
+		}
+		state st_readw if(wram_ack){
+			if(wram_dout!=0xFE00){
+				col := wram_dout<13:6>;
+				goto st_read;
 			}
-			else{
-			//	wram_write(rl, 0xFE000400);
-				goto st2;
+			else{ // 0xFE00
+				image_count := 0;
+				goto st_write;
 			}
 		}
-		state st2 par{//if(wram_ack){
-			end_of_data();
-			reg1 &= ^0x20800000;
-			generate int_wait1.do(dma_size << 2, 1);
-			goto st1;
+		state st_write if(wram_ack){
+			any{
+				reg0<27> : par{ // 15bit color
+					wram_write(image_adrs, 0x00 || col || col, 2);
+					image_adrs += 2;
+				}
+				else : par{ // 24bit color
+					wram_write(image_adrs, col || col || col, 3);
+					image_adrs += 3;
+				}
+			}
+			image_count++;
+			if(image_count==255){
+				if(block_count==12) goto st_end; // test
+				else goto st_read;
+				block_count++;
+			}
+		}
+*/
+		state st_end if(wram_ack){
+			generate int_wait1.do(18432 /*dma_size << 2*/, 1);
+			goto st_init;
 			finish;
 		}
 	}
@@ -152,9 +187,13 @@ circuit MDEC
 			if(count1_rst) goto st2;
 		}
 		state st2 if(run33){
-			int_wait_count1++;
+			int_wait_count1--;
 			if(int_wait_count1==0){
 				mdec1_interrupt();
+
+			//	end_of_data();
+				reg1 &= ^0x20800000;
+
 				goto st1;
 				finish;
 			}

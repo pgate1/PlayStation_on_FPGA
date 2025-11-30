@@ -404,9 +404,9 @@ dbg32 = dbg32_reg;
 	// time2sector(time_min<8>, time_sec<8>, time_frac<8>);
 	instruct time2sector par{
 	//	time2sector_ret = t2s_mul_sec.con(t2s_mul_min.con(time_min,60).dout + (0x00||time_sec), 75).dout<23:0> + (0x0000||time_frac);
-		sel min2sec<16>; // <14> x60 = 64-4
+		sel min2sec<16>; // <14> x60 = 64-4 ok
 		min2sec = ((8#0b0 || time_min) << 6) - ((8#0b0 || time_min) << 2) + (8#0b0 || time_sec);
-	//	sel sec2frac<24>; // <21> x75
+	//	sel sec2frac<24>; // <21> x75 ok
 		time2sector_ret = ((8#0b0 || min2sec) << 6) + ((8#0b0 || min2sec) << 3) + ((8#0b0 || min2sec) << 1) + (8#0b0 || min2sec) + (16#0b0 || time_frac);
 	}
 
@@ -454,12 +454,13 @@ dbg32 = dbg32_reg;
 	if(file_read_req_reg & ^file_ack) file_read_req();
 	if(file_ack) file_read_req_reg := 0b0;
 
-// >>8,4,3 NG
+// >>1 ok
+// >>4,3,2NG
 	stage interrupt_wait {
-		reg int_wait_count<26>;
+		reg int_wait_count<28>;
 		first_state st1;
 		state st1 par{
-			int_wait_count := int_wait_max<27:2>;
+			int_wait_count := int_wait_max;
 			int_count_rst := 0b0;
 			if(int_count_rst) goto st2;
 		}
@@ -474,11 +475,13 @@ dbg32 = dbg32_reg;
 		}
 	}
 
+// >>1,2 ok 武蔵伝NG
+// >>3,4 NG
 	stage play_interrupt_wait {
-		reg play_int_wait_count<26>;
+		reg play_int_wait_count<28>;
 		first_state st1;
 		state st1 par{
-			play_int_wait_count := play_int_wait_max<27:2>;
+			play_int_wait_count := play_int_wait_max;
 			play_int_count_rst := 0b0;
 			if(play_int_count_rst) goto st2;
 		}
@@ -494,10 +497,10 @@ dbg32 = dbg32_reg;
 	}
 
 	stage read_interrupt_wait {
-		reg read_int_wait_count<26>;
+		reg read_int_wait_count<28>;
 		first_state st1;
 		state st1 par{
-			read_int_wait_count := read_int_wait_max<27:2>;
+			read_int_wait_count := read_int_wait_max;
 			read_int_count_rst := 0b0;
 			if(read_int_count_rst) goto st2;
 		}
@@ -587,7 +590,7 @@ if(Irq_==0x0109) count++;
 						Stat := 5;
 					}
 					else{
-						AddIrqQueue(0x0107, 0x1AEAA00);
+						AddIrqQueue(0x0107, 0x1AEAA00 >> 4);
 						start_rotating := 1;
 					}
 				}
@@ -610,7 +613,7 @@ if(Irq_==0x0109) count++;
 					sel delay<28>;
 					if(DriveState==0){ // DRIVESTATE_STANDB
 						// CD player exit
-						delay = 0x0075C00; //0x0675C00;
+						delay = 0x0675C00;
 					}
 					else delay = 0x0000800;
 
@@ -626,7 +629,7 @@ if(Irq_==0x0109) count++;
 					Stat := 2;//Complete;
 				}
 				Irq_==9 : par{ // CdlPause:
-					AddIrqQueue(0x0109 /*CdlPause*/, 0x014AC00);
+					AddIrqQueue(0x0109 /*CdlPause*/, 0x014AC00 >> 4);
 					Ctrl |= 0x80;
 				}
 				Irq_==0x0109 : par{ // 265
@@ -637,7 +640,7 @@ if(Irq_==0x0109) count++;
 					Stat := 2;//Complete;
 				}
 				Irq_==10 : par{ //CdlInit:
-					AddIrqQueue(0x010A /*CdlInit*/, 0x0295800);
+					AddIrqQueue(0x010A /*CdlInit*/, 0x0295800 >> 4);
 					no_busy_error := 0b1;
 					start_rotating := 0b1;
 				}
@@ -681,7 +684,7 @@ if(Irq_==0x0109) count++;
 				//	if(^Play & ^Reading) Result[1] := 0;
 				}
 				Irq_==18 : par{
-					AddIrqQueue(0x0112/*CdlReadT*/, 0x1F39200);
+					AddIrqQueue(0x0112/*CdlReadT*/, 0x1F39200 >> 4);
 					start_rotating := 0b1;
 				}
 				Irq_==0x0112 : par{
@@ -723,7 +726,7 @@ if(Irq_==0x0109) count++;
 					//CDRMISC_INT(Seeked == 1 ? 0x800 : cdReadTime * 4);
 					sel delay<28>;
 					if(Seeked) delay = 0x0000800;
-					else       delay = 0x01B9000;
+					else       delay = 0x01B9000 >> 4;
 					generate play_interrupt_wait.do(delay, 0b1);
 
 					Seeked := 0b0;//SEEK_PENDING;
@@ -798,7 +801,7 @@ if(Irq_==0x0109) count++;
 					Stat := 2; //Complete;
 				}
 				Irq_==30 : par{ // 0x1E CdlReadToc:
-					AddIrqQueue(0x011E /*30+0x100*/, 0x1361400);
+					AddIrqQueue(0x011E /*30+0x100*/, 0x1361400 >> 4);
 					no_busy_error := 0b1;
 					start_rotating := 0b1;
 				}
@@ -958,7 +961,7 @@ dbg_reg := 0x0000 || Irq_;
 		state st2 par{
 //dbg32_reg := 0x00 || Prev[0] || Prev[1] || Prev[2];
 		//	seek_point := readtrack_mul.con(0x00||sector, 2352).dout<31:0>;
-			// * 2352 = 2048 + 256 + 16 + 8
+			// * 2352 = 2048 + 256 + 16 + 8 ok
 			seek_point := ((0x00||sector)<<11) + ((0x00||sector)<<8) + ((0x00||sector)<<5) + ((0x00||sector)<<4);
 			readtrack_transfer_index := -12; // 同期12バイトを除外
 			if(sector<23>){

@@ -605,7 +605,7 @@ dbg = dbg_reg;
 	}
 
 	stage RTP_stg { // RTPS RTPT
-		reg_wr rtp_v<5>, rtp_vx<16>, rtp_vy<16>, rtp_vz<16>, szv<16>, quotient<32>;
+		reg rtp_v<5>, rtp_vx<16>, rtp_vy<16>, rtp_vz<16>, szv<16>, quotient<32>;
 		mul_s32 rtp_mulq_x, rtp_mulq_y, rtp_mulq_m;
 		gte_LIMIT lim_RTP;
 		first_state st_init;
@@ -756,7 +756,7 @@ dbg = dbg_reg;
 
 	stage MVMVA_stg {
 		sel mvmva_mx<2>, mvmva_v<2>, mvmva_cv<2>, mvmva_lm;
-		reg_wr mvmva_vx<16>, mvmva_vy<16>, mvmva_vz<16>;
+		reg mvmva_vx<16>, mvmva_vy<16>, mvmva_vz<16>;
 		first_state st_init;
 
 		par{
@@ -833,7 +833,7 @@ dbg = dbg_reg;
 	}
 
 	stage DPC_stg { // DPCS DPCT
-		reg_wr dpc_st<2>;
+		reg dpc_st<2>;
 		mul_s16 dpc_smul_mac1, dpc_smul_mac2, dpc_smul_mac3;
 		gte_LIMIT lim_DPC;
 		first_state st_init;
@@ -1078,7 +1078,7 @@ dbg = dbg_reg;
 	}
 
 	stage NC_stg { // NCS NCT
-		reg_wr nc_st<2>, nc_v<5>, nc_vx<16>, nc_vy<16>, nc_vz<16>;
+		reg nc_st<2>, nc_v<5>, nc_vx<16>, nc_vy<16>, nc_vz<16>;
 		first_state st_init;
 
 		state st_init par{
@@ -1203,9 +1203,9 @@ dbg = dbg_reg;
 	}
 
 	stage NCD_stg { // NCDS NCDT
-		reg_wr ncd_st<2>, ncd_v<5>, ncd_vx<16>, ncd_vy<16>, ncd_vz<16>;
+		reg ncd_st<2>, ncd_v<5>, ncd_vx<16>, ncd_vy<16>, ncd_vz<16>;
 		mul_s16 ncd_smul1_3, ncd_smul2_3, ncd_smul3_3;
-		reg_wr ncd_mul_lim_reg<16>;
+		reg ncd_mul_lim_reg<16>;
 		gte_LIMIT lim_NCD;
 		first_state st_init;
 
@@ -1395,7 +1395,7 @@ dbg = dbg_reg;
 	}
 
 	stage NCC_stg { // NCCS NCCT
-		reg_wr ncc_st<2>, ncc_v<5>, ncc_vx<16>, ncc_vy<16>, ncc_vz<16>;
+		reg ncc_st<2>, ncc_v<5>, ncc_vx<16>, ncc_vy<16>, ncc_vz<16>;
 		first_state st_init;
 
 		state st_init par{
@@ -1553,7 +1553,7 @@ v st
 	}
 
 	stage CC_stg {
-		reg_wr cc_st<2>;
+		reg cc_st<2>;
 		first_state st_init;
 		state st_init par{
 			reset_FLAG();
@@ -1662,7 +1662,7 @@ v st
 	}
 
 	stage AVSZ3_stg {
-		reg_wr sz3_add<16>;
+		reg sz3_add<16>;
 		mul_s16 avsz3_smul;
 		gte_LIMIT lim_AVSZ3;
 		first_state st_init;
@@ -1692,7 +1692,7 @@ v st
 	}
 
 	stage AVSZ4_stg {
-		reg_wr sz4_sum<18>;
+		reg sz4_sum<18>;
 		mul_s32 avsz4_smul;
 		gte_LIMIT lim_AVSZ4;
 		first_state st_init;

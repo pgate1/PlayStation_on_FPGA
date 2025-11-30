@@ -64,6 +64,7 @@ Here's a list of games that work a little. There may be other games that work as
 - Einhander
 - Ridge Racer
 - Tobal No.1
+- Tobal 2
 - iS internal section
 - Saga Frontier 2
 - Dewprism
@@ -80,6 +81,13 @@ Here's a list of games that work a little. There may be other games that work as
 - Valkyrie Profile
 - Omega Boost
 - Final Fantasy Tactics
+- Brave Fencer Musashiden
+- Chocobo Racing
+- Racing Lagoon
+- Seiken Densetsu Legend of Mana
+- G Darius
+- Silent Bomber
+- Xenogears
 
 User reports.
 
@@ -91,4 +99,14 @@ User reports.
 - Runabout
 - Kaette Kita Cyborg Kurochan
 - Bloody Roar
+- Minna no Golf 2
+
+## Future implementation plans.  
+
+- GPU: Transparent drawing, texture blending.
+- SIO: Handling save data.
+- Pocket: Change resolution.
+- SPU: Sound is simulated using a square wave.
+- SPU: Pipelined.
+- GTE: Processing optimization.
 

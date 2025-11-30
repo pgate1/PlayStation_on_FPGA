@@ -25,6 +25,7 @@ circuit Timer
 	output irq_code<8>;
 
 	instrout hsync;
+	instrout VBlank_begin, VBlank_end;
 
 	instrself halt(h_code);
 	sel h_code<8>;
@@ -107,9 +108,15 @@ circuit Timer
 				}
 			}
 			if(index==3){
-				if(hSyncCount==240){
-					hSyncCount := 1;
+				// for NTSC
+				if(hSyncCount==243){
+					VBlank_begin();
 					irq_out();
+				}
+				if(hSyncCount==263){
+					VBlank_end();
+				//	irq_out();
+					hSyncCount := 1;
 				}
 				else hSyncCount++;
 				hsync();

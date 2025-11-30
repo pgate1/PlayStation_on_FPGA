@@ -61,7 +61,7 @@ circuit DMA_SPU
 		first_state st1;
 		state st1 par{
 			// uint32 madr = DmaMADR[n] & 0x1FFFFF;
-			madr := DmaMADR_4<20:0>;
+			madr := DmaMADR_4<20:2> || 0b00;
 			// uint32 bcr = DmaBCR[n];
 			bcr := DmaBCR_4;
 			dma_count := 0;
@@ -105,7 +105,7 @@ circuit DMA_SPU
 		reg int_wait_count<8>;
 		first_state st1;
 		state st1 par{
-			int_wait_count := 32;
+			int_wait_count := 16;
 			count_rst := 0b0;
 			if(count_rst) goto st2;
 		}

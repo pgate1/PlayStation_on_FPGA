@@ -53,7 +53,7 @@ output dbg<32>;
 		reg bcr<16>, madr<21>;
 		first_state st1;
 		state st1 par{
-			madr := DmaMADR_6<20:0>;
+			madr := DmaMADR_6<20:2> || 0b00;
 			bcr := DmaBCR_6<15:0>;
 			if(DmaBCR_6==0) goto st3;
 			else goto st2;

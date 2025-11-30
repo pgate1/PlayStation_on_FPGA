@@ -112,6 +112,7 @@ circuit R3000A
 	reg_wr gte_op<32>;
 
 	output ir_read;
+	instrout ir_sync;
 
 	output pc_out<32>, opcode_out<32>;
 
@@ -190,6 +191,8 @@ dbg32 = 0;//dbg32_reg;//gte.dbg32;
 	instruct read par{
 		read_req();
 		generate read_wait.do(rid);
+		if(rid==READ_OP) ir_sync();
+cache_hit_reg := 0b00;
 	}
 	if(read) ir_read = rid==READ_OP;
 	else ir_read = rid_reg==READ_OP;

@@ -61,7 +61,7 @@ dbg32 = dbg32_reg;
 		mem dma_data[4]<8>;
 		first_state st_init;
 		state st_init par{
-			madr := DmaMADR_3<20:0>;
+			madr := DmaMADR_3<20:2> || 0b00;
 			dma_count := 0;
 			goto st_read;
 		}

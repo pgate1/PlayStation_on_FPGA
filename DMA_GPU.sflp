@@ -85,14 +85,14 @@ dbg = dbg_reg;
 
 	stage run_mem2vram {
 		first_state st_init;
-		state st_init if(^gpu_busy){
+		state st_init par{
 			if(run_chain.do){
 				madr := block_addr;
 				goto st_read;
 			}
 			else{
 				// u32 *ptr = (u32*)(ram + (madr>>2));
-				madr := DmaMADR_2<20:0>;
+				madr := DmaMADR_2<20:2> || 0b00;
 				// u32 bcr = DmaBCR[n];
 				// u32 size = (bcr >> 16) * (bcr & 0xFFFF);
 				block_count := DmaBCR_2<31:16>;
@@ -118,7 +118,10 @@ dbg = dbg_reg;
 		state st_write if(^gpu_busy){
 			gpu_dma_write_req(dma_data);
 			if(dma_count==block_size){
-				if(dma_block==block_count) goto st_end;
+				if(dma_block==block_count){
+					if(^run_chain.do) trans_count := trans_count >> 1;
+					goto st_end;
+				}
 				else goto st_read;
 				dma_count := 0;
 				dma_block++;
@@ -136,13 +139,13 @@ dbg = dbg_reg;
 
 	stage run_chain {
 		first_state st_init;
-		state st_init if(^gpu_busy){
+		state st_init par{
 			next_addr := DmaMADR_2<23:0>;
 			trans_count := 0;
 			goto st_read;
 		}
 		state st_read if(wram_ack & ^gpu_busy){
-			wram_read(next_addr<20:0>);
+			wram_read(next_addr<20:2> || 0b00);
 			block_addr := next_addr<20:0> + 4;
 			goto st_trans;
 		}
@@ -153,7 +156,7 @@ dbg = dbg_reg;
 			if(Din<31:24>!=0) generate run_mem2vram.do();
 			goto st_end;
 		}
-		state st_end if(^run_mem2vram.do & ^gpu_busy){
+		state st_end if(^run_mem2vram.do){
 			if((next_addr!=0xFFFFFF) & (next_addr<20:2>!=0)) goto st_read;
 			else{
 				generate int_wait.do(0b1);
@@ -165,9 +168,9 @@ dbg = dbg_reg;
 
 	stage run_vram2mem {
 		first_state st_init;
-		state st_init if(^gpu_busy){
+		state st_init par{
 			// uint32 *ptr = (uint32*)(ram + (madr>>2));
-			madr := DmaMADR_2<20:0>;
+			madr := DmaMADR_2<20:2> || 0b00;
 			// uint32 bcr = DmaBCR[n];
 			block_count := DmaBCR_2<31:16>;
 			block_size := DmaBCR_2<15:0>;

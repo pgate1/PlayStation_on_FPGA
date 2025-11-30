@@ -9,7 +9,7 @@ circuit PAD_controller
 {
 	input io_din<16>;
 	instrin WriteData(io_din);
-	reg_wr din_reg<8>;
+	reg din_reg<8>;
 	instrin WriteMode(io_din);
 	instrin WriteCtrl(io_din);
 	instrin WriteBaud(io_din);
@@ -29,7 +29,7 @@ circuit PAD_controller
 	mem data_buf[256]<8>;
 	reg_wr adrL<8>, adrH<8>;
 
-	output running;
+	output running, waiting;
 
 	instrin run33;
 	reg_wr count_rst;
@@ -66,8 +66,6 @@ dbg16 = dbg16_reg;
 	instruct halt halt_code_reg := halt_sel;
 	halt_code = halt_code_reg;
 
-	running = WriteData_stg.do;
-
 	instruct WriteData par{
 //if(WriteData_stg.do) halt(0x44);
 		generate WriteData_stg.do(io_din<7:0>);
@@ -97,6 +95,7 @@ dbg16 = dbg16_reg;
 
 	instruct ReadData par{
 		if(StatReg<1>/*RX_RDY*/){
+			//io_dout = 0x00 || data_buf[parp];
 
 			sel data<8>;
 			any{
@@ -116,7 +115,6 @@ dbg16 = dbg16_reg;
 				else : data = data_buf[parp<2:0>];
 			}
 			io_dout = 0x00 || data;
-			//io_dout = 0x00 || data_buf[parp];
 
 			if(parp==bufcount){
 			//	StatReg &= ^0x0002;//RX_RDY; // Receive is not Ready now 下で実行
@@ -140,12 +138,15 @@ dbg16 = dbg16_reg;
 				if(padst==2) padst := 0;
 				if(mcdst==1){
 					mcdst := 2;
-				//	StatReg |= 0x0002;//RX_RDY;
+					StatReg |= 0x0002;//RX_RDY;
 				}
 				else StatReg &= ^0x0002;
 			}
 		}
-		else io_dout = 0x0000;
+		else{
+		//	io_dout = 0x0000;
+			io_dout = 0x00FF; // メモリーカード未挿入
+		}
 	}
 
 	instruct ReadStat par{
@@ -162,6 +163,9 @@ dbg16 = dbg16_reg;
 
 	pad1.key_data = ^key_in;
 	pad2.key_data = 0xFFFF;
+
+	running = WriteData_stg.do;
+	waiting = running | interrupt_wait.do;
 
 	stage WriteData_stg {
 		first_state st1;
@@ -344,6 +348,7 @@ dbg16 = dbg16_reg;
 					finish;
 				}
 				din_reg==0x81 : par{
+/*
 					StatReg |= 2;//RX_RDY;
 					//memcpy(buf, cardh, 4);
 					data_buf[0] := 0x00;
@@ -355,6 +360,8 @@ dbg16 = dbg16_reg;
 					mcdst := 1;
 					rdwr := 0;
 					generate interrupt_wait.do(0b1);
+*/
+					// 上記コメントアウトでメモリーカード未挿入
 					goto st1;
 					finish;
 				}
@@ -367,26 +374,32 @@ dbg16 = dbg16_reg;
 		}
 	}
 
+// <<2,1 メモカ画面時間かかる
+// <<5,4,0 キー効かない
 	stage interrupt_wait {
-		reg int_wait_count<19>;
+		reg int_wait_count<16>;
 		first_state st1;
 		state st1 par{
-			int_wait_count := BaudReg || 0b000;
+			int_wait_count := BaudReg << 3;
 			count_rst := 0b0;
 			if(count_rst) goto st2;
 		}
-		state st2 if(run33){
-			int_wait_count--;
-			if(int_wait_count==0){
-				StatReg |= 0x0200; //IRQ;
-				interrupt_out();
-				goto st1;
-				finish;
-			}
-			if(count_rst) goto st1;
+		state st2 par{
 			if(interrupt_off){
 				goto st1;
 				finish;
+			}
+			else{
+				if(run33){
+					int_wait_count--;
+					if(int_wait_count==0){
+						StatReg |= 0x0200; //IRQ;
+						interrupt_out();
+						goto st1;
+						finish;
+					}
+					if(count_rst) goto st1;
+				}
 			}
 		}
 	}
