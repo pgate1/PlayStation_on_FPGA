@@ -165,30 +165,40 @@ circuit core
 		if(psx.dispH /*| psx.sw_view_half*/) psx_view_y = psx.view_y<8:1>; // 480->240
 		else psx_view_y = psx.view_y<7:0>; // 240->240
 
+		// ムービー未実装のため処理中は緑を挿入
+		sel mdec_waiting_G<5>;
+		if(psx.mdec_waiting) mdec_waiting_G = 0b00100;
+		else mdec_waiting_G = 0b00000;
 		view_ram.write(psx_view_x, psx_view_y,
-			psx.view_R<7:3>, psx.view_G<7:3>, psx.view_B<7:3>);
+			psx.view_R<7:3>, psx.view_G<7:3> | mdec_waiting_G, psx.view_B<7:3>);
 	}
 	instruct vga.view view_ram.read();
 
 	instruct vga.vblank_begin par{
-		view_ram.read_adrs_reset();
-		reg_wr vblank_wait;
-		if(exe_read_ok & (^vblank_wait) & pass_1sec){
-			psx_run_ok := 0b1;
-			vblank_wait := 0b1;
-		}
-		if(/*(^psx.drawing) &*/ (^psx.stop)){
+		// drawingでないこと：イズインターナショナル
+		// sio_irq待ちでないこと：オメガブースト、レイクライシス
+		if((^psx.gpu_drawing) & (^psx.sio_waiting) & (^psx.stop)){
 			if(psx_run_ok) psx.vblank_begin();
-			if(^psx.sw_kernel_run){
-				view_ram.bank_change();
-				fps_count++;
-			}
+		}
+		view_ram.read_adrs_reset();
+		if(^psx.sw_kernel_run){
+			view_ram.bank_change();
+			fps_count++;
 		}
 	}
-	instruct vga.vblank_end psx.vblank_end();
-	instruct psx.display_flip if(psx.sw_kernel_run){
-		view_ram.bank_change();
-		fps_count++;
+	instruct vga.vblank_end par{
+		if(exe_read_ok & pass_1sec){
+			psx_run_ok := 0b1;
+		}
+	//	if((^psx.gpu_drawing) & (^psx.sio_waiting) & (^psx.stop)){
+			if(psx_run_ok) psx.vblank_end();
+	//	}
+	}
+	instruct psx.display_flip par{
+		if(psx.sw_kernel_run){
+			view_ram.bank_change();
+			fps_count++;
+		}
 	}
 //	instruct psx.fill_view_on view_ram.fill_view_on(); // 20230402 コメントアウト
 //	instruct psx.draw_notdisp_side view_ram.draw_notdisp_side();
@@ -228,7 +238,7 @@ psx.sw_spuenv_off();
 	if(key_14_hold /*& key_9_hold*/) ;//psx.sw_texcache_off();
 
 /*
-SDRAM 64MB 16bit 32Mword<25>
+SDRAM 64MB 16bit 32MWord<25>
 0b00000   || psx.A<20:2> || 0b0      WorkRAM  2MB 32bit 512kWord<19>
 0b000010  || psx.vram_adrs<18:0>     VideoRAM 1MB 16bit 512kWord<19>
 0b0100000 || psx.A<18:2> || 0b0      BIOS   512kB 32bit 128kWord<17>
@@ -260,12 +270,12 @@ SDRAM 64MB 16bit 32Mword<25>
 
 	instruct psx.WRAM_WRITE par{
 		any{
-			psx.Word==1 : any{
-				psx.A<0>==0b0 : sdram_write(0b00000 || psx.A<20:1>, 128#psx.Dout<7:0>,      0x0001, 1);
-				psx.A<0>==0b1 : sdram_write(0b00000 || psx.A<20:1>, (128#psx.Dout<7:0>)<<8, 0x0002, 1);
+			psx.Word==1 : any{ // psx.Dout<7:0>
+				psx.A<0>==0b0 : sdram_write(0b00000 || psx.A<20:1>,  128#psx.Dout      , 0x0001, 1);
+				psx.A<0>==0b1 : sdram_write(0b00000 || psx.A<20:1>, (128#psx.Dout) << 8, 0x0002, 1);
 			}
-			psx.Word==2 : par{
-				sdram_write(0b00000 || psx.A<20:1>, 128#psx.Dout<15:0>, 0x0003, 1);
+			psx.Word==2 : par{ // psx.Dout<15:0>
+				sdram_write(0b00000 || psx.A<20:1>, 128#psx.Dout, 0x0003, 1);
 			}
 			else/*psx.Word==4*/ : sdram_write(0b00000 || psx.A<20:2> || 0b0, 128#psx.Dout, 0x000F, 2);
 		}
@@ -331,7 +341,7 @@ halt(0x96);
 	}
 
 /*
-	psx.spu_mem_Dout = sdram_rdata<15:0>;
+	psx.spu_mem_Dout = sdram_dout<15:0>;
 
 	if(spu_wait_ack){
 		if(sdram_ack){
@@ -394,7 +404,7 @@ halt(0x96);
 		first_state st1;
 		state st1 if(sdram_ack){
 			reg_wr wA<19>;
-			sdram_write(0b00000 || wA || 0b0, 128#0b0, 0x000F , 2);
+			sdram_write(0b00000 || wA || 0b0, 128#0b0, 0x000F, 2);
 			wA++;
 			if(/&wA) goto st2;
 		}

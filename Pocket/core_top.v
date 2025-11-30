@@ -652,10 +652,10 @@ synch_3 #(.WIDTH(16)) synch_controler(cont1_key[15:0], key_s, clk_50);
 		.VGA_HS(video_hs), .VGA_VS(video_vs), .VGA_DE(video_de),
 		.VGA_R(video_rgb[23:16]), .VGA_G(video_rgb[15:8]), .VGA_B(video_rgb[7:0]),
 		
-		.set_sdram(set_sdram), .set_sram(set_sram),
+		.set_sdram(set_sdram), .set_bram(set_bram), .set_sram(set_sram),
 		.target_id(target_id), .target_slotoffset(target_slotoffset),
 		.target_bridgeaddr(target_bridgeaddr), .target_length(target_length),
-	//	.bram_word_wr(ram_word_wr_hold_r), .bram_wdata(ram1_word_data),
+		.bram_word_wr(ram_word_wr_hold_r), .bram_wdata(ram1_word_data),
 		.sram_word_wr(ram_word_wr_hold_r), .sram_wdata(ram1_word_data),
 		.target_dataslot_read(target_dataslot_read_s), .ram_reloading(ram_reloading_s)
 	);

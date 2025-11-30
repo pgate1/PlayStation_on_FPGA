@@ -4,7 +4,7 @@ PlayStation on FPGA feat. Analogue Pocket
 
 [ CAUTION, the screen flickering, protect your eyes. ]
 If the screen is flickering, do not leave it for a long time, but turn off the power.
-If the flickering remains on the screen, turn off the power and leave it for a few hours.
+If the flickering remains on the screen, turn off the power and leave it for a day.
 
 
 This is a port of the basic functions of the first PlayStation to Analogue Pocket.
@@ -48,7 +48,7 @@ The FPS is low because the main memory and VRAM are shared.
 
 6. Have fun until your Pocket's battery runs out.
 
-If it works happily, please take a video of it and upload it to Twitter. I will be delighted.
+If it works happily, please take a video of it and upload it to X(Twitter). I will be delighted.
 
 
 * What to do when it doesn't work.
@@ -63,7 +63,8 @@ Cannot proceed after PS logo is displayed, red lines appear on all four sides.
   -> This software is not yet supported. Sorry.
 
 The game won't start after the PS logo.
-  -> The movie is probably being processed, so hit the Start button repeatedly after the PS logo to skip the movie. If you time it right, you might be able to skip the movie.
+  -> The movie is probably being processed (dark green), so hit the Start button repeatedly after 
+     the PS logo to skip the movie. If you time it right, you might be able to skip the movie.
      If it still doesn't start, it's still not supported.
 
 During play, red or yellow lines appeared on all four sides and the game stopped.
@@ -72,4 +73,4 @@ During play, red or yellow lines appeared on all four sides and the game stopped
      Yellow lines : Some feature implementation is missing.
 
 
-2023/11/28 pgate1
+2025/11/30 pgate1
