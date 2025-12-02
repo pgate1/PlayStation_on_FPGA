@@ -394,10 +394,10 @@ dbg = dbg_reg;
 						f_texture : par{
 							sel vadrs<19>;
 							any{
-								tpage_col==0 : vadrs = (0b0||v||10#0b0) + tadjust_y + (13#0b0||u<7:2>);
-								tpage_col==1 : vadrs = (0b0||v||10#0b0) + tadjust_y + (12#0b0||u<7:1>);
+								tpage_col==0 : vadrs = (0b0 || v || 10#0b0) + tadjust_y + (13#0b0 || u<7:2>);
+								tpage_col==1 : vadrs = (0b0 || v || 10#0b0) + tadjust_y + (12#0b0 || u<7:1>);
 								else : par{ // tpage_col==2,3
-									vadrs = (0b0||v||10#0b0) + tadjust_y + (11#0b0||u);
+									vadrs = (0b0 || v || 10#0b0) + tadjust_y + (11#0b0 || u);
 								}
 							}
 							tcache_read(vadrs);
@@ -413,7 +413,7 @@ dbg = dbg_reg;
 								view_on(x<9:0>, y<8:0>);
 							}
 							else{
-								vram_write(y<8:0>||x<9:0>, 0b0||vb<CMULS+7:CMULS+3>||vg<CMULS+7:CMULS+3>||vr<CMULS+7:CMULS+3>);
+								vram_write(y<8:0> || x<9:0>, 0b0 || vb<CMULS+7:CMULS+3> || vg<CMULS+7:CMULS+3> || vr<CMULS+7:CMULS+3>);
 							}
 							delta_add();
 						}
@@ -435,29 +435,44 @@ dbg = dbg_reg;
 	}
 
 	stage texdraw {
+		reg clut_adrs_reg<19> = -1, clut_data<16>;
+		instrself clut_data_valid;
 		if(tcache_ack){
 			reg_wr tex_st;
 			if(tex_st==0b0){
+				sel clut_adrs<19>;
 				any{
 					tpage_col==0 : par{
 						sel tci<4>;
-						tci = (tcache_dout >> (u<1:0>||0b00))<3:0>;
-						vram_read(clut_p + ((15#0b0)||tci));
-						tex_st := 0b1;
+						tci = (tcache_dout >> (u<1:0> || 0b00))<3:0>;
+						clut_adrs = clut_p + (15#0b0 || tci);
 					}
 					tpage_col==1 : par{
 						sel tci<8>;
-						tci = (tcache_dout >> (u<0>||0b000))<7:0>;
-						vram_read(clut_p + ((11#0b0)||tci));
-						tex_st := 0b1;
+						tci = (tcache_dout >> (u<0> || 0b000))<7:0>;
+						clut_adrs = clut_p + (11#0b0 || tci);
+					}
+					tpage_col<1>==0b0 : par{
+						if(clut_adrs!=clut_adrs_reg){
+							vram_read(clut_adrs);
+							clut_adrs_reg := clut_adrs;
+							tex_st := 0b1;
+						}
+						else clut_data_valid();
 					}
 				}
 			}
 
-			if(tpage_col<1> | (tex_st & vram_ack)){
+			if(tpage_col<1> | (tex_st & vram_ack) | clut_data_valid){
 				sel tex_data<16>;
 				if(tpage_col<1>) tex_data = tcache_dout;
-				else tex_data = vram_read_data;
+				else{
+					if(clut_data_valid) tex_data = clut_data;
+					else{
+						tex_data = vram_read_data;
+						clut_data := vram_read_data;
+					}
+				}
 				if((tex_data<14:0>!=0) | (tex_data==0x8000)){
 					view_on(x<9:0>, y<8:0>);
 					tr = tex_data< 4: 0> || 0b000;
