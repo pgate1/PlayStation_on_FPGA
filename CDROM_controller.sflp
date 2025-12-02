@@ -613,7 +613,7 @@ if(Irq_==0x0109) count++;
 					sel delay<28>;
 					if(DriveState==0){ // DRIVESTATE_STANDB
 						// CD player exit
-						delay = 0x0675C00;
+						delay = 0x0675C00 >> 4;
 					}
 					else delay = 0x0000800;
 
@@ -756,7 +756,7 @@ if(Irq_==0x0109) count++;
 					no_busy_error := 0b1;
 				}
 				Irq_==26 : par{// CdlID
-					AddIrqQueue(0x011A/*CdlID*/, 20480);
+					AddIrqQueue(0x011A/*CdlID*/, 0x0005000);
 				}
 				Irq_==0x011A : par{ //CdlID
 					// 0x00 : PSÉçÉSÅ®CDÉCÉÅÅ[ÉWì«Ç›çûÇ›
@@ -831,6 +831,7 @@ dbg_reg := 0x0000 || Irq_;
 			if(^CdPlay & ^CdRead) goto st4;
 		}
 
+		// CDDA read ?
 		state st_CdPlay if(^FindCurTrack.do){
 			generate ReadTrack.do();
 			goto st_CdPlay2;
@@ -841,7 +842,7 @@ dbg_reg := 0x0000 || Irq_;
 			StatP := 0b10 || StatP<5:0>;
 			Play := 0b1;
 		//	CDRMISC_INT( cdReadTime );
-			generate play_interrupt_wait.do(0x006E400, 0b1);
+			generate play_interrupt_wait.do(0x006E400 >> 1, 0b1);
 			start_rotating := 0b1;
 			goto st4;
 		}
@@ -862,7 +863,7 @@ dbg_reg := 0x0000 || Irq_;
 			//CDREAD_INT((Mode & 0x80) ? (cdReadTime) : cdReadTime * 2);
 			sel delay<28>;
 			if(Mode<7>) delay = 0x006E400;
-			else        delay = 0x00DC800;
+			else        delay = 0x00DC800 >> 1;
 			generate read_interrupt_wait.do(delay, 0b1);
 			Result[0] := stat;
 			start_rotating := 0b1;
@@ -1082,7 +1083,7 @@ dbg_reg := 0x0000 || Irq_;
 				else SetSectorPlay[2]++;
 
 				// CDRMISC_INT(cdReadTime);
-				generate play_interrupt_wait.do(0x006E400, 0b1);
+				generate play_interrupt_wait.do(0x006E400 >> 1, 0b1);
 
 				goto st1;
 				finish;
@@ -1170,7 +1171,7 @@ dbg_reg := 0x0000 || Irq_;
 				//CDREAD_INT((Mode & 0x80) ? (cdReadTime / 2) : cdReadTime);
 				sel delay<28>;
 				if(Mode<7>) delay = 0x0037200;
-				else        delay = 0x006E400;
+				else        delay = 0x006E400 >> 1;
 				generate read_interrupt_wait.do(delay, 0b1);
 				goto st1;
 				finish;
@@ -1196,8 +1197,8 @@ dbg_reg := 0x0000 || Irq_;
 
 			//CDREAD_INT((Mode & 0x80) ? (cdReadTime / 2) : cdReadTime);
 			sel delay<28>;
-			if(Mode<7>) delay = 0x0037200;
-			else        delay = 0x006E400;
+			if(Mode<7>) delay = 0x0037200; // double speed
+			else        delay = 0x006E400 >> 1;
 			generate read_interrupt_wait.do(delay, 0b1);
 
 			if((Mode<6>==0b0) | (Transfer.dout<2>==0b0)){
