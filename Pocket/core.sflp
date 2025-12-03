@@ -441,8 +441,7 @@ halt(0x96);
 	}
 */
 	stage apf2sram {
-//		reg_wr sram_wadrs<10>; // 1kWord 4kByte
-		reg_wr sram_wadrs<11>; // 2kWord 8kByte
+		reg_wr sram_wadrs<10>; // 1kWord 4kByte
 		first_state st1;
 		state st1 par{
 			set_sram_reg := 0b1;
@@ -453,11 +452,11 @@ halt(0x96);
 			goto st3;
 		}
 		state st3 if((sram_word_wr | ^ram_reloading) & sram.ack){
-			sram.write(0b00000 || sram_wadrs || 0b0, sram_wdata<15:0>);
+			sram.write(0b000000 || sram_wadrs || 0b0, sram_wdata<15:0>);
 			goto st4;
 		}
 		state st4 if(sram.ack){
-			sram.write(0b00000 || sram_wadrs || 0b1, sram_wdata<31:16>);
+			sram.write(0b000000 || sram_wadrs || 0b1, sram_wdata<31:16>);
 			sram_wadrs++;
 			if(/&sram_wadrs) goto st5;
 			else goto st3;
@@ -470,19 +469,24 @@ halt(0x96);
 	}
 
 	stage rom_read {
-		reg_ws file_adrs<17>;
+
+		reg_ws file_adrs<18>, sram_adrs<11>;
 		first_state st_read;
 		state st_read if(psx.file_read_req & ^apf2sram.do & sram.ack){
 			// 783216000 Byte = 0x2EAEED80 -> 0x40000000 30bit
-			if(psx.file_adrs<29:13>==file_adrs){
-				sram.read(0b00000 || psx.file_adrs<12:1>);
-				goto st_data;
+			if(psx.file_adrs<29:12>!=file_adrs){
+				generate apf2sram.do(0x0040, 0b00 || psx.file_adrs<29:12> || 12#0b0, 4096);
+				file_adrs := psx.file_adrs<29:12>;
 			}
 			else{
-				generate apf2sram.do(0x0040, 0b00 || psx.file_adrs<29:13> || 13#0b0, 8192);
-				file_adrs := psx.file_adrs<29:13>;
+				if(psx.file_adrs<11:1>!=sram_adrs){
+					sram.read(0b000000 || psx.file_adrs<11:1>);
+					sram_adrs := psx.file_adrs<11:1>;
+				}
+				goto st_data;
 			}
 		}
+
 		state st_data if(sram.ack){
 			switch(psx.file_adrs<0>){
 				case 0: psx.file_data = sram.dout<7:0>;
