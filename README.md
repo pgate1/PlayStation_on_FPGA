@@ -55,7 +55,8 @@ Add MemoryCard Controller for Saga Frontier 2.
 <img width=260 src="img/20230201_MetalGearSolid.jpg"><img width=260 src="img/20230318_XI.jpg">
 <img width=260 src="img/20230203_RayStorm.jpg"><img width=260 src="img/20230202_IsInternalSection.jpg">
 <img width=260 src="img/20250228_RockmanX6.jpg"><img width=260 src="img/20250228_ValkyrieProfile.jpg">
-<img width=260 src="img/20250909_OmegaBoost.jpg">
+<img width=260 src="img/20250909_OmegaBoost.jpg"><img width=260 src="img/20251129_Musashiden.jpg">
+<img width=260 src="img/20251129_SeikenDensetsuLoM.jpg"><img width=260 src="img/20251129_Xenogears.jpg">
 
 ## Working game list
 
@@ -106,7 +107,8 @@ User reports.
 - GPU: Transparent drawing, texture blending.
 - SIO: Handling save data.
 - Pocket: Change resolution.
-- SPU: Sound is simulated using a square wave.
+- Pocket: Sound is simulated using a square wave.
+- GPU: Draw lines.
 - SPU: Pipelined.
 - GTE: Processing optimization.
 
