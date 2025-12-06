@@ -109,6 +109,7 @@ User reports.
 - Pocket: Change resolution.
 - Pocket: Sound is simulated using a square wave.
 - GPU: Draw lines.
+- CPU: Write buffer to WorkRAM.
 - SPU: Pipelined.
 - GTE: Processing optimization.
 
