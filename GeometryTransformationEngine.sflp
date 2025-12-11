@@ -881,14 +881,8 @@ dbg = dbg_reg;
 			if(shift) gfc_t = 44#GFC - (0x00000000 || g || 0x0);
 			else      gfc_t = (GFC - (0x00000 || g || 0x0)) || 0x000;
 			sel mac2_t<48>;
-			if(DPC_stg.dpcs){
-				mac2_t = (g || 0x0000) +
-					48#dpc_smul_mac2.con(IR0, lim_DPC.limB2(gfc_t<31:0>, 0b0).limB2_ret).dout;
-			}
-			else{ // DPCT
-				mac2_t = (g || 0x0000) +
-					48#dpc_smul_mac2.con(IR0, lim_DPC.limB1(gfc_t<31:0>, 0b0).limB1_ret).dout;
-			}
+			mac2_t = (g || 0x0000) +
+				48#dpc_smul_mac2.con(IR0, lim_DPC.limB2(gfc_t<31:0>, 0b0).limB2_ret).dout;
 		//	A2(t);
 			set_MAC2(mac2_t<43:12>);
 
@@ -900,14 +894,8 @@ dbg = dbg_reg;
 			if(shift) bfc_t = 44#BFC - (0x00000000 || b || 0x0);
 			else      bfc_t = (BFC - (0x00000 || b || 0x0)) || 0x000;
 			sel mac3_t<48>;
-			if(DPC_stg.dpcs){
-				mac3_t = (b || 0x0000) +
-					48#dpc_smul_mac3.con(IR0, lim_DPC.limB3(bfc_t<31:0>, 0b0).limB3_ret).dout;
-			}
-			else{ // DPCT
-				mac3_t = (b || 0x0000) +
-					48#dpc_smul_mac3.con(IR0, lim_DPC.limB1(bfc_t<31:0>, 0b0).limB1_ret).dout;
-			}
+			mac3_t = (b || 0x0000) +
+				48#dpc_smul_mac3.con(IR0, lim_DPC.limB3(bfc_t<31:0>, 0b0).limB3_ret).dout;
 		//	A3(t);
 			set_MAC3(mac3_t<43:12>);
 
