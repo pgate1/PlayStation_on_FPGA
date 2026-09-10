@@ -57,7 +57,7 @@ circuit PlayStation_core
 
 	Scratchpad scratch;
 
-	reg_wr spuDmaWait<32>;
+	reg_wr spuDmaWait<32>, CommonDelay<20>;
 	reg_wr ramSize<16>;
 
 	reg_wr IREG<16>, IMASK<16>, DmaDPCR<32>, DmaDICR<32>;
@@ -662,6 +662,7 @@ dbg_gpu = gpu.dbg_gpu;
 					any{
 						cpu_A<15:0>==0x100C : io_reg := 0x00003022;
 						cpu_A<15:0>==0x1014 : io_reg := spuDmaWait;
+						cpu_A<15:0>==0x1020 : io_reg := 0x000 || CommonDelay;
 						cpu_A<15:0>==0x1040 : par{ // パッドデータ
 						//	io_reg := 0x000000 || pad.ReadData().io_dout<7:0>;
 							pad.ReadData();
@@ -684,6 +685,7 @@ dbg_gpu = gpu.dbg_gpu;
 						cpu_A<15:0>==0x1058 : io_reg := 0; // test
 						cpu_A<15:0>==0x105A : io_reg := 0; // test
 						cpu_A<15:0>==0x105C : io_reg := 0; // test
+						cpu_A<15:0>==0x105E : io_reg := 0; // test
 						cpu_A<15:0>==0x1060 : io_reg := 0x0000 || ramSize;
 						cpu_A<15:0>==0x1070 : io_reg := 0x0000 || IREG;
 						cpu_A<15:0>==0x1074 : io_reg := 0x0000 || IMASK;
@@ -849,12 +851,13 @@ dbg_gpu = gpu.dbg_gpu;
 					cpu_A<15:0>==0x1014 : spuDmaWait := cpu_Dout;
 					cpu_A<15:0>==0x1018 : ;
 					cpu_A<15:0>==0x101C : ;
-					cpu_A<15:0>==0x1020 : ;
+					cpu_A<15:0>==0x1020 : CommonDelay := cpu_Dout<19:0>;
 					cpu_A<15:0>==0x1040 : pad.WriteData(0x00||cpu_Dout<7:0>); // パッドデータ
 					cpu_A<15:0>==0x1048 : pad.WriteMode(cpu_Dout<15:0>); // パッドモード
 					cpu_A<15:0>==0x104A : pad.WriteCtrl(cpu_Dout<15:0>); // パッドコントロール
 					cpu_A<15:0>==0x104C : ;
 					cpu_A<15:0>==0x104E : pad.WriteBaud(cpu_Dout<15:0>); // パッドボーレート
+					cpu_A<15:0>==0x1050 : ; // test
 					cpu_A<15:0>==0x1058 : ; // test
 					cpu_A<15:0>==0x105A : ; // test
 					cpu_A<15:0>==0x105C : ; // test
