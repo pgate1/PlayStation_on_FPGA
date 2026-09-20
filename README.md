@@ -101,6 +101,7 @@ User reports.
 - Kaette Kita Cyborg Kurochan
 - Bloody Roar
 - Minna no Golf 2
+- LSD
 
 ## Future implementation plans.  
 
