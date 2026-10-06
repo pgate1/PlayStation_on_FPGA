@@ -738,7 +738,7 @@ dbg_gpu = gpu.dbg_gpu;
 						//	io_reg := spu.io_get(cpu_A<15:0>).io_Dout || spu.io_Dout;
 							io_reg := spu.io_get(cpu_A<15:0> & 0x1DFF).io_Dout || spu.io_Dout;
 						}
-						cpu_A<15:0>==0x2000 : ;
+						cpu_A<15:8>==0x20 : ;
 						else : par{
 							dbg_reg := cpu_A;
 							halt(0x57);
@@ -971,7 +971,7 @@ dbg_gpu = gpu.dbg_gpu;
 						spu.io_set(cpu_A<15:0> & 0x1DFF, cpu_Dout<15:0>);
 					}
 					cpu_A<15:0>==0x2041 : ; // ディップスイッチ?
-					cpu_A<15:0>==0x2080 : ;
+					cpu_A<15:8>==0x20 : ;
 					else : par{
 						dbg_reg := cpu_A;
 						halt(0x55);
