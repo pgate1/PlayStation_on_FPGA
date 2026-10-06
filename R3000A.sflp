@@ -249,7 +249,10 @@ if(in_syscall) halt(0x0A);
 	irq_on = (IRQ_in!=0) & (st_irq_run==0) & cpr0[12]<10> & cpr0[12]<0>;
 
 	instruct run par{
-		if(read_wait.do | mul_wait.do | div_wait.do | gte.running);
+		if(read_wait.do | 
+			((mul_wait.do | div_wait.do) & ((op==0x00) & ((funct==0x10) | (funct==0x12)))) | 
+			(gte.running & ((op==0x12) | (op==0x32) | (op==0x3A)))
+		); // stall
 		else{
 			alt{
 				write_mem_rt : stall_mem2 := 1;
@@ -956,7 +959,7 @@ dbg_reg := funct; halt(0x04);
 				// u32 reg = gpr[opcode.imm.rt];
 				// u32 val = mem.read(adrs & 0xFFFFFFFC);
 				adrs = rs_data + (32#immediate);
-				read(READ_RT, adrs<31:2>||0b00, 4);
+				read(READ_RT, adrs<31:2> || 0b00, 4);
 				read_rt();
 				set_rt(0);
 				rt_data_reg := rt_data;
@@ -965,18 +968,28 @@ dbg_reg := funct; halt(0x04);
 			}
 			op==0x32 : par{ // LWC2 mem -> d[rt]
 				adrs = rs_data + (32#immediate);
-				read(READ_RT, adrs, 4);
-				read_rt();
-				gte_rt := rt;
+				if(/|adrs<1:0>){
+					exception(0x00000010);
+				}
+				else{
+					read(READ_RT, adrs, 4);
+					read_rt();
+					gte_rt := rt;
+				}
 				set_rt(0);
 			}
 			op==0x3A : par{ // SWC2 d[rt] -> mem
 				// mem.write(adrs, gte.MFC2(opcode.imm.rt));
 				adrs = rs_data + (32#immediate);
-				gte.MFC2(rt);
-				read_gte();
-				read_rt();
-				mem_A := adrs;
+				if(/|adrs<1:0>){
+					exception(0x00000014);
+				}
+				else{
+					gte.MFC2(rt);
+					read_gte();
+					read_rt();
+					mem_A := adrs;
+				}
 				set_rt(0);
 				// write(adrs, gte.MFC2(rt).dout, 4);
 				// write_rt();
