@@ -1,0 +1,738 @@
+{
+  "schema": 1,
+  "notes": [
+    "Compile is the local tools/sflc/sflc.py result. Elaborate is Icarus -t null on that output only, and is recorded only when compile exits 0.",
+    "Oracle status is separate from local results; no independent sfl2vl output is recorded here.",
+    "Paths are repository-relative. <tmp> is a temporary directory."
+  ],
+  "rows": [
+    {
+      "probe": "p00_base",
+      "source": "tools/sflc/probe/p00_base.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p00_base.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p00_base.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p01_ifelse",
+      "source": "tools/sflc/probe/p01_ifelse.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p01_ifelse.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p01_ifelse.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p02_switch",
+      "source": "tools/sflc/probe/p02_switch.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p02_switch.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p02_switch.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p03_sel",
+      "source": "tools/sflc/probe/p03_sel.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p03_sel.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p03_sel.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p04_ops",
+      "source": "tools/sflc/probe/p04_ops.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p04_ops.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p04_ops.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p05_incdec",
+      "source": "tools/sflc/probe/p05_incdec.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p05_incdec.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p05_incdec.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p06_instrargs",
+      "source": "tools/sflc/probe/p06_instrargs.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p06_instrargs.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p06_instrargs.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p07_init",
+      "source": "tools/sflc/probe/p07_init.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p07_init.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p07_init.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p08_gen",
+      "source": "tools/sflc/probe/p08_gen.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "unsupported-explicit",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p08_gen.sfl",
+        "exit_status": 1,
+        "first_diagnostic": "tools/sflc/probe/p08_gen.sfl: NotImplementedError: par generator",
+        "pass_evidence": ""
+      },
+      "elaborate": null,
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Compiler feature not implemented; no oracle run applies."
+      }
+    },
+    {
+      "probe": "p09_prec",
+      "source": "tools/sflc/probe/p09_prec.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p09_prec.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p09_prec.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p10_scoped",
+      "source": "tools/sflc/probe/p10_scoped.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p10_scoped.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p10_scoped.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p11_pp",
+      "source": "tools/sflc/probe/p11_pp.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p11_pp.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p11_pp.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p12_unops",
+      "source": "tools/sflc/probe/p12_unops.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p12_unops.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p12_unops.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p13_stage",
+      "source": "tools/sflc/probe/p13_stage.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "local-only",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p13_stage.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p13_stage.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      },
+      "note": "Archived sfl2vl produced no reference Verilog for this probe; rejected as an oracle."
+    },
+    {
+      "probe": "p14_any_alt",
+      "source": "tools/sflc/probe/p14_any_alt.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p14_any_alt.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p14_any_alt.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p15_submod",
+      "source": "tools/sflc/probe/p15_submod.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p15_submod.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p15_submod.sv tools/sflc/tests/interface_leaf.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p16_circuit_kw",
+      "source": "tools/sflc/probe/p16_circuit_kw.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p16_circuit_kw.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p16_circuit_kw.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p17_registers",
+      "source": "tools/sflc/probe/p17_registers.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "local-only",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p17_registers.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p17_registers.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p18_controls",
+      "source": "tools/sflc/probe/p18_controls.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "local-only",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p18_controls.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p18_controls.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p19_stage",
+      "source": "tools/sflc/probe/p19_stage.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "local-only",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p19_stage.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p19_stage.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p20_retained_stage",
+      "source": "tools/sflc/probe/p20_retained_stage.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "local-only",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p20_retained_stage.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p20_retained_stage.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p21_multi_task",
+      "source": "tools/sflc/probe/p21_multi_task.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "unsupported-explicit",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p21_multi_task.sfl",
+        "exit_status": 1,
+        "first_diagnostic": "tools/sflc/probe/p21_multi_task.sfl: NotImplementedError: multiple tasks in one stage",
+        "pass_evidence": ""
+      },
+      "elaborate": null,
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Compiler feature not implemented; no oracle run applies."
+      }
+    },
+    {
+      "probe": "p22_widths",
+      "source": "tools/sflc/probe/p22_widths.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p22_widths.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p22_widths.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "q_lines00400",
+      "source": "tools/sflc/probe/q_lines00400.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/q_lines00400.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/q_lines00400.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "q_lines00900",
+      "source": "tools/sflc/probe/q_lines00900.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/q_lines00900.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/q_lines00900.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "q_lines01900",
+      "source": "tools/sflc/probe/q_lines01900.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/q_lines01900.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/q_lines01900.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "q_lines03900",
+      "source": "tools/sflc/probe/q_lines03900.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/q_lines03900.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/q_lines03900.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "q_lines09000",
+      "source": "tools/sflc/probe/q_lines09000.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/q_lines09000.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <scratch>/probe_out/q_lines09000.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics, run without timeout, about 50 min wall clock (2026-10-12 04:00-04:50 EEST)"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      },
+      "note": "Icarus elaboration with no timeout: exit 0 after about 50 min. Earlier 35 min run was stopped by SIGTERM."
+    },
+    {
+      "probe": "p23_call_args",
+      "source": "tools/sflc/probe/p23_call_args.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p23_call_args.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p23_call_args.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p24_shared_args",
+      "source": "tools/sflc/probe/p24_shared_args.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p24_shared_args.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p24_shared_args.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p25_selector_guards",
+      "source": "tools/sflc/probe/p25_selector_guards.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p25_selector_guards.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p25_selector_guards.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    },
+    {
+      "probe": "p26_data_controls",
+      "source": "tools/sflc/probe/p26_data_controls.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p26_data_controls.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p26_data_controls.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "not-run",
+        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
+      }
+    }
+  ]
+}
