@@ -83,14 +83,15 @@ class InstanceArrayBoundaryTests(unittest.TestCase):
         self.assertIn("assign y = (cells[1'd0]);", generated)
         self.assertNotIn("cells_0", generated)
 
-    def test_scalar_with_similarly_named_instance_is_not_inferred_as_array(self):
-        # A declared scalar base keeps ordinary expression resolution. An
-        # indexed read is rejected as a non-memory; a call through it reaches
-        # the compiler's unsupported nested-call-result boundary.
+    def test_scalar_index_stays_an_index_but_method_qualifier_selects_instance(self):
+        # Bare s[0] keeps ordinary signal/memory indexing rules. The member
+        # qualifier on s[0].con(...) identifies the declared component s_0.
         with self.assertRaisesRegex(NotImplementedError, "index of non-memory"):
             self.compile("input s<8>; leaf s_0; output y<8>; y = s[0];")
-        with self.assertRaisesRegex(NotImplementedError, "nested call result"):
-            self.compile("input s<8>, d<8>; leaf s_0; output y<8>; y = s[0].con(d).q;")
+        generated = self.compile("input s<8>, d<8>; leaf s_0; output y<8>; y = s[0].con(d).q;")
+        self.assertIn("input [7:0] s;", generated)
+        self.assertIn("leaf s_0", generated)
+        self.assertIn("assign y = (__sfl_port_0_q);", generated)
 
     def test_method_result_inside_generator_routes_each_expanded_instance(self):
         generated = self.compile("""
