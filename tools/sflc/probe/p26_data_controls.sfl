@@ -1,0 +1,18 @@
+// Distinguish data selectors from control terminals and nested activation.
+circuit p26 {
+    input a<8>, b<8>, c, s, bit_input;
+    output bit_data, bit_constant, wide_constant<8>, nested<8>, duplicate<8>, combined<8>;
+    instrout event_out;
+    if(c) bit_data=bit_input;
+    if(c) bit_constant=0b1;
+    if(c) wide_constant=0x34;
+    if(c) event_out();
+    if(c) {
+        if(s) nested=a;
+        else nested=b;
+    }
+    if(c) duplicate=a;
+    if(s) duplicate=a;
+    combined=b;
+    if(c) combined=a;
+}

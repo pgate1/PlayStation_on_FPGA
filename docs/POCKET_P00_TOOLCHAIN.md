@@ -1,10 +1,11 @@
 # P00 build recovery — dependency status and plan
 
-**Current update (2026-10-12):** the self-written compiler now generates both
-real cache sources with behavioral/mutation tests. It is still experimental;
-sequential oracle equivalence and hierarchy linking are the next hard jobs.
-See [POCKET_SFLC.md](POCKET_SFLC.md) and the refreshed
-[checkpoint](POCKET_START_HERE.md). The dated sections below are recovery history.
+**Current update (2026-10-12):** the experimental compiler now links modules,
+generates both real caches, and passes 15 combinational plus five sequential
+native reference cases. Thirteen regression groups pass locally and on Linux.
+Full-core compilation and a Pocket build remain open. Start with the exact
+[handoff](POCKET_HANDOFF_2026-10-12.md), then [compiler limits](POCKET_SFLC.md).
+The dated sections below are recovery history, not the current capability list.
 
 
 Checked 2026-10-11. Evidence is from GitHub API queries and web search; pgate1.at-ninja.jp could not be fetched from this session.

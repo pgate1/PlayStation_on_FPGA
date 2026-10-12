@@ -1,0 +1,21 @@
+// Single ordinary drivers, repeated values, and direct/call mixtures.
+circuit p25 {
+    input a<8>, b<8>, c<8>;
+    instrin first, second, third;
+    output plain<8>, selected<8>, repeated<8>, mixture<8>, direct_only<8>;
+    instrself invoke, unused;
+    sel selected_arg<8>, mixed_arg<8>, unused_arg<8>;
+    instr_arg invoke(mixed_arg);
+    instr_arg unused(unused_arg);
+    instruct first plain=a;
+    instruct first selected_arg=a;
+    selected=selected_arg;
+    instruct first repeated=a;
+    instruct second repeated=a;
+    instruct first invoke(a);
+    instruct second invoke(b);
+    mixed_arg=c;
+    mixture=mixed_arg;
+    instruct third unused_arg=c;
+    direct_only=unused_arg;
+}

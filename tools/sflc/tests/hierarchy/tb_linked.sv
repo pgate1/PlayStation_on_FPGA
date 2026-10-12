@@ -16,8 +16,8 @@ module tb_linked;
     expected=valid[which]?contents[which]:8'b0;
     if(available!==valid[which] || event_out!==valid[which] || value!==expected)
       $fatal(1,"child response routing mismatch checks=%d",checks);
-    if(mapped!==(push?(data^8'h5a):8'b0) || local_value!==(push?8'(data+3):8'b0))
-      $fatal(1,"guarded call result mismatch");
+    if(mapped!==(push?(data^8'h5a):8'hc3) || local_value!==8'(data+3))
+      $fatal(1,"continuous data/guarded control call mismatch");
     // When the result is inactive the child must not be spuriously invoked.
     if(d.transform.con!==push) $fatal(1,"call side effect escaped its guard");
   endtask

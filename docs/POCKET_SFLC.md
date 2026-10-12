@@ -19,7 +19,8 @@ equivalence of the full core.
 - Statically sized memory with one selected physical write port, registered or
   combinational reads as specified by the source, and optional initialization.
 - Lexically distinct local wires/registers, declaration after use, `switch`,
-  `any`, `alt` with or without `else`, and implicit zero on inactive selectors.
+  `any`, `alt` with or without `else`, and oracle-tested data selector simplification.
+  Inactive data is not universally zero; see the qualification below.
 - Single- and multiple-task stages, captured register arguments, common actions,
   state guards, `goto` and `finish`.
 - Header/interface linking, lexical instances, child control calls, child output
@@ -51,10 +52,10 @@ check exercised traffic; they are not a static proof of mutually exclusive
 writers. Some valid SFL programs intentionally OR simultaneous writers; run
 reference equivalence without these optional exclusivity assertions.
 
-## Sequential reference evidence and open mismatch
+## Sequential reference evidence and data/control qualification
 
 Linux oracle run `38184207585` generated native p17–p21 successfully. With the
-new `cosim_sequential.py`, p17, p19, p20 and p21 pass 4,000 random cycles each
+new `cosim_sequential.py`, all five cases p17–p21 pass 4,000 random cycles each
 (seed 1), comparing every output around manually driven clock/reset edges.
 Inputs include overlapping starts, simultaneous finish/generate and periodic
 asynchronous reset. The references remain external.
@@ -66,11 +67,24 @@ active bits: starting a second task does not cancel the first. Finish clears all
 tasks except those generated on that same edge. Shared argument writers combine
 by guarded OR, as do ordinary SFL multiple writers. Nested stages are unsupported.
 
-**Open mismatch: p18 instruction arguments.** The oracle drives a sole call's
-argument unconditionally, even while its control is inactive. The current
-compiler guards it. Native p23 distinguishes single/multiple call sites and a
-mixed direct writer; await that reference before generalizing a fix. Do not
-claim instruction-argument equivalence or use this compiler for live integration.
+The p18 inactive argument mismatch is fixed. Further native probes p23–p26
+establish that this applies to ordinary data selectors as well as call arguments:
+a single distinct data value is continuously connected; identical repeated
+values need no selector; an unconditional writer makes the tested data values
+combine without their activation guards. Distinct conditional values retain
+selection guards, including shared formals across different control terminals.
+A one-bit literal assignment remains a Boolean control equation: `if(c) flag=1`
+produces `flag=c`, whereas `if(c) data=bit_input` continuously connects the data.
+Instruction activation and register enables remain guarded.
+
+This reproduces the sampled archived **`-O2` output**, not a complete language or
+optimizer specification. The compiler recognizes syntactically identical emitted
+values and literal Boolean constants. Symbolically equivalent expressions,
+constant folding beyond those literals and more complex selector transformations
+remain unqualified. Do not rely on unspecified inactive data to indicate validity;
+use the appropriate control terminal. Local scoreboards were corrected to remove
+the earlier universal inactive-zero assumption, and a 4,096-case fixture now
+covers p18/p23–p26 without needing external licensed references.
 
 The old p13 stage probe produced no oracle because of invalid native syntax.
 The new probes are small native inputs below the evaluation limit. Do not compact
@@ -99,7 +113,7 @@ From the project root, with Python 3, Icarus and vvp on PATH:
 python3 tools/sflc/tests/run_tests.py
 ```
 
-Executed successfully with Python 3.12 and Icarus 13.0. Twelve test groups pass:
+Executed successfully with Python 3.12 and Icarus 13.0. Thirteen test groups pass:
 
 | Evidence | Result and scope |
 |---|---|
@@ -113,6 +127,7 @@ Executed successfully with Python 3.12 and Icarus 13.0. Twelve test groups pass:
 | Elaboration only | 19 real leaf modules and supported `p*` probes; p08 generators fail explicitly |
 | Linked modules | 2,000 cycles with clocked children, an external leaf, events and guarded call results; invalid interfaces and cycles rejected |
 | Multiple stage tasks | 40 directed checks including shared argument OR, sticky overlap, finish/generate and reset |
+| Data/control selectors | 4,096 input/control cases covering sole/shared/repeated values, direct writers, one-bit literal controls and nested guards |
 
 The texture bench supplies responses only after the request has crossed an
 accepting clock edge. It does not establish compatibility with a same-cycle ack
@@ -127,21 +142,21 @@ For optional comparison against the archived reference output directory:
 python3 tools/sflc/cosim.py --reference-dir /path/to/sfl2vl-probe-out
 ```
 
-Executed with seed 1 and 4,000 vectors each: **all eleven pass** (`p01`, `p03`,
-`p04`, `p09`, `p11`, `p12`, `p14`, `p15`, `p16`, `p22`, and real `bsr_s16`). `p11` has no data
+Executed with seed 1 and 4,000 vectors each: **all fifteen pass** (`p01`, `p03`,
+`p04`, `p09`, `p11`, `p12`, `p14`, `p15`, `p16`, p22–p26, and real `bsr_s16`). `p11` has no data
 inputs, so it is a repeated constant-output check. The runner generates vectors
 in Python, checks output widths, supports arbitrary input widths, and fails on
 missing references, simulator failures, mismatches or missing PASS markers.
-Latest references are external artifacts from Linux run `38212896810`; p22 uses
+Latest references are external artifacts from Linux run `38215563441`; p22 uses
 native subtraction instead of the unary-minus spelling rejected by the oracle.
-This is combinational equivalence only. For the currently passing sequential cases:
+This is combinational equivalence only. For all five sequential cases:
 
 ```sh
-python3 tools/sflc/cosim_sequential.py --reference-dir /path/to/sfl2vl-probe-out \
-  --cases p17_registers p19_stage p20_retained_stage p21_multi_task
+python3 tools/sflc/cosim_sequential.py --reference-dir /path/to/sfl2vl-probe-out
 ```
 
-The default five-case run currently exposes the p18 mismatch above.
+The complete suite passes at seed 1, 4,000 cycles each, including overlapping
+control inputs. No output masking is used to hide inactive-data mismatches.
 
 Both caches also passed **Verilator 5.052 lint without warnings**:
 
@@ -153,15 +168,19 @@ verilator --lint-only --top-module Cache_Texture /tmp/Cache_Texture.sv
 ```
 
 `.github/workflows/sflc.yml` adds the local regression to CI without downloading
-the proprietary compiler. The probe branch ran this workflow on Linux; its older compiler snapshot fails
-the newly added multi-task probe. Current local changes have not yet had a green
-remote run. The native oracle workflow succeeds, but that workflow deliberately
-retains failed probe logs: inspect each individual exit status.
+the proprietary compiler. The final 13-group compiler snapshot passed Linux CI in run
+[38222767443](https://github.com/ollisulopuisto/PlayStation_on_FPGA/actions/runs/38222767443)
+on isolated branch `sfl-oracle-20261012`, commit `c2da886`. This includes the final
+selector implementation and fixture corrections. The matching native oracle
+workflow [38222767521](https://github.com/ollisulopuisto/PlayStation_on_FPGA/actions/runs/38222767521)
+also completed; individual probe exits must still be inspected because that
+workflow deliberately retains failures. Local reference comparisons used the
+same p17–p26 sources from previously downloaded run `38215563441`.
 
 ## Next hard work, in order
 
-1. **L3: instruction-argument closure.** Resolve p18 using the native p23
-   evidence, then rerun both independent reference suites and the local regression.
+1. **L3: selector/typed-expression audit.** Broaden native evidence for equivalent
+   expressions and constant folding; the sampled p18/p23–p26 mismatch is closed.
 2. **L3: typed expression audit.** Broaden decimal sizing, mixed-width arithmetic,
    overflow before slicing and sign-extension contexts beyond p22. Do this before
    trusting GTE/CPU arithmetic.

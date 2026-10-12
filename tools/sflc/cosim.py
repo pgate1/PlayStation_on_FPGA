@@ -28,6 +28,10 @@ CASES = {
     'p15_submod': Path('tools/sflc/probe/p15_submod.sfl'),
     'p16_circuit_kw': Path('tools/sflc/probe/p16_circuit_kw.sfl'),
     'p22_widths': Path('tools/sflc/probe/p22_widths.sfl'),
+    'p23_call_args': Path('tools/sflc/probe/p23_call_args.sfl'),
+    'p24_shared_args': Path('tools/sflc/probe/p24_shared_args.sfl'),
+    'p25_selector_guards': Path('tools/sflc/probe/p25_selector_guards.sfl'),
+    'p26_data_controls': Path('tools/sflc/probe/p26_data_controls.sfl'),
     'real_bsr_s16': Path('bsr_s16.sflp'),
 }
 DECL = re.compile(

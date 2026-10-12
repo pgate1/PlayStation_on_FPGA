@@ -1,6 +1,7 @@
 # Session checkpoint — start here
 
-Updated **2026-10-12**. Workspace:
+Updated **2026-10-12**. Latest handoff: [POCKET_HANDOFF_2026-10-12.md](POCKET_HANDOFF_2026-10-12.md).
+Workspace:
 `/Users/dst/Documents/koodi/PlayStation_on_FPGA-master`.
 
 ## Objective and work order
@@ -19,9 +20,11 @@ must own compiler semantics and shared RTL interfaces.
 
 This is now a Git checkout, with existing committed and uncommitted work. Check
 `git status` before editing. Milestone commit `6fbe8bc` contains the first compiler/cache work; external agent
-commit `95d42dd` adds the portable HDL runner. Oracle-only branch
-`sfl-oracle-20261012` was pushed for Linux reference runs; current integration
-work remains local until its next checkpoint commit.
+commit `95d42dd` adds the portable HDL runner. Isolated validation branch
+`sfl-oracle-20261012` was pushed for Linux reference/regression runs; integration
+checkpoint `0422745` adds hierarchy linking, stages and the task queue.
+The follow-up selector checkpoint matches native p23–p26; its 13-group
+regression passes Linux CI run `38222767443` (snapshot `c2da886`).
 Preserve the original SFL files' CRLF/non-UTF-8 bytes. This session changed compiler,
 fixtures and documentation, not the cache source bytes or the live Pocket top.
 
@@ -29,8 +32,8 @@ fixtures and documentation, not the cache source bytes or the live Pocket top.
 |---|---|
 | Replacement SFL compiler | Expanded from combinational subset to registers, memory, local controls, lexical scopes, switch, multiple-task stages and hierarchy linking; **experimental**, not a full compiler |
 | P02 caches | Actual corrected SFL sources compile and pass 242 behavioral checks; reverting each existing suffix comparison makes the bench fail |
-| Compiler validation | Twelve test groups pass, including 4,000 sequential cycles and 65,536 arithmetic vectors; 19 real leaf modules elaborate; linked fixture passes 2,000 cycles |
-| Reference equivalence | Eleven combinational cases pass 4,000 vectors each; four sequential cases pass 4,000 cycles each; **p18 argument-wiring mismatch remains open** |
+| Compiler validation | Thirteen test groups pass, including 4,000 sequential cycles and 65,536 arithmetic vectors; 19 real leaf modules elaborate; linked fixture passes 2,000 cycles |
+| Reference equivalence | Fifteen combinational cases pass 4,000 vectors each; all five sequential cases pass 4,000 cycles each; sampled p18/p23–p26 selector mismatches fixed |
 | Cache lint | Both generated caches pass Verilator 5.052 without warnings |
 | P04 memory frontend | Isolated behavioral scoreboard already passed across multiple parameter sets; not integrated |
 | Replacement framebuffer RAM/SRAM blocks | Written and previously simulated; interface/timing assumptions remain |
@@ -48,9 +51,9 @@ The compiler now makes isolated cache validation possible without a proprietary
 license. Do not spend the next session redoing the parser spike or claiming that
 all sequential semantics have been recovered.
 
-1. Resolve the p18 instruction-argument mismatch using native p23; see
-   [POCKET_SFLC.md](POCKET_SFLC.md). Register reset and single/multiple-task stage
-   probes now agree with the oracle, including restart and overlapping starts.
+1. Continue the selector/typed-expression audit described in
+   [POCKET_SFLC.md](POCKET_SFLC.md). Native register, stage and sampled selector
+   probes now agree, including inactive data, restart and overlapping starts.
 2. Expand finite-width expression evidence beyond p22 before trusting CPU/GTE.
 3. Implement constant generators and audit the linked hierarchy. Source defects
    are inventoried separately; do not silently introduce implicit signals.

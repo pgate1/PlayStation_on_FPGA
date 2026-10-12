@@ -1,0 +1,21 @@
+// Shared formal across controls; repeated identical values; guarded direct writer.
+circuit p24 {
+    input a<8>, b<8>;
+    instrin first, second, third;
+    output shared_value<8>, same_value<8>, mixed_value<8>;
+    instrself left_call, right_call, same_call, mixed_call;
+    sel shared_arg<8>, same_arg<8>, mixed_arg<8>;
+    instr_arg left_call(shared_arg);
+    instr_arg right_call(shared_arg);
+    instr_arg same_call(same_arg);
+    instr_arg mixed_call(mixed_arg);
+    instruct first left_call(a);
+    instruct second right_call(b);
+    instruct first same_call(a);
+    instruct second same_call(a);
+    instruct first mixed_call(a);
+    instruct third mixed_arg=b;
+    shared_value=shared_arg;
+    same_value=same_arg;
+    mixed_value=mixed_arg;
+}

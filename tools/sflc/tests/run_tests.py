@@ -181,6 +181,14 @@ class CompilerTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
         self.assertIn('PASS multi-task checks=40', result.stdout)
 
+    def test_13_instruction_argument_connections(self):
+        modules = {name: sflc.translate(ROOT/('tools/sflc/probe/'+name+'.sfl'))
+                   for name in ('p18_controls', 'p23_call_args', 'p24_shared_args',
+                                'p25_selector_guards', 'p26_data_controls')}
+        result = self.simulate('tb_call_args', modules, ROOT/'tools/sflc/tests/tb_call_args.sv')
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+        self.assertIn('PASS call arguments checks=4096', result.stdout)
+
     def test_11_linker_rejects_bad_interfaces(self):
         header = 'declare child interface {input a<8>; output b<8>; instrin put(a); instrout ack;}'
         for body, error in [

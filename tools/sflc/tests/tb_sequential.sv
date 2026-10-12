@@ -40,7 +40,7 @@ module tb_sequential;
     if(a[0]) l=l+1; else rr=rr+2;
     clk=1; #1;
     if(value!==r || memq!==q || busy!==(state!=0) || result!==res ||
-       left!==(a[0]?l:8'b0) || right!==(a[0]?8'b0:rr) || set_value!==1 || initialized!==5)
+       left!==l || right!==rr || set_value!==1 || initialized!==5)
        $fatal(1,"sequential mismatch check=%d r=%h/%h mem=%h/%h busy=%b state=%d result=%h/%h locals=%h/%h %h/%h",
          checks,value,r,memq,q,busy,state,result,res,left,l,right,rr);
     checks=checks+1;

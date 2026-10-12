@@ -32,7 +32,7 @@ circuit sequential {
         local++;
         left = local;
     } else {
-        // Same spelling, independent persistent register and implicit zero left.
+        // Same spelling, independent persistent register; data stays connected.
         reg_wr local<8>;
         local += 2;
         right = local;

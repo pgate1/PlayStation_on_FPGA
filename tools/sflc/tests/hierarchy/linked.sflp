@@ -13,6 +13,7 @@ circuit linked {
     leaf transform;
     instrself local_call(v);
     sel v<8>, local_result<8>;
+    available = ready_event;
     instruct local_call local_result = v + 0x03;
     if(push) {
         if(which) right.put(data);
@@ -23,9 +24,9 @@ circuit linked {
     left.take = take & ^which;
     right.take = take & which;
     instruct left.offer if(^which) {
-        ready_event(); available=0b1; value=left.value;
+        ready_event(); value=left.value;
     }
     instruct right.offer if(which) {
-        ready_event(); available=0b1; value=right.value;
+        ready_event(); value=right.value;
     }
 }
