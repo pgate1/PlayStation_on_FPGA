@@ -29,8 +29,8 @@ Checkpoint `e92456c` commits the 32-probe matrix; its checker passed at that
 checkpoint. It now needs p27/p28 rows plus p21 and oracle-status corrections.
 The selector checkpoint `d93175d` matches native p23–p26. Latest compiler
 checkpoint **f983b03** adds bounded generators, p28 comparison and opt-in banks.
-All 15 groups pass locally; current Linux CI fails the experimental bank fixture.
-The older green 13-group run does not validate this new bank feature.
+All 15 groups now pass locally and on Linux after a bench-only static-task fix
+(run 38296978627). Native bank equivalence remains a separate known mismatch.
 Checkpoint `31934fc` recovered authoritative diagnostic project/timing inputs.
 Preserve the original SFL files' CRLF/non-UTF-8 bytes. This session changed compiler,
 fixtures and documentation, not the cache source bytes or the live Pocket top.
@@ -39,7 +39,7 @@ fixtures and documentation, not the cache source bytes or the live Pocket top.
 |---|---|
 | Replacement SFL compiler | Expanded from combinational subset to registers, memory, local controls, lexical scopes, switch, multiple-task stages, hierarchy linking and bounded generators; **experimental**, not a full compiler |
 | P02 caches | Actual corrected SFL sources compile and pass 242 behavioral checks; reverting each existing suffix comparison makes the bench fail |
-| Compiler validation | 15 groups pass locally; 14 pass on Linux and bank initialization fails; GTE hierarchy elaborates only with experimental bank flag |
+| Compiler validation | 15 groups pass locally and on Linux (38296978627); GTE hierarchy elaborates only with experimental bank flag |
 | Reference equivalence | Fifteen combinational cases pass 4,000 vectors each; six sequential cases p17–p21/p28 pass 4,000 cycles each; p27 parallel memory is an explicit mismatch |
 | Cache lint | Both generated caches pass Verilator 5.052 without warnings |
 | P04 memory frontend | Isolated behavioral scoreboard already passed across multiple parameter sets; not integrated |
@@ -61,13 +61,14 @@ all sequential semantics have been recovered.
 1. Resolve the author-documented SFL+ versus archived native discrepancies:
    parallel memory writes and wide reg_ws reset. The latter affects loader address
    comparisons in Pocket/core.sflp. Current sampled native matches do not settle it.
-2. Reduce the Linux bank initialization failure and record exact tool versions;
-   Q-L2-03 assigns independent evidence gathering, leaving the compiler to L3.
+2. Linux bank scoreboard portability is fixed with static tasks; see
+   [reduction evidence](POCKET_BANK_INIT_REPRO.md). Do not repeat Q-L2-03.
 3. Broaden typed-expression/selector evidence and audit real hierarchy clients.
    Constant par/any/alt expansion is implemented; join remains unsupported.
 4. Progress the [Pocket diagnostic milestone](POCKET_DIAGNOSTIC_PLAN.md).
    [Authoritative inputs](POCKET_DIAGNOSTIC_INPUTS.md) now exist; diagnostic RTL
-   and simulation can start without Quartus. No such RTL existed at handoff.
+   and simulation passed locally and on Linux. RTL/bench are committed in 77b3f50;
+   APF wrapper/project integration and Quartus fitting remain.
 5. Preserve frontend isolation and CPU/GPU stalls until platform/controller
    ownership, CDC and reset contracts are met.
 

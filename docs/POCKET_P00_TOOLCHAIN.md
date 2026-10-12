@@ -1,7 +1,7 @@
 # P00 build recovery — dependency status and plan
 
 **Current update (2026-10-12):** compiler checkpoint f983b03 adds bounded generators.
-Fifteen groups pass locally; Linux fails the experimental bank initialization test.
+Fifteen groups pass locally and on Linux after a static-task bench fix (38296978627).
 Six sequential reference cases pass; parallel-memory p27 is a known mismatch.
 Wide reg_ws also has an unresolved SFL+ versus archived-native semantic gap.
 Full-core compilation and a Pocket build remain open. Start with the exact

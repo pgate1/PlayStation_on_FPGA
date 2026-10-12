@@ -8,7 +8,8 @@ sequential probes now have independent reference evidence; this is not
 equivalence of the full core.
 
 Compiler checkpoint **f983b03**: 15 groups pass locally with Icarus 13, but the
-new experimental bank fixture fails initial-state checks on Linux CI. Six
+new bank fixture now also passes Linux CI after a static-task bench fix
+(run 38296978627); compiler memory logic was unchanged. Six
 sequential native comparisons pass; parallel-memory p27 is a retained mismatch.
 See the [current handoff](POCKET_HANDOFF_2026-10-12.md) for exact runs and commands.
 
@@ -77,10 +78,11 @@ rather than updating all selected words. The optional comparison exits 1 at
 post_edge cycle 4, q0=00 versus 9b. It is deliberately excluded from default
 reference cases and retained as an explicit counterexample, not masked.
 
-Linux CI also fails the bank fixture's first check (q0–q3 unknown at 2 ns).
-Changing initialization to explicit per-word assignments did not fix it; that
-attempt was reverted. Exact simulator/version diagnosis remains open. Keep the
-initialization assertion intact. This flag is not suitable for live integration.
+The earlier Linux failure (q0–q3 unknown at 2 ns) is resolved by static tasks in
+the nonrecursive scoreboard. Icarus 11 saw initialized internal words but unknown
+outputs with the old automatic-task bench. Compiler memory logic and all assertions
+remain unchanged. See [reduction evidence](POCKET_BANK_INIT_REPRO.md).
+The native mismatch still makes this flag unsuitable for live integration.
 
 ## Sequential reference evidence and data/control qualification
 
@@ -148,7 +150,7 @@ From the project root, with Python 3, Icarus and vvp on PATH:
 PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/tests/run_tests.py
 ```
 
-Executed successfully with Python 3.12 and Icarus 13.0. Fifteen test groups pass locally; Linux has the bank failure above:
+Executed successfully with Python 3.12 and Icarus 13.0. Fifteen test groups pass locally and now on Linux after the bench-only fix:
 
 | Evidence | Result and scope |
 |---|---|
@@ -163,7 +165,7 @@ Executed successfully with Python 3.12 and Icarus 13.0. Fifteen test groups pass
 | Linked modules | 2,000 cycles with clocked children, an external leaf, events and guarded call results; invalid interfaces and cycles rejected |
 | Multiple stage tasks | 40 directed checks including shared argument OR, sticky overlap, finish/generate and reset |
 | Data/control selectors | 4,096 input/control cases covering sole/shared/repeated values, direct writers, one-bit literal controls and nested guards |
-| Generators/banks | 6065 checks, 2019 cycles locally; default bank rejection checked; Linux initial-state failure remains |
+| Generators/banks | 6065 checks, 2019 cycles locally and on Linux; default bank rejection checked |
 | GTE | Linked hierarchy elaborates under experimental bank flag; no arithmetic/fit proof |
 
 The texture bench supplies responses only after the request has crossed an
@@ -215,19 +217,20 @@ also completed; individual probe exits must still be inspected because that
 workflow deliberately retains failures. Local reference comparisons used the
 same p17–p26 sources from previously downloaded run `38215563441`.
 
-Current 15-group Linux run [38250146881](https://github.com/ollisulopuisto/PlayStation_on_FPGA/actions/runs/38250146881)
+Historical failing 15-group Linux run [38250146881](https://github.com/ollisulopuisto/PlayStation_on_FPGA/actions/runs/38250146881)
 failed the bank fixture; 14 groups passed. Its compiler/test snapshot `3c14120`
 matches f983b03. The ineffective initialization experiment `8ad1d22` also failed
 in [38250348469](https://github.com/ollisulopuisto/PlayStation_on_FPGA/actions/runs/38250348469).
-Do not cite the older green run as validation of the current full suite.
+The unchanged assertions now pass in [38296978627](https://github.com/ollisulopuisto/PlayStation_on_FPGA/actions/runs/38296978627)
+with the static-task bench fix (snapshot 9ccdab6); all 15 groups are green.
 
 ## Next hard work, in order
 
 1. **L3: SFL+ versus archived SFL contract.** Resolve parallel-memory and wide
    reg_ws discrepancies with the author's documented behavior. Recover the missing
    preprocessor lowering or explicitly qualify separate versioned semantics.
-2. **L2 evidence, L3 fix: Linux initialization failure.** Minimal reproduction,
-   exact tool versions and unmodified initial-state assertions; see Q-L2-03.
+2. **Linux bench portability is fixed.** Read POCKET_BANK_INIT_REPRO.md rather
+   than repeating Q-L2-03; no compiler semantic change was made.
 3. **L3: typed expressions and selectors.** Broaden symbolic equivalence, decimal
    sizing, mixed widths, overflow before slicing and sign-extension contexts.
 4. **L3: hierarchy and remaining constructs.** Audit real clients, join ordering,

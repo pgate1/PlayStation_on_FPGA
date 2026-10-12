@@ -1,5 +1,9 @@
 # Handoff — 2026-10-12, bounded generator checkpoint
 
+**Historical handoff:** newer progress and claims are in [rolling checkpoints](POCKET_CHECKPOINTS.md).
+The Linux bank bench failure below is now fixed; diagnostic RTL/bench and matrix
+refresh are committed in 77b3f50. Preserve the dated evidence below as history.
+
 Latest **compiler checkpoint: `f983b03`** on `pocket-work`. This document supersedes
 the earlier continuation record. Read [compiler limits](POCKET_SFLC.md),
 [diagnostic inputs](POCKET_DIAGNOSTIC_INPUTS.md), and the

@@ -5,6 +5,30 @@ new entries here record current ownership, discoveries and commits. Update after
 each bounded change or significant finding, and at least every 15 minutes during
 longer work. A checkpoint may explicitly report incomplete work or failing tests.
 
+## 2026-10-12 19:22 UTC — Linux regression fixed; three independent packets active
+
+- **Linux PASS:** all 15 compiler groups and the diagnostic's 3-frame/618600-pixel
+  scoreboard pass run [38296978627](https://github.com/ollisulopuisto/PlayStation_on_FPGA/actions/runs/38296978627),
+  isolated snapshot `9ccdab6`. Root also reran all 15 groups locally successfully.
+- **Fix:** only generator scoreboard tasks changed from automatic to static.
+  Calls are sequential/nonrecursive. On Icarus 11 the old full bench read X on
+  output wires even though internal cells held zero; static tasks passed all
+  unchanged checks. Compiler/emitted memory logic did not change. Reduction and
+  reproduction are documented in `POCKET_BANK_INIT_REPRO.md`. Native p27 mismatch
+  and wide reg_ws compatibility remain unresolved; do not conflate these issues.
+- **Completed commits:** `cd7ed19` initial claim checkpoint; `77b3f50` reviewed
+  diagnostic RTL/bench and probe matrix; `c0f86ea` autonomous provider packets.
+- **Active smaller-model claims:** diagnostic_core -> Q-L2-04 (runner/workflow);
+  task_packets -> Q-L2-05 (reference-cache fetch/verify); cache_boundaries ->
+  Q-L1-06 (operator test card). Each has a separate `docs/claims/` record and owns
+  disjoint paths. Root reviews/stages results promptly; no duplicate assignments.
+- **Other provider report:** user relayed that all five Pocket HDL benches pass
+  and results were written to `scratchpad/progress.md`. That path is absent in
+  this checkout at review time; result is recorded as reported, not independently
+  inspected. Do not rerun those benches solely to duplicate that work.
+- **Next root task:** review the three packets and advance the independent APF
+  diagnostic integration path; compiler semantic qualification remains open.
+
 ## 2026-10-12 17:50 UTC — diagnostic simulation and matrix complete
 
 - Diagnostic RTL and bench have been reviewed, including removal of the RTL

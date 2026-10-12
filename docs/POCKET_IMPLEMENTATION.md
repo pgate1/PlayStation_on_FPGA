@@ -5,7 +5,7 @@
 See [current handoff](POCKET_HANDOFF_2026-10-12.md) and
 [compiler limits](POCKET_SFLC.md): bounded generators are implemented, 15 groups
 pass locally, and six sequential native cases pass. The experimental bank fixture
-fails Linux initialization and differs from native parallel-memory behavior.
+now passes Linux after a bench-only fix but differs from native parallel-memory behavior.
 GTE hierarchy elaboration requires that experimental flag and proves no arithmetic.
 Current reg_ws follows archived numeric-1 reset, but the author's SFL+ notes specify
 all ones for wide registers. This compatibility gap affects Pocket loader addresses

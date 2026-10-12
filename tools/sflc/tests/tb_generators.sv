@@ -22,7 +22,10 @@ module tb_generators;
   integer i;
   reg [31:0] rng=32'h8f31a5c7;
 
-  task automatic check_outputs(input [8*24-1:0] where);
+  // All task calls are sequential and nonrecursive. Static task storage also
+  // avoids Icarus 11's automatic-task/unpacked-array output propagation issue:
+  // the original bench saw X outputs despite initialized DUT memory words.
+  task check_outputs(input [8*24-1:0] where);
     begin
       want_mask=bits;
       want_first=3'd7; found=0;
@@ -40,7 +43,7 @@ module tb_generators;
     end
   endtask
 
-  task automatic tick(input bit do_load,input bit do_wr,
+  task tick(input bit do_load,input bit do_wr,
                       input [1:0] wr_addr,input [7:0] data,
                       input [3:0] active_bits);
     reg [7:0] old_mem[0:3];
@@ -67,7 +70,7 @@ module tb_generators;
     end
   endtask
 
-  task automatic async_reset_counters;
+  task async_reset_counters;
     begin
       clk=0; reset=1; #1;
       for(integer j=0;j<4;j=j+1) model_count[j]=0;

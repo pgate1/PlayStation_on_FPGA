@@ -2,7 +2,7 @@
 
 Check [rolling checkpoints](POCKET_CHECKPOINTS.md) for active claims and newer
 results before taking a packet. **Q-L1-03 and Q-L2-02 are complete in `77b3f50`.**
-Root owns the Linux bank regression; Q-L2-03 is claimed. Other models can start
+Q-L2-03 is complete: Linux passes after the bench-only fix. Other models can start
 [the autonomous ready packets](POCKET_READY_TASKS.md) without waiting for root.
 
 **Resume work from [POCKET_START_HERE.md](POCKET_START_HERE.md).** It records what was actually completed, installed tools, unresolved blockers and the next implementation packet. The [memory contract](POCKET_MEMORY_CONTRACT.md) now has isolated RTL; see [implementation evidence](POCKET_IMPLEMENTATION.md). The isolated memory frontend has passed behavioral simulation. Full-system simulation and live integration remain outstanding.
@@ -47,7 +47,7 @@ The tasks below are ready to claim by one provider at a time. They are provider-
 | Q-L1-04 Read-only source-defect inventory | **Done locally, owner commit pending** | L1 | None; compiler diagnostics are optional evidence | Existing `docs/POCKET_SOURCE_DEFECTS.md` only; do not duplicate |
 | Q-L1-05 Diagnostic input preflight | **Done locally, owner commit pending**; checker exits 2 (Quartus only) | L1 | Read access to cached APF inputs and fetch manifest | Existing `Pocket/diagnostic/inputs.json`, `Pocket/diagnostic/check_inputs.py` only |
 | Q-L2-02 Diagnostic display/input core | **Done — 77b3f50, simulation/lint pass** | L2 | Pinned timing, interface and project sources in [diagnostic inputs](POCKET_DIAGNOSTIC_INPUTS.md); Quartus only gates fitting | New `Pocket/diagnostic/diagnostic_core.sv`, `Pocket/diagnostic/tb_diagnostic_core.sv` only |
-| Q-L2-03 Linux bank initialization reproduction | **Claimed by root; Linux investigation active** | L2 | f983b03 generated bank fixture; Linux Icarus access preferred | New `tools/sflc/tests/repro_bank_init.sv`, `docs/POCKET_BANK_INIT_REPRO.md` only |
+| Q-L2-03 Linux bank initialization reproduction | **Done — static-task bench fix, Linux PASS** | L2 | f983b03 generated bank fixture; Linux Icarus access preferred | New `tools/sflc/tests/repro_bank_init.sv`, `docs/POCKET_BANK_INIT_REPRO.md` only |
 
 ### Archived assignment Q-L1-03 (completed) — refresh P00 result snapshot
 
