@@ -5,6 +5,56 @@ new entries here record current ownership, discoveries and commits. Update after
 each bounded change or significant finding, and at least every 15 minutes during
 longer work. A checkpoint may explicitly report incomplete work or failing tests.
 
+## 2026-10-12 22:18 UTC — Claude handoff reviewed; diagnostic integration checkpoint
+
+- Latest received handoff is **2fc51da**, not the older d93175d/e92456c checkpoints.
+  Claude's auditor (`ff0decc`), inventory (`bf4b1a2`) and constant-indexed instances
+  (`4bfb2f8`) are committed locally. Root independently reran all **16 compiler
+  test groups: PASS**. This does not establish native SFL+ instance-array semantics.
+- Root completes the previously uncommitted APF project preparer/overlay,
+  Q-L2-07 reset module/bench and two-bench runner/workflow, plus Q-L1-08 build-host
+  research. Locate this checkpoint's commit with
+  `git log -1 --oneline -- tools/pocket/prepare_diagnostic.py`.
+- Video: **3 frames / 618600 checked pixels**. Reset: **5 releases / 4 assertions**.
+  Both standalone modules lint without warnings. Wrong-marker and fatal-after-PASS
+  reset benches were rejected on temporary copies. Extended Linux CI is pending.
+- A fresh temporary prepared project passes Claude's **42-file** hash auditor;
+  no inherited SOF/RBF copied, existing-output refusal verified. The retained
+  `Pocket/build/diagnostic-reviewed` also passes. Reference cache remains intact.
+- **No new bitstream or hardware result.** Quartus is still absent. Use the
+  committed preparer and `check_diagnostic_project.py` for the isolated diagnostic;
+  the other provider's untracked PS1 preflight is not a dependency for this path.
+- Refreshed provider queue closes completed claims and supplies independent
+  wrapper-lint, instance-array boundary-test and packaging-contract packets.
+  Preserve other providers' source/IP/preflight edits and the modified tracked
+  Python cache; none belongs in this checkpoint. All commits remain local.
+
+## 2026-10-12 22:00 UTC — Claude session handoff (Q-L2-09, Q-L1-07, Q-L1-09 done)
+
+- Six unpushed commits `86aa4b7`..`4bfb2f8` by the Claude session; sflc now maps
+  constant-indexed instance arrays (`ch[i]` → `ch_XX`). `join` still blocked.
+  Read [POCKET_HANDOFF_CLAUDE_2026-10-13.md](POCKET_HANDOFF_CLAUDE_2026-10-13.md)
+  for commands, results, uncommitted-file ownership and open decisions.
+
+## 2026-10-12 20:28 UTC — APF diagnostic preparation and reset integration
+
+- `5c179b7` commits the dedicated CI/runner, verified cache fetcher and operator
+  card. Three completed smaller-model packets are available to other providers.
+- Root prepared a separate project at `Pocket/build/diagnostic-reviewed` using
+  `prepare_diagnostic.py` and `apf_video.vh`. Reference cache untouched; old vendor
+  SOF/RBF excluded; manifest records every project-input hash. Existing-output
+  refusal and file hashes checked. New artifact does not yet exist.
+- Q-L2-07 reset synchronizer/bench is complete. Root requested one combined async
+  clear for clear FPGA mapping. Local simulation/lint pass; dedicated runner/CI
+  extension to include this bench is being finished by diagnostic_core.
+- Assembled wrapper structurally elaborates under Verilator with explicit vendor
+  interface stubs and nonfatal warnings. Icarus rejects reference declarations
+  after use. Read `POCKET_DIAGNOSTIC_BUILD.md` for scope and unresolved warnings;
+  neither result is Quartus synthesis, timing closure or bridge/PLL simulation.
+- **New independent READY packets:** Q-L2-09 prepared-project input auditor and
+  Q-L1-07 generator/source inventory. Q-L1-08 official Quartus-host research is
+  claimed by task_packets. See POCKET_READY_TASKS.md for exact ownership/acceptance.
+
 ## 2026-10-12 20:11 UTC — three more packets reviewed and ready to commit
 
 - `c0c2c07` commits the Linux bench fix and green 15-group evidence. Compiler

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compile and run the bounded Pocket diagnostic pixel-domain regression."""
+"""Compile and run the bounded Pocket diagnostic video and reset regressions."""
 
 from __future__ import annotations
 
@@ -12,7 +12,20 @@ import tempfile
 from pathlib import Path
 
 
-PASS_LINE = "PASS diagnostic_core: frames=3 checked_pixels=618600 (204800 clocks/frame)"
+CASES = (
+    (
+        "video",
+        "diagnostic_core",
+        "tb_diagnostic_core",
+        "PASS diagnostic_core: frames=3 checked_pixels=618600 (204800 clocks/frame)",
+    ),
+    (
+        "reset",
+        "diagnostic_reset",
+        "tb_diagnostic_reset",
+        "PASS diagnostic_reset: releases=5 async_assertions=4",
+    ),
+)
 DEFAULT_TIMEOUT_SECONDS = 60
 
 
@@ -47,6 +60,59 @@ def _as_text(value: str | bytes) -> str:
     return value.decode(errors="replace") if isinstance(value, bytes) else value
 
 
+def run_case(
+    *,
+    name: str,
+    design_name: str,
+    bench_name: str,
+    pass_line: str,
+    iverilog: str,
+    vvp: str,
+    timeout: int,
+    build_dir: Path,
+) -> int:
+    source = REPOSITORY_ROOT / f"Pocket/diagnostic/{design_name}.sv"
+    bench = REPOSITORY_ROOT / f"Pocket/diagnostic/{bench_name}.sv"
+    for path in (source, bench):
+        if not path.is_file():
+            print(f"ERROR: required {name} diagnostic input is missing: {path}", file=sys.stderr)
+            return 2
+
+    executable = build_dir / f"{bench_name}.vvp"
+    compile_result = run_command(
+        [iverilog, "-g2012", "-Wall", "-s", bench_name, "-o", str(executable), str(source), str(bench)],
+        timeout=timeout,
+        label=f"{name} compile",
+    )
+    if compile_result is None:
+        return 124
+    if compile_result.returncode != 0:
+        print(
+            f"ERROR: {name} Icarus compile failed with exit code {compile_result.returncode}",
+            file=sys.stderr,
+        )
+        return compile_result.returncode or 1
+
+    simulation = run_command(
+        [vvp, str(executable)],
+        timeout=timeout,
+        label=f"{name} simulation",
+    )
+    if simulation is None:
+        return 124
+    if simulation.returncode != 0:
+        print(
+            f"ERROR: {name} VVP simulation failed with exit code {simulation.returncode}",
+            file=sys.stderr,
+        )
+        return simulation.returncode or 1
+
+    if re.search(rf"(?m)^{re.escape(pass_line)}\r?$", simulation.stdout) is None:
+        print(f"ERROR: {name} simulation did not emit the exact PASS marker: {pass_line}", file=sys.stderr)
+        return 1
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -59,7 +125,8 @@ def main() -> int:
     if args.timeout_seconds < 1:
         parser.error("--timeout-seconds must be at least 1")
 
-    missing = [tool for tool in ("iverilog", "vvp") if shutil.which(tool) is None]
+    tools = {tool: shutil.which(tool) for tool in ("iverilog", "vvp")}
+    missing = [tool for tool, path in tools.items() if path is None]
     if missing:
         print(
             "ERROR: required simulation tool(s) not found on PATH: " + ", ".join(missing),
@@ -67,52 +134,24 @@ def main() -> int:
         )
         return 2
 
-    source = REPOSITORY_ROOT / "Pocket/diagnostic/diagnostic_core.sv"
-    bench = REPOSITORY_ROOT / "Pocket/diagnostic/tb_diagnostic_core.sv"
-    for path in (source, bench):
-        if not path.is_file():
-            print(f"ERROR: required diagnostic input is missing: {path}", file=sys.stderr)
-            return 2
+    with tempfile.TemporaryDirectory(prefix="pocket-diagnostic-") as temp_dir:
+        build_dir = Path(temp_dir)
+        for case in CASES:
+            name, design_name, bench_name, pass_line = case
+            result = run_case(
+                name=name,
+                design_name=design_name,
+                bench_name=bench_name,
+                pass_line=pass_line,
+                iverilog=tools["iverilog"] or "iverilog",
+                vvp=tools["vvp"] or "vvp",
+                timeout=args.timeout_seconds,
+                build_dir=build_dir,
+            )
+            if result != 0:
+                return result
 
-    with tempfile.TemporaryDirectory(prefix="pocket-diagnostic-") as build_dir:
-        executable = Path(build_dir) / "tb_diagnostic_core.vvp"
-        compile_result = run_command(
-            [
-                shutil.which("iverilog") or "iverilog",
-                "-g2012",
-                "-Wall",
-                "-s",
-                "tb_diagnostic_core",
-                "-o",
-                str(executable),
-                str(source),
-                str(bench),
-            ],
-            timeout=args.timeout_seconds,
-            label="compile",
-        )
-        if compile_result is None:
-            return 124
-        if compile_result.returncode != 0:
-            print(f"ERROR: Icarus compile failed with exit code {compile_result.returncode}", file=sys.stderr)
-            return compile_result.returncode or 1
-
-        simulation = run_command(
-            [shutil.which("vvp") or "vvp", str(executable)],
-            timeout=args.timeout_seconds,
-            label="simulation",
-        )
-        if simulation is None:
-            return 124
-        if simulation.returncode != 0:
-            print(f"ERROR: VVP simulation failed with exit code {simulation.returncode}", file=sys.stderr)
-            return simulation.returncode or 1
-
-        if re.search(rf"(?m)^{re.escape(PASS_LINE)}\r?$", simulation.stdout) is None:
-            print(f"ERROR: simulation did not emit the exact PASS marker: {PASS_LINE}", file=sys.stderr)
-            return 1
-
-    print("Diagnostic simulation accepted.")
+    print("Diagnostic simulations accepted.")
     return 0
 
 
