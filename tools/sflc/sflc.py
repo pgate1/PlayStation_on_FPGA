@@ -3,11 +3,12 @@
 """Experimental SFL+ -> SystemVerilog compiler for isolated block validation.
 
 Supports guarded combinational logic, registers, one-port memories, local
-control terminals/arguments, lexical locals, stages and interface linking.
+control terminals/arguments, lexical locals, bounded generators, stages and interface linking.
 Not a qualified full-core compiler. See docs/POCKET_SFLC.md for semantic limits.
 Unsupported constructs fail rather than silently disappear.
 
-Usage: sflc.py [-D NAME]... [--assertions] file.sflp > out.sv
+Usage: sflc.py [-D NAME]... [--assertions] [--hierarchy] [--register-banks] file.sflp > out.sv
+--register-banks enables experimental parallel memory writes, NOT native-qualified.
 """
 import os
 import re
@@ -66,6 +67,7 @@ class Scope:
         self.declarations = []
         self.interfaces = []
         self.serial = 0
+        self.expansions = 0
 
     def expr(self, n, env):
         if not isinstance(n, tuple):
@@ -73,7 +75,8 @@ class Scope:
         if n[0] == 'name':
             if n[1] not in env:
                 raise NameError('undeclared ' + n[1])
-            return ('name', env[n[1]])
+            value = env[n[1]]
+            return value if isinstance(value, tuple) else ('name', value)
         if n[0] == 'dot':
             member = n[2]
             # Local instruction calls return a named signal in the same scope.
@@ -135,14 +138,32 @@ class Scope:
                 out.append(self.action(item, env))
         return out
 
+    def generator_envs(self, gen, env):
+        variable, start, end = gen
+        start, end = constant(self.expr(start, env)), constant(self.expr(end, env))
+        if start < 0 or end < 0: raise ValueError('negative generator bound')
+        count = max(0, end - start)
+        self.expansions += count
+        if self.expansions > 4096: raise ValueError('generator expansion budget exceeded (4096)')
+        for value in range(start, end):
+            yield dict(env, **{variable: ('num', str(value))})
+
     def action(self, a, env):
         k = a[0]
         if k in ('par', 'join'):
-            if a[1] is not None or k == 'join':
+            if k == 'join':
                 raise NotImplementedError(k + ' generator')
+            if a[1] is not None:
+                return ('par', None, [('par', None, self.block(a[2], iteration), a[-1])
+                                     for iteration in self.generator_envs(a[1], env)], a[-1])
             return ('par', None, self.block(a[2], env), a[-1])
         if k in ('any', 'alt'):
-            if a[1] is not None: raise NotImplementedError(k + ' generator')
+            if a[1] is not None:
+                arms = [(self.expr(g, iteration), self.action(b, iteration))
+                        for iteration in self.generator_envs(a[1], env) for g, b in a[2]]
+                # One fallback after all generated arms; the loop index does
+                # not escape into it, including for an empty range.
+                return (k, None, arms, None if a[3] is None else self.action(a[3], env), a[-1])
             return (k, None, [(self.expr(g, env), self.action(b, env)) for g, b in a[2]],
                     None if a[3] is None else self.action(a[3], env), a[-1])
         if k == 'if':
@@ -178,9 +199,10 @@ class Scope:
 
 
 class Gen:
-    def __init__(self, name, assertions=False, interfaces=None):
+    def __init__(self, name, assertions=False, interfaces=None, register_banks=False):
         self.name = name
         self.assertions = assertions
+        self.register_banks = register_banks
         self.ports = []
         self.decls = {}       # name -> bit count (always numeric)
         self.kinds = {}
@@ -190,6 +212,7 @@ class Gen:
         self.stages = {}
         self.drivers = {}     # target -> [(guards, expression)]
         self.writes = {}      # memory -> [(guards, address, expression)]
+        self.write_indices = {}  # matching static index or None for each write
         self.temps = []
         self.interfaces = dict(interfaces or {})
         self.instances = {}   # instance name -> (Interface, port alias mapping)
@@ -399,6 +422,11 @@ class Gen:
             if lhs[1][0] != 'name' or lhs[1][1] not in self.memories:
                 raise ValueError('write target is not a memory')
             name = lhs[1][1]
+            try: index = constant(lhs[2])
+            except NotImplementedError: index = None
+            if index is not None and not 0 <= index < self.memories[name][0]:
+                raise ValueError('constant memory write index out of bounds: ' + name)
+            self.write_indices.setdefault(name, []).append(index)
             self.writes.setdefault(name, []).append((list(guards), self.expr(lhs[2]),
                                                      self.expr(rhs, self.decls[name])))
         elif lhs[0] == 'name':
@@ -587,7 +615,30 @@ class Gen:
                              (self.guard(ga), self.guard(gb), label))
         return lines
 
+    def banked_memories(self):
+        banks = set()
+        for name, writes in self.writes.items():
+            indices = self.write_indices[name]
+            for i, (guards, _, _) in enumerate(writes):
+                if indices[i] is None: continue
+                for j in range(i):
+                    if indices[j] is not None and indices[j] != indices[i]:
+                        if not self.register_banks:
+                            raise NotImplementedError('parallel memory writes need experimental --register-banks: ' + name)
+                        if self.memories[name][0] > 256:
+                            raise NotImplementedError('parallel memory writes require bank depth <=256: ' + name)
+                        banks.add(name)
+        return banks
+
+    def bank_terms(self, name, index):
+        terms = []
+        for (guards, address, value), static in zip(self.writes[name], self.write_indices[name]):
+            if static is None: terms.append((guards + ['(%s) == %d' % (address, index)], value))
+            elif static == index: terms.append((guards, value))
+        return terms
+
     def emit(self):
+        banks = self.banked_memories()
         def rng(w): return '[%d:0] ' % (w - 1) if w > 1 else ''
         L = ['// Experimental sflc output; see docs/POCKET_SFLC.md.',
              'module %s (%s);' % (self.name, ', '.join(['p_reset', 'm_clock'] + [p[1] for p in self.ports])),
@@ -634,6 +685,15 @@ class Gen:
                     L.append("    %s[%d] = %d'd%d;" % (name, i, self.decls[name], val))
                 L.append('  end')
             writes = self.writes.get(name, [])
+            if name in banks:
+                L.append('  // Parallel constant-index writes: explicit per-word register bank.')
+                for index in range(depth):
+                    terms = self.bank_terms(name, index)
+                    if not terms: continue
+                    enable = ' || '.join('(%s)' % self.guard(g) for g, _ in terms)
+                    L.append('  always @(posedge m_clock) if (%s) %s[%d] <= %s;' %
+                             (enable, name, index, self.mux(terms)))
+                continue
             # A single physical write port: select the address and data under
             # the same guards. Assert multiple writers instead of inventing
             # source-order priority or inferring accidental multiport RAM.
@@ -658,7 +718,11 @@ class Gen:
             for n, terms in self.drivers.items():
                 if self.kinds[n] not in ('instrout', 'instrself'):
                     checks += self.conflict_checks(terms, n)
-            for n, writes in self.writes.items(): checks += self.conflict_checks([(g, v) for g, _, v in writes], n)
+            for n, writes in self.writes.items():
+                if n in banks:
+                    for index in range(self.memories[n][0]):
+                        checks += self.conflict_checks(self.bank_terms(n, index), '%s[%d]' % (n, index))
+                else: checks += self.conflict_checks([(g, v) for g, _, v in writes], n)
             if checks: L += ['  // synthesis translate_off', '  always @(posedge m_clock) if (!p_reset) begin'] + checks + ['  end', '  // synthesis translate_on']
         return '\n'.join(L + ['endmodule', ''])
 
@@ -775,7 +839,7 @@ class Library:
         return circuit
 
 
-def translate(path, defines=(), assertions=False, hierarchy=False):
+def translate(path, defines=(), assertions=False, hierarchy=False, register_banks=False):
     library = Library(defines)
     active, emitted = set(), set()
     results = []
@@ -786,7 +850,7 @@ def translate(path, defines=(), assertions=False, hierarchy=False):
         if name in active: raise ValueError('recursive module instantiation: ' + name)
         if name in emitted: return
         active.add(name)
-        generator = Gen(name, assertions, library.interfaces)
+        generator = Gen(name, assertions, library.interfaces, register_banks)
         output = generator.run(circuit)
         if hierarchy:
             for interface, _ in generator.instances.values():
@@ -800,17 +864,18 @@ def translate(path, defines=(), assertions=False, hierarchy=False):
 
 
 def main(argv):
-    defines, files, assertions, hierarchy = [], [], False, False
+    defines, files, assertions, hierarchy, register_banks = [], [], False, False, False
     it = iter(argv)
     for a in it:
         if a == '-D': defines.append(next(it))
         elif a == '--assertions': assertions = True
         elif a == '--hierarchy': hierarchy = True
+        elif a == '--register-banks': register_banks = True
         else: files.append(a)
     if len(files) != 1:
         print(__doc__, file=sys.stderr); return 2
     try:
-        sys.stdout.write(translate(files[0], defines, assertions, hierarchy))
+        sys.stdout.write(translate(files[0], defines, assertions, hierarchy, register_banks))
     except (NotImplementedError, ValueError, NameError, SyntaxError, OSError) as exc:
         print('%s: %s: %s' % (files[0], type(exc).__name__, exc), file=sys.stderr)
         return 1

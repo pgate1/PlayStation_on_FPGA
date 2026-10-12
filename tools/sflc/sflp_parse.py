@@ -358,6 +358,8 @@ class Parser:
         end = self.expr_noslice()
         self.eat(';')
         v3 = self.name()
+        if v3 != var:
+            self.err('generator increment variable mismatch')
         self.eat('++')
         self.eat(')')
         return (var, start, end)

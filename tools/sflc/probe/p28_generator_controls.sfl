@@ -1,0 +1,18 @@
+// Small hand-expanded native reference for tests/generator_controls.sflp.
+circuit p28 {
+    input addr<2>, bits<4>;
+    output first<3>, mask<4>, local_count<8>;
+    reg_wr count0<8>, count1<8>, count2<8>, count3<8>;
+    if(bits<0>) count0++;
+    if(bits<1>) count1++;
+    if(bits<2>) count2++;
+    if(bits<3>) count3++;
+    if(addr==0) local_count=count0;
+    if(addr==1) local_count=count1;
+    if(addr==2) local_count=count2;
+    if(addr==3) local_count=count3;
+    alt { bits<0> : first=0; bits<1> : first=1;
+          bits<2> : first=2; bits<3> : first=3; else : first=7; }
+    any { bits<0> : mask=0b0001<<0; bits<1> : mask=0b0001<<1;
+          bits<2> : mask=0b0001<<2; bits<3> : mask=0b0001<<3; else : mask=0; }
+}

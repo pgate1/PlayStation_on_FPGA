@@ -1,0 +1,11 @@
+circuit p28 {
+    input addr<2>, bits<4>;
+    output first<3>, mask<4>, local_count<8>;
+    par(i=0;i<4;i++) {
+        reg_wr count<8>;
+        if(bits<i>) count++;
+        if(addr==i) local_count=count;
+    }
+    alt(i=0;i<4;i++) { bits<i> : first=i; else : first=7; }
+    any(i=0;i<4;i++) { bits<i> : mask=0b0001<<i; else : mask=0; }
+}

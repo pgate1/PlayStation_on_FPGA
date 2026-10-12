@@ -1,0 +1,15 @@
+circuit p27 {
+    input load, wr, addr<2>, a<8>, bits<4>;
+    output q0<8>, q1<8>, q2<8>, q3<8>, first<3>, mask<4>, local_count<8>;
+    mem cells[4]<8> = {0};
+    if(load) par(i=0;i<4;i++) { cells[i] := a+i; }
+    if(wr) cells[addr] := a;
+    par(i=0;i<4;i++) {
+        reg_wr count<8>;
+        if(bits<i>) count++;
+        if(addr==i) local_count=count;
+    }
+    alt(i=0;i<4;i++) { bits<i> : first=i; else : first=7; }
+    any(i=0;i<4;i++) { bits<i> : mask=0b0001<<i; else : mask=0; }
+    q0=cells[0]; q1=cells[1]; q2=cells[2]; q3=cells[3];
+}

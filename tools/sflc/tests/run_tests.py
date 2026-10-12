@@ -110,7 +110,12 @@ class CompilerTests(unittest.TestCase):
             ('input a; sel a;', ValueError),
             ('sel __sfl_bad;', ValueError),
             ('output a; a=1#0xFF;', ValueError),
-            ('par(i=0;i<4;i++){;}', NotImplementedError),
+            ('input n<4>; par(i=0;i<n;i++){;}', NotImplementedError),
+            ('par(i=0;i<4;j++){;}', SyntaxError),
+            ('par(i=0;i<4097;i++){;}', ValueError),
+            ('par(i=0-1;i<4;i++){;}', ValueError),
+            ('mem a[2]<8>; a[2]:=0;', ValueError),
+            ('alt(i=0;i<0;i++){ 0b1:; else: if(i==0); }', NameError),
             ('output a; bus b; a=b;', NotImplementedError),
         ]
         for body, error in bad:
@@ -152,7 +157,7 @@ class CompilerTests(unittest.TestCase):
         self.assertIn('PASS widths vectors=65536', result.stdout)
 
     def test_09_supported_probes_elaborate(self):
-        unsupported = {'p08_gen'}
+        unsupported = {'p08_gen', 'p27_parallel_memory'}
         for path in sorted((ROOT/'tools/sflc/probe').glob('p*.sfl')):
             with self.subTest(probe=path.name):
                 if path.stem in unsupported:
@@ -188,6 +193,23 @@ class CompilerTests(unittest.TestCase):
         result = self.simulate('tb_call_args', modules, ROOT/'tools/sflc/tests/tb_call_args.sv')
         self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
         self.assertIn('PASS call arguments checks=4096', result.stdout)
+
+    def test_14_generators_and_parallel_memory(self):
+        with self.assertRaisesRegex(NotImplementedError, 'experimental --register-banks'):
+            sflc.translate(ROOT/'tools/sflc/tests/generators.sflp')
+        result = self.simulate('tb_generators', {'p27': sflc.translate(
+            ROOT/'tools/sflc/tests/generators.sflp', assertions=False, register_banks=True)},
+            ROOT/'tools/sflc/tests/tb_generators.sv')
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+        self.assertIn('PASS generators checks=6065 cycles=2019', result.stdout)
+
+    def test_15_gte_hierarchy_elaborates(self):
+        out = self.build/'gte_hierarchy.sv'
+        out.write_text(sflc.translate(ROOT/'GeometryTransformationEngine.sflp',
+                                     hierarchy=True, register_banks=True))
+        subprocess.run(['iverilog', '-g2012', '-s', 'GeometryTransformationEngine', '-t', 'null',
+                        str(out), *[str(ROOT/n) for n in ('mul_s16.v', 'mul_s32.v', 'mul_u32.v')]],
+                       check=True, capture_output=True, text=True, timeout=30)
 
     def test_11_linker_rejects_bad_interfaces(self):
         header = 'declare child interface {input a<8>; output b<8>; instrin put(a); instrout ack;}'

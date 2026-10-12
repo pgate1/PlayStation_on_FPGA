@@ -24,6 +24,8 @@ CASES = {
     "p19_stage": Path("tools/sflc/probe/p19_stage.sfl"),
     "p20_retained_stage": Path("tools/sflc/probe/p20_retained_stage.sfl"),
     "p21_multi_task": Path("tools/sflc/probe/p21_multi_task.sfl"),
+    "p28_generator_controls": Path("tools/sflc/tests/generator_controls.sflp"),
+    "p27_parallel_memory": Path("tools/sflc/tests/generators.sflp"),
 }
 TIMEOUT = 120
 
@@ -112,7 +114,8 @@ def run_case(name, reference_dir, rng, cycles, iverilog, vvp, timeout):
         raise CosimError("%s: missing oracle file %s" % (name, reference_path))
     try:
         reference = reference_path.read_text(encoding="utf-8")
-        dut = sflc.translate(source_path, assertions=False)
+        dut = sflc.translate(source_path, assertions=False,
+                             register_banks=(name == 'p27_parallel_memory'))
         dut = rename_module(dut, "__cosim_dut_" + name, name)
         testbench = fixture(name, reference, dut, rng, cycles)
     except (OSError, UnicodeError, NotImplementedError, ValueError, NameError, SyntaxError, CosimError) as exc:
@@ -150,8 +153,9 @@ def main(argv=None):
                         help="directory containing external <case>.v oracle files")
     parser.add_argument("--cycles", type=int, default=4000)
     parser.add_argument("--seed", type=int, default=1)
-    parser.add_argument("--cases", nargs="+", choices=tuple(CASES), default=list(CASES),
-                        help="probe subset (default: all five sequential probes)")
+    parser.add_argument("--cases", nargs="+", choices=tuple(CASES),
+                        default=[name for name in CASES if name != 'p27_parallel_memory'],
+                        help="probe subset; p27 is an opt-in known mismatch for experimental register banks")
     parser.add_argument("--timeout", type=int, default=TIMEOUT, help="seconds per compile/simulation")
     args = parser.parse_args(argv)
     if args.cycles <= 0 or args.timeout <= 0:
