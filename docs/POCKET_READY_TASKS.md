@@ -1,7 +1,7 @@
 # Work that can continue without the primary agent
 
 Latest received handoff: **2fc51da**, including Claude's three completed packets.
-The diagnostic integration checkpoint follows it; use current `pocket-work` HEAD
+Diagnostic integration is committed as **a097ed4**; use current `pocket-work` HEAD
 and record that hash in your claim. Read [rolling checkpoints](POCKET_CHECKPOINTS.md)
 first. Completed packets below are retained as history; do not duplicate them.
 The user authorizes

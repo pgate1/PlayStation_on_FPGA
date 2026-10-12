@@ -1,5 +1,13 @@
 # Assigning the roadmap to other models
 
+**Current implementation checkpoint: `a097ed4`, local/unpushed.** Root has read
+Claude's `2fc51da` handoff. The separate APF diagnostic project preparer, reset
+synchronizer and two-bench runner are now committed; all 16 compiler groups and
+both diagnostic benches pass locally. Quartus compilation, timing and hardware
+remain untested. See [the build procedure](POCKET_DIAGNOSTIC_BUILD.md).
+New independent packets **Q-L2-10, Q-L2-11 and Q-L1-10** are ready in
+[the current provider queue](POCKET_READY_TASKS.md); older tables below are history.
+
 Check [rolling checkpoints](POCKET_CHECKPOINTS.md) for active claims and newer
 results before taking a packet. **Q-L1-03 and Q-L2-02 are complete in `77b3f50`.**
 Q-L2-03 is complete: Linux passes after the bench-only fix. Other models can start

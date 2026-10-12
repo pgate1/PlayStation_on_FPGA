@@ -5,7 +5,10 @@ new entries here record current ownership, discoveries and commits. Update after
 each bounded change or significant finding, and at least every 15 minutes during
 longer work. A checkpoint may explicitly report incomplete work or failing tests.
 
-## 2026-10-12 22:18 UTC — Claude handoff reviewed; diagnostic integration checkpoint
+## 2026-10-12 22:17 UTC — Claude handoff reviewed; diagnostic integration checkpoint
+
+**Implementation checkpoint: `a097ed4`** (local, not pushed). Later documentation
+commits may follow this hash; use `git log -1` for the actual branch HEAD.
 
 - Latest received handoff is **2fc51da**, not the older d93175d/e92456c checkpoints.
   Claude's auditor (`ff0decc`), inventory (`bf4b1a2`) and constant-indexed instances
