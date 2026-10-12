@@ -27,7 +27,10 @@ compiler oracle and corrected, rather than hidden by the testbench.
   runner, diagnostic plan and cross-provider task queue.
 - The follow-up commit containing this handoff fixes native data selection and
   adds probes p24–p26 plus the 4,096-case selector fixture. Find its hash with
-  `git log -1 --format=%h -- docs/POCKET_HANDOFF_2026-10-12.md`.
+  `git log -1 --format=%h -- docs/POCKET_HANDOFF_2026-10-12.md`; it is `d93175d`.
+- `e92456c`: adds the p23–p26 rows to `tools/pocket/p00_probe_matrix.json`. Each
+  compiles and elaborates with Icarus (exit 0); oracle status stays `not-run`.
+  `tools/pocket/check_p00_probes.py` reports `OK: 32 probes recorded`.
 
 Primary branch is `pocket-work`. Its new checkpoint commits have **not** been
 pushed by this session. The isolated validation branch `sfl-oracle-20261012`
