@@ -18,16 +18,19 @@ must own compiler semantics and shared RTL interfaces.
 ## Current state — supersedes older checkpoint claims
 
 This is now a Git checkout, with existing committed and uncommitted work. Check
-`git status` before editing. The 2026-10-12 session made no commits or pushes.
+`git status` before editing. Milestone commit `6fbe8bc` contains the first compiler/cache work; external agent
+commit `95d42dd` adds the portable HDL runner. Oracle-only branch
+`sfl-oracle-20261012` was pushed for Linux reference runs; current integration
+work remains local until its next checkpoint commit.
 Preserve the original SFL files' CRLF/non-UTF-8 bytes. This session changed compiler,
 fixtures and documentation, not the cache source bytes or the live Pocket top.
 
 | Area | Actual evidence |
 |---|---|
-| Replacement SFL compiler | Expanded from combinational subset to registers, memory, local controls, lexical scopes, switch and single-task stages; **experimental**, not a full compiler |
+| Replacement SFL compiler | Expanded from combinational subset to registers, memory, local controls, lexical scopes, switch, multiple-task stages and hierarchy linking; **experimental**, not a full compiler |
 | P02 caches | Actual corrected SFL sources compile and pass 242 behavioral checks; reverting each existing suffix comparison makes the bench fail |
-| Compiler validation | Nine test groups pass, including 4,000 sequential cycles and 65,536 arithmetic vectors; 19 real leaf modules elaborate |
-| Reference equivalence | Existing nine combinational reference comparisons pass at 4,000 vectors each; **sequential reference equivalence still missing** |
+| Compiler validation | Twelve test groups pass, including 4,000 sequential cycles and 65,536 arithmetic vectors; 19 real leaf modules elaborate; linked fixture passes 2,000 cycles |
+| Reference equivalence | Eleven combinational cases pass 4,000 vectors each; four sequential cases pass 4,000 cycles each; **p18 argument-wiring mismatch remains open** |
 | Cache lint | Both generated caches pass Verilator 5.052 without warnings |
 | P04 memory frontend | Isolated behavioral scoreboard already passed across multiple parameter sets; not integrated |
 | Replacement framebuffer RAM/SRAM blocks | Written and previously simulated; interface/timing assumptions remain |
@@ -45,17 +48,17 @@ The compiler now makes isolated cache validation possible without a proprietary
 license. Do not spend the next session redoing the parser spike or claiming that
 all sequential semantics have been recovered.
 
-1. Run native probes `p17_registers`, `p18_controls`, `p19_stage` against the
-   archived sfl2vl oracle and compare cycle traces. Old `p13_stage` was rejected
-   and produced no reference. Busy stage regeneration and retained-state restart
-   remain explicitly unverified.
-2. Audit finite-width expression behavior with more independent reference probes
-   before trusting CPU/GTE arithmetic.
-3. Add `%i`/interface/instance linking and submodule instruction routing with a
-   two-module handshake fixture. Generators, `join`, strings and other unsupported
-   forms currently fail explicitly.
-4. Resume platform/controller integration only after its build prerequisites are
-   met. Keep the frontend isolated and the existing CPU/GPU stalls in place.
+1. Resolve the p18 instruction-argument mismatch using native p23; see
+   [POCKET_SFLC.md](POCKET_SFLC.md). Register reset and single/multiple-task stage
+   probes now agree with the oracle, including restart and overlapping starts.
+2. Expand finite-width expression evidence beyond p22 before trusting CPU/GTE.
+3. Implement constant generators and audit the linked hierarchy. Source defects
+   are inventoried separately; do not silently introduce implicit signals.
+4. Progress the independent [Pocket diagnostic milestone](POCKET_DIAGNOSTIC_PLAN.md)
+   once authoritative platform inputs and a working Quartus environment exist.
+   Its test pattern/input response does not prove game execution.
+5. Keep the frontend isolated and the existing CPU/GPU stalls in place until the
+   platform/controller integration prerequisites are met.
 
 Run current local evidence:
 

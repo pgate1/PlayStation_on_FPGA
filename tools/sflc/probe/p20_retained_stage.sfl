@@ -1,0 +1,16 @@
+// Does a completed stage retain its last state on idle regeneration?
+circuit p20 {
+    instrin start, advance;
+    output busy, y<8>;
+    reg_wr r<8>;
+    stage_name work { task do(); }
+    busy = work.do;
+    y = r;
+    instruct start generate work.do();
+    stage work {
+        state_name s0, s1;
+        first_state s0;
+        state s0 if(advance) par { r := 0x12; goto s1; }
+        state s1 if(advance) par { r := r + 0x01; finish; }
+    }
+}

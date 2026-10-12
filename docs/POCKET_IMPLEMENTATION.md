@@ -1,5 +1,21 @@
 # Implementation checkpoint — 2026-10-12
 
+## Current continuation — hierarchy and native sequential probes
+
+See [POCKET_SFLC.md](POCKET_SFLC.md) for the current boundary: hierarchy linking,
+multiple-task stages, twelve local regression groups, eleven combinational
+reference cases and four sequential reference cases pass. The p18 inactive
+instruction-argument output mismatch remains open. `reg_ws` wide-register reset
+was corrected from all-ones to numeric 1 using native evidence.
+
+Commits `6fbe8bc` (compiler/cache milestone) and `95d42dd` (another agent's HDL
+runner/evidence) exist. An isolated oracle branch was pushed for Linux CI.
+No Pocket bitstream, fit, timing closure or hardware FPS has been established.
+The [diagnostic plan](POCKET_DIAGNOSTIC_PLAN.md) defines an earlier visible screen
+and input milestone, conditional on platform/build prerequisites.
+
+## Earlier checkpoint — superseded where stated below
+
 ## Latest work: experimental compiler and actual-source cache validation
 
 See [POCKET_SFLC.md](POCKET_SFLC.md) for the detailed implementation boundary,

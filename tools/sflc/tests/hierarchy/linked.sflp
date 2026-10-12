@@ -1,0 +1,31 @@
+// No holding_child.h exists; its interface is derived from the exact sibling.
+%i "holding_child.h"
+declare leaf interface {
+    input x<8>;
+    output q<8>;
+    instrin con(x);
+}
+circuit linked {
+    input push, take, which, data<8>;
+    output available, value<8>, mapped<8>, local_value<8>;
+    instrout ready_event;
+    holding_child left, right;
+    leaf transform;
+    instrself local_call(v);
+    sel v<8>, local_result<8>;
+    instruct local_call local_result = v + 0x03;
+    if(push) {
+        if(which) right.put(data);
+        else left.put(data);
+        mapped = transform.con(data).q;
+        local_value = local_call(data).local_result;
+    }
+    left.take = take & ^which;
+    right.take = take & which;
+    instruct left.offer if(^which) {
+        ready_event(); available=0b1; value=left.value;
+    }
+    instruct right.offer if(which) {
+        ready_event(); available=0b1; value=right.value;
+    }
+}

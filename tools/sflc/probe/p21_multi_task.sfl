@@ -1,0 +1,18 @@
+// Task identity is separate from state; examine replacement/finish priority.
+circuit p21 {
+    instrin start_a, start_b, stop;
+    input a<8>, b<8>;
+    output busy_a, busy_b, y<8>;
+    reg_wr arg<8>, r<8>;
+    stage_name work { task one(arg); task two(arg); }
+    busy_a = work.one;
+    busy_b = work.two;
+    y = r;
+    instruct start_a generate work.one(a);
+    instruct start_b generate work.two(b);
+    stage work {
+        if(work.one) r := arg;
+        if(work.two) r := arg + 0x01;
+        if(stop) finish;
+    }
+}

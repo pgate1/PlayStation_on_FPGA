@@ -1,0 +1,9 @@
+circuit p22 {
+    input a<8>, b<8>;
+    output carry, low<8>, wide<16>, signed_part<16>, neg<8>;
+    carry = ((0b0 || a) + (0b0 || b))<8>;
+    low = (a+b)<7:0>;
+    wide = a+b;
+    signed_part = 16#a<6:2>;
+    neg = 0x00-a;
+}

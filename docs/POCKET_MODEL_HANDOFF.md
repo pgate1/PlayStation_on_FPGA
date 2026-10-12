@@ -19,8 +19,8 @@ Long context alone is insufficient. Prefer a model that can reason about nonbloc
 
 ## Efficient dispatch order
 
-1. Assign **P00** to the strongest model. Use a cheap assistant for its dependency/manifest work. Its first deliverable is a concrete missing-file/toolchain plan, not speculative RTL optimization.
-2. Assign **P02** as the first small coding exercise and **P01** tooling as an independent packet. Without the recovered build, these can prepare patches/fixtures but cannot claim validation.
+1. Keep **P00** compiler control/sequential work with the strongest model. The L1 dependency manifest/checker is complete (79 entries); do not reassign it.
+2. The portable regression/evidence packet and P02 cache boundary fixtures are complete. Use the ready-claim queue below for the next independent low-cost work; do not duplicate those outputs.
 3. Have the architecture owner specify **P04** interfaces before assigning dependent blocks. Freeze request ownership, byte lanes, reset and completion semantics in a shared document.
 4. Implement **P06** VRAM rendering/scanout and reclaim internal RAM. Reserve resources and bounded memory service for later audio; defer **P05/P07** implementation until the video gate passes.
 5. Assign **P08/P09** to one owner or tightly coordinated sequential tasks; scheduling and game time are coupled. Assign **P10/P13** only with the pixel sink/cache contract in hand.
@@ -29,49 +29,39 @@ Long context alone is insufficient. Prefer a model that can reason about nonbloc
 
 Use separate branches/checkouts for implementation packets. Two models should not independently change `PlayStation_core.sflp`, `GraphicProcessingUnit.sflp` or `Pocket/core_top.v` without an integrator. Commit interface changes before dependent branches start integrating.
 
-## Independent low-cost task packets
+## Cross-provider task queue
 
-These packets are intentionally separable from the compiler's sequential/control implementation and from one another. Keep each change within its owned files; report blockers with evidence instead of filling gaps by assumption. Acceptance commands below are run from the project root. They define the expected evidence; do not claim a command passed unless it was actually run.
+The tasks below are ready to claim by one provider at a time. They are provider-neutral prompts, not a claim that any external model has already been contacted or assigned. A provider claims one task ID before editing, owns only its listed paths, and leaves shared compiler sources alone. When a task is in progress, other providers should choose a different ID. Do not duplicate completed tasks.
 
-### L1 — P00 dependency and build-input manifest
+| Task ID | Status | Minimum tier | Prerequisites | Owned paths |
+|---|---|---|---|---|
+| Q-L1-01 P00 dependency manifest | **Done** — 79 entries; checker passes | L1 | None | `tools/pocket/build_inputs.json`, `tools/pocket/check_build_inputs.py` (closed) |
+| Q-L1-02 Portable regressions/evidence | **Done** — commit `95d42dd`; five bounded tests recorded | L1 | Icarus/VVP | `tools/pocket/run_regressions.sh`, `docs/POCKET_REGRESSION_EVIDENCE.md` (closed) |
+| Q-L2-01 Cache boundary fixtures | **Done** — commit `6fbe8bc`; 11 checks | L2 | Experimental compiler and Icarus | `tools/sflc/tests/tb_cache_boundaries.sv`, `tools/sflc/tests/run_cache_boundaries.py` (closed) |
+| Q-L1-03 P00 probe-result snapshot refresh | **Ready after compiler freeze** | L1 | Main compiler owner declares a source freeze; p20–p23 probes are present | `tools/pocket/p00_probe_matrix.json` only |
+| Q-L1-04 Read-only source-defect inventory | **Ready** | L1 | None; compiler diagnostics are optional evidence | New `docs/POCKET_SOURCE_DEFECTS.md` only |
+| Q-L1-05 Diagnostic input preflight | **Ready** | L1 | Read access to cached APF inputs and fetch manifest | New `Pocket/diagnostic/inputs.json`, `Pocket/diagnostic/check_inputs.py` only |
+| Q-L2-02 Diagnostic display/input core | **Blocked on D0** | L2 | Authoritative APF top interface, matching constraints and known video timing, per [diagnostic plan](POCKET_DIAGNOSTIC_PLAN.md) | New `Pocket/diagnostic/diagnostic_core.sv`, `Pocket/diagnostic/tb_diagnostic_core.sv` only |
 
-**Goal:** turn the known P00 build gaps into a machine-readable, auditable inventory while the compiler work proceeds.
+### Ready packet Q-L1-03 — refresh P00 result snapshot
 
-**Inputs:** `Makefile`, `Pocket/core.sflp`, `Pocket/core_top.v`, `docs/POCKET_P00_TOOLCHAIN.md`, `tools/apf/fetch_apf.sh`, `hdl/SDRAM/MIRLO64/README.md`.
+**Copyable assignment:** after the compiler owner declares `tools/sflc/sflc.py` frozen for this checkpoint, refresh only `tools/pocket/p00_probe_matrix.json` using the current probes and current tool availability. Include the new p20–p23 cases, distinguish local compiler/test evidence from archived sfl2vl oracle evidence, and retain exact commands, status, and concise diagnostics. Do not edit `tools/sflc/sflc.py`, `sflp_parse.py`, probe source, matrix checker, or other docs. Run `python3 tools/pocket/check_p00_probes.py` and `python3 tools/sflc/tests/run_tests.py`; report both exact outcomes. If the compiler is still changing, stop before writing and report the prerequisite as unmet.
 
-**Owned files:** add `tools/pocket/build_inputs.json` and `tools/pocket/check_build_inputs.py`; do not edit source RTL, SFL, compiler files, fetch scripts, or licenses. Record for each required input: logical name, consuming source/target, current status (`present`, `generated`, `fetch-at-build`, `missing`, or `decision-needed`), expected path, pinned revision/hash where available, license/provenance note, and next action. Distinguish a downloadable installer from an installed tool and distinguish syntax/elaboration from a complete project build.
+### Ready packet Q-L1-04 — read-only source-defect inventory
 
-**Acceptance:** `python3 tools/pocket/check_build_inputs.py` exits 0 on a valid manifest, rejects missing required keys and duplicate logical names, and emits a deterministic summary. Cross-check manifest paths against the Makefile and direct includes in the named Pocket sources. The summary must preserve the documented open Overtone/APF distribution decisions and must not imply the recovered evaluation compiler can process large modules.
+**Copyable assignment:** inspect, but do not fix, these candidate source defects: undeclared `under640` use in `drawRect.sflp:85,112`; `dbg32`/`dbg32_reg` assignment versus the `dbg`/`dbg_reg` declarations in `DMA_CDR.sflp:33–44`; `size_mul` call in `DMA_SPU.sflp:55`; duplicate `file_adrs` output declarations in `PlayStation_core.sflp:114–116`. Add only `docs/POCKET_SOURCE_DEFECTS.md`. For each item quote the minimum exact source evidence with file and line, classify as confirmed or unresolved, explain what compiler evidence supports that classification, and state any preprocess defines used. Record both default (`DEMO` undefined) and `DEMO`-defined context where applicable; do not silently “correct” likely typos or assert intended hardware behavior. Acceptance is a concise evidence table plus `rg`/compiler commands that another reviewer can reproduce; no source or compiler files change.
 
-### L1 — portable regression runner and evidence index
+### Ready packet Q-L1-05 — diagnostic input preflight
 
-**Goal:** make the existing bounded HDL regressions easy to rerun and their results easy to archive, without changing testbench behavior.
+**Copyable assignment:** inventory existing `Pocket/build/apf/` files against `tools/apf/fetch_apf.sh`, the expected Pocket project/constraints and the current local tool availability. Add only `Pocket/diagnostic/inputs.json` and `Pocket/diagnostic/check_inputs.py`. The checker must be read-only, deterministic, and report missing QPF/QSF, Quartus, pixel timing reference, and generated/missing core IP as distinct states. It may hash local cached files; it must not download, fetch, alter APF files, or guess pins/clocks. Acceptance: `python3 Pocket/diagnostic/check_inputs.py` reports each required input and exits nonzero for a deliberately absent required field or hash mismatch. Refer to `docs/POCKET_DIAGNOSTIC_PLAN.md` for the bring-up gates.
 
-**Inputs:** `docs/POCKET_IMPLEMENTATION.md`, `Pocket/rtl/psx_mem.f`, `Pocket/tb/tb_psx_mem.sv`, `Pocket/rtl/ram_320x240x15_dp.sv`, `Pocket/tb/tb_ram_320x240x15_dp.sv`, `Pocket/rtl/sram_ctrl.sv`, `Pocket/tb/tb_sram_ctrl.sv`.
+### Ready packet Q-L2-02 — diagnostic display/input core
 
-**Owned files:** add `tools/pocket/run_regressions.sh` and `docs/POCKET_REGRESSION_EVIDENCE.md`. Runner should check for `iverilog` and `vvp`, build in a temporary directory, use bounded seeds/cycle counts, preserve per-test logs and return nonzero on compile or simulation failure. Evidence index records date, tool version, exact command/configuration, pass/fail, and report/log path; leave performance/resource fields explicitly unmeasured unless measured.
+**Copyable assignment:** claim this only after D0 of `docs/POCKET_DIAGNOSTIC_PLAN.md` is satisfied. Add only `Pocket/diagnostic/diagnostic_core.sv` and `Pocket/diagnostic/tb_diagnostic_core.sv`; use the supplied authoritative APF interface and timing, implement a static test pattern plus a visible controller-input response, and verify reset and pattern behavior in Icarus. Do not edit the live PS1 top, shared compiler, APF shell, or constraints. A simulation pass is not a claim of visible hardware output; include a separate D2/D3 checklist and report those gates as pending until fit and physical Pocket evidence exist.
 
-**Acceptance:** `tools/pocket/run_regressions.sh` runs the memory frontend bench at documented parameter sets, the RAM fixture at seed 3, and SRAM controller bench at seed 3 with 4000 operations, then writes a concise evidence record. Also verify missing-tool handling by invoking with an empty PATH while retaining shell utilities needed to start the script, or provide a deterministic self-check mode that exercises that error path. No waveform dumps by default and no unbounded full-console run.
+## Provider completion/report protocol
 
-### L2 — extend P02 cache fixtures at untested boundaries
-
-**Goal:** extend the actual-source cache regression now available in `tools/sflc/tests/tb_caches.sv`. Basic suffix fills, tag replacement, reset and reverted-comparison detection are already done; do not duplicate them.
-
-**Inputs:** `Cache_IR.sflp`, `Cache_Texture.sflp`, `tools/sflc/tests/tb_caches.sv`, `tools/sflc/tests/run_tests.py`, and [POCKET_SFLC.md](POCKET_SFLC.md). Compilation uses the experimental local compiler; independent sequential equivalence remains an L3 job.
-
-**Owned files:** add `tools/sflc/tests/tb_cache_boundaries.sv`; coordinate a small runner hook with the compiler owner. Do not edit either cache SFL source or compiler semantics. Cover IR single-word writes and targeted clear, repeated whole-cache clears without reset, texture index 255, long request stalls, and reset at request/state boundaries. State expected timing from the source before writing each case. Keep texture bypass and concurrent clear/read outside the initial packet unless an L3 reviewer supplies their contract.
-
-**Acceptance:** `python3 tools/sflc/tests/run_tests.py` plus the added bench pass with `--assertions` generated RTL. A deliberately wrong expected word or omitted clear must produce a nonzero failure. Record exactly which new cases ran. Compiler-based results are evidence for the source behavior, not proof of original-toolchain equivalence, BRAM inference, timing or hardware performance.
-
-### L1 — stalled P00 build reproduction packet
-
-**Goal:** isolate which build stages can run today and produce a reproducible blocker report for the active compiler owner.
-
-**Inputs:** `Makefile`, `tools/sflc/ci_sfl2vl.sh`, `tools/sflc/probe/`, `docs/POCKET_P00_TOOLCHAIN.md`, and current `python3`, `iverilog`, `vvp`, `sflc.py` availability.
-
-**Owned files:** add `tools/pocket/p00_probe_matrix.json` and `tools/pocket/check_p00_probes.py`; do not change `tools/sflc/sflc.py`, `sflp_parse.py`, probes, or compiler semantics. Matrix rows identify each probe/real source, required preprocessing, available compiler path, expected capability category, and observed status. The checker parses existing probe names and validates that every result includes the exact command, exit status, and first diagnostic or explicit PASS evidence. Never download proprietary tools, request licenses, or contact maintainers in this packet.
-
-**Acceptance:** `python3 tools/pocket/check_p00_probes.py` exits 0 for a complete matrix and nonzero for an omitted probe or evidence field. Run the currently documented supported probes through `python3 tools/sflc/sflc.py` and Icarus only where the probe is in the documented supported subset; classify accepted local compiler output separately from independent oracle output; list unsupported constructs and missing oracle results with concrete prerequisites. Read POCKET_SFLC.md because many sequential probes now compile locally. The report must clearly separate successful parser/frontend checks from an end-to-end Pocket build, which remains blocked until all required stages and platform inputs are available.
+For any claimed task, send the user/task owner the task ID and owned paths before editing. Keep changes restricted to those paths; never overlap the active compiler owner. Finish with: (1) paths changed, (2) exact commands and exit statuses, (3) evidence artifacts, (4) unresolved assumptions/blockers, and (5) the next dependency or status. Do not claim external dispatch, compiler freeze, hardware fit, visible output, or a passing check without the corresponding evidence. A task that is blocked should return the concrete missing prerequisite and leave its owned outputs unchanged where possible.
 
 ## Copyable implementation prompt
 

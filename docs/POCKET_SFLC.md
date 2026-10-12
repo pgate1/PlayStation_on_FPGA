@@ -3,8 +3,9 @@
 The replacement compiler now generates **the actual `Cache_IR.sflp` and
 `Cache_Texture.sflp` sources** and runs them in a bounded behavioral regression.
 This unblocks isolated cache validation without the proprietary toolchain.
-It does **not** yet build the console, establish sequential equivalence to
-sfl2vl, or qualify a Pocket bitstream.
+It does **not** yet build the console or qualify a Pocket bitstream. Small
+sequential probes now have independent reference evidence; this is not
+equivalence of the full core.
 
 ## Implemented boundary
 
@@ -19,8 +20,11 @@ sfl2vl, or qualify a Pocket bitstream.
   combinational reads as specified by the source, and optional initialization.
 - Lexically distinct local wires/registers, declaration after use, `switch`,
   `any`, `alt` with or without `else`, and implicit zero on inactive selectors.
-- Single-task stages, captured register arguments, common actions, state guards,
-  `goto` and `finish`.
+- Single- and multiple-task stages, captured register arguments, common actions,
+  state guards, `goto` and `finish`.
+- Header/interface linking, lexical instances, child control calls, child output
+  event guards and call-result expressions. `--hierarchy` emits source-backed
+  dependencies once; external Verilog leaves must be supplied separately.
 - Constant width arithmetic, slicing expression results through sized temporary
   wires, bit reversal and sign extension including constants and expressions.
 
@@ -34,39 +38,58 @@ included in this repository.
 
 Scopes are resolved before generating hardware. Registers preserve their values
 when no assignment is enabled. A `reg` without an initializer has no synthesized
-reset; memory initialization happens once, not on `p_reset`. Multiple guarded
+reset. `reg_ws` resets to numeric **1**, including wider registers (the earlier
+all-ones implementation was corrected against p17). Memory initialization happens once, not on `p_reset`. Multiple guarded
 writers select the address and data together, avoiding accidental multiport RAM
 from separate procedural assignments. No synthesis evidence yet proves BRAM
 inference or area savings.
 
 `--assertions` adds simulation-only failures for simultaneous data/register
-writers, multiple memory writers, and unverified stage regeneration while busy.
+writers and multiple memory writers.
 Control terminal invocations may OR their activation conditions. Assertions
 check exercised traffic; they are not a static proof of mutually exclusive
-writers. Use this option for block validation.
+writers. Some valid SFL programs intentionally OR simultaneous writers; run
+reference equivalence without these optional exclusivity assertions.
 
-## Exact stage qualification limit
+## Sequential reference evidence and open mismatch
 
-Each stage has a resettable active bit. A generation loads task arguments and
-activates the stage on the next edge. States are initialized on reset, updated
-by `goto`, and retained while inactive. The cache sources explicitly return to
-their first state before `finish`; the regression tests that pattern and repeated
-completed transactions. Stateful and stateless clear stages are both exercised.
+Linux oracle run `38184207585` generated native p17–p21 successfully. With the
+new `cosim_sequential.py`, p17, p19, p20 and p21 pass 4,000 random cycles each
+(seed 1), comparing every output around manually driven clock/reset edges.
+Inputs include overlapping starts, simultaneous finish/generate and periodic
+asynchronous reset. The references remain external.
 
-**Retained-state restart without a return `goto`, generation while already
-active, and simultaneous generation/finish remain unverified against sfl2vl.**
-Do not use the compiler for live integration of a block relying on those cases.
-Busy generation trips the optional assertion; without it, the emitted active
-bit gives generation priority, which is an implementation choice awaiting
-reference validation. Multiple tasks per stage and nested stages are unsupported.
+Stages capture arguments on every generate, even while already active. Generate
+wins over same-edge finish. State is initialized on reset and changed by `goto`;
+it is retained across finish/restart. Tasks in one stage have independent sticky
+active bits: starting a second task does not cancel the first. Finish clears all
+tasks except those generated on that same edge. Shared argument writers combine
+by guarded OR, as do ordinary SFL multiple writers. Nested stages are unsupported.
 
-The archived `p13_stage` produced **no reference Verilog**: its input-terminal
-`instr_arg` was rejected. Earlier presence of the probe was not evidence for
-stage semantics. New `p17_registers`, `p18_controls`, and `p19_stage` use native
-syntax without that input-terminal declaration. They elaborate through our
-compiler; they are inputs for the **next** archived-compiler run, not claimed
-oracle results. Each is well below the evaluation limit. Do not compact or split
-large modules to evade that limit.
+**Open mismatch: p18 instruction arguments.** The oracle drives a sole call's
+argument unconditionally, even while its control is inactive. The current
+compiler guards it. Native p23 distinguishes single/multiple call sites and a
+mixed direct writer; await that reference before generalizing a fix. Do not
+claim instruction-argument equivalence or use this compiler for live integration.
+
+The old p13 stage probe produced no oracle because of invalid native syntax.
+The new probes are small native inputs below the evaluation limit. Do not compact
+or split real modules to evade the archived compiler's 500-line limit.
+
+## Hierarchy boundary
+
+A missing generated `foo.h` is derived only from the exact sibling `foo.sflp`'s
+public declarations. Explicit headers are parsed recursively with cycle checks;
+conflicting interfaces, bad port directions/arity, missing members and recursive
+module instantiation fail. `declare ... interface` leaves omit implicit clocks;
+ordinary declared/source-backed modules receive `p_reset` and `m_clock`.
+
+The two-clocked-child plus combinational-leaf fixture passes 2,000 cycles,
+covering activation guards, captured data, child events, local call results and
+reset. ADSR and drawFillRect additionally elaborate with their real Verilog leaves.
+This does not prove full CPU/GPU hierarchy support. Header macros shared across
+files, instance arrays and identifiers colliding with SystemVerilog keywords are
+not qualified; the last may currently fail during downstream elaboration.
 
 ## Reproduce local evidence
 
@@ -76,7 +99,7 @@ From the project root, with Python 3, Icarus and vvp on PATH:
 python3 tools/sflc/tests/run_tests.py
 ```
 
-Executed successfully with Python 3.12 and Icarus 13.0. Nine test groups pass:
+Executed successfully with Python 3.12 and Icarus 13.0. Twelve test groups pass:
 
 | Evidence | Result and scope |
 |---|---|
@@ -87,7 +110,9 @@ Executed successfully with Python 3.12 and Icarus 13.0. Nine test groups pass:
 | Cache mutations | Reverting the word-2 offset comparison in each temporary source copy causes the expected behavioral failure |
 | Error handling | Invalid assignments, undeclared signals, invalid widths/slices/cases/tasks, unsupported constructs and exercised conflicting writers are rejected |
 | Lexical scope | Sibling locals with identical spelling are independent; forward local declarations resolve |
-| Elaboration only | 19 real leaf modules and 18 supported `p*` probes; two unsupported probes fail explicitly |
+| Elaboration only | 19 real leaf modules and supported `p*` probes; p08 generators fail explicitly |
+| Linked modules | 2,000 cycles with clocked children, an external leaf, events and guarded call results; invalid interfaces and cycles rejected |
+| Multiple stage tasks | 40 directed checks including shared argument OR, sticky overlap, finish/generate and reset |
 
 The texture bench supplies responses only after the request has crossed an
 accepting clock edge. It does not establish compatibility with a same-cycle ack
@@ -102,13 +127,21 @@ For optional comparison against the archived reference output directory:
 python3 tools/sflc/cosim.py --reference-dir /path/to/sfl2vl-probe-out
 ```
 
-Executed with seed 1 and 4,000 vectors each: **all nine pass** (`p01`, `p03`,
-`p04`, `p09`, `p11`, `p12`, `p14`, `p16`, and real `bsr_s16`). `p11` has no data
+Executed with seed 1 and 4,000 vectors each: **all eleven pass** (`p01`, `p03`,
+`p04`, `p09`, `p11`, `p12`, `p14`, `p15`, `p16`, `p22`, and real `bsr_s16`). `p11` has no data
 inputs, so it is a repeated constant-output check. The runner generates vectors
 in Python, checks output widths, supports arbitrary input widths, and fails on
 missing references, simulator failures, mismatches or missing PASS markers.
-References were recovered from the earlier local `ci2/sfl2vl-probe-out` scratch
-artifacts. This is combinational equivalence only.
+Latest references are external artifacts from Linux run `38212896810`; p22 uses
+native subtraction instead of the unary-minus spelling rejected by the oracle.
+This is combinational equivalence only. For the currently passing sequential cases:
+
+```sh
+python3 tools/sflc/cosim_sequential.py --reference-dir /path/to/sfl2vl-probe-out \
+  --cases p17_registers p19_stage p20_retained_stage p21_multi_task
+```
+
+The default five-case run currently exposes the p18 mismatch above.
 
 Both caches also passed **Verilator 5.052 lint without warnings**:
 
@@ -120,22 +153,21 @@ verilator --lint-only --top-module Cache_Texture /tmp/Cache_Texture.sv
 ```
 
 `.github/workflows/sflc.yml` adds the local regression to CI without downloading
-the proprietary compiler. The workflow was written but **has not run remotely**.
+the proprietary compiler. The probe branch ran this workflow on Linux; its older compiler snapshot fails
+the newly added multi-task probe. Current local changes have not yet had a green
+remote run. The native oracle workflow succeeds, but that workflow deliberately
+retains failed probe logs: inspect each individual exit status.
 
 ## Next hard work, in order
 
-1. **L3: sequential oracle closure.** Run p17–p19 through the archived compiler,
-   fix only native syntax if required, then compare bounded cycle traces. Expand
-   the probes to stage idle restart, finish/generate overlap and argument capture.
-   Keep unknown cases rejected/asserted until evidence determines their behavior.
-2. **L3: typed expression audit.** Extend reference probes for decimal sizing,
-   mixed-width arithmetic, overflow before slicing and sign-extension contexts.
-   The numerical fixture is strong regression evidence, not a complete language
-   specification. Do this before trusting GTE/CPU arithmetic.
-3. **L3: hierarchy linking.** Resolve `%i` interfaces, `declare interface` leaf
-   ports, instances, `instruct sub.ack` and expressions containing invocations.
-   Share one interface representation with argument wiring. Prove handshake and
-   data behavior on a tiny two-module fixture before enabling the real CPU/GPU.
+1. **L3: instruction-argument closure.** Resolve p18 using the native p23
+   evidence, then rerun both independent reference suites and the local regression.
+2. **L3: typed expression audit.** Broaden decimal sizing, mixed-width arithmetic,
+   overflow before slicing and sign-extension contexts beyond p22. Do this before
+   trusting GTE/CPU arithmetic.
+3. **L3: hierarchy audit.** Exercise real clients now that linking works; establish
+   remaining call side effects, lexical interfaces and error boundaries before
+   enabling CPU/GPU integration.
 4. **L3: constant generators and remaining constructs.** Implement compile-time
    `par/any/alt` expansion and separately establish `join` ordering. Preserve
    lexical instance/local names. String literals and `bus`/bidirectional
@@ -146,6 +178,8 @@ the proprietary compiler. The workflow was written but **has not run remotely**.
 `DMA_CDR.sflp` currently fails on undeclared `dbg32` and `DMA_SPU.sflp` on
 undeclared `size_mul` under default defines. Determine intended build defines
 and original source intent before changing them; do not create implicit wires.
+`drawRect.sflp` additionally references undeclared `under640`;
+`PlayStation_core.sflp` declares `file_adrs` twice. These remain explicit errors.
 
 Smaller independent packets live in [POCKET_MODEL_HANDOFF.md](POCKET_MODEL_HANDOFF.md).
 P00 remains open. P02 has actual-source behavioral and mutation evidence under

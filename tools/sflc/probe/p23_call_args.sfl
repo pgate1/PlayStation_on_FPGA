@@ -1,0 +1,22 @@
+// Isolate local control argument wiring with one/two call sites and a direct
+// assignment to a formal. Outputs expose the argument nets while inactive.
+circuit p23 {
+    input a<8>, b<8>, c<8>;
+    instrin start_one, start_left, start_right, start_direct;
+    output one_value<8>, many_value<8>, direct_value<8>;
+    instrself one, many, direct;
+    sel one_arg<8>, many_arg<8>, direct_arg<8>;
+    instr_arg one(one_arg);
+    instr_arg many(many_arg);
+    instr_arg direct(direct_arg);
+
+    instruct start_one one(a);
+    instruct start_left many(b);
+    instruct start_right many(c);
+    instruct start_direct direct(a);
+    direct_arg = c;
+
+    one_value = one_arg;
+    many_value = many_arg;
+    direct_value = direct_arg;
+}

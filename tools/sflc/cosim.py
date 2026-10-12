@@ -25,7 +25,9 @@ CASES = {
     'p11_pp': Path('tools/sflc/probe/p11_pp.sfl'),
     'p12_unops': Path('tools/sflc/probe/p12_unops.sfl'),
     'p14_any_alt': Path('tools/sflc/probe/p14_any_alt.sfl'),
+    'p15_submod': Path('tools/sflc/probe/p15_submod.sfl'),
     'p16_circuit_kw': Path('tools/sflc/probe/p16_circuit_kw.sfl'),
+    'p22_widths': Path('tools/sflc/probe/p22_widths.sfl'),
     'real_bsr_s16': Path('bsr_s16.sflp'),
 }
 DECL = re.compile(
@@ -150,7 +152,9 @@ def run_case(name, source_rel, reference_dir, vectors, rng, iverilog, vvp, timeo
         dut_path.write_text(dut, encoding='utf-8')
         try:
             subprocess.run([iverilog, '-g2012', '-s', 'tb_' + name, '-o', str(exe_path),
-                            str(reference_path), str(dut_path), str(tb_path)],
+                            str(reference_path), str(dut_path), str(tb_path),
+                            *([str(ROOT/'tools/sflc/tests/interface_leaf.sv')]
+                              if name == 'p15_submod' else [])],
                            check=True, capture_output=True, text=True, timeout=timeout)
             result = subprocess.run([vvp, str(exe_path)], check=True, capture_output=True,
                                     text=True, timeout=timeout)

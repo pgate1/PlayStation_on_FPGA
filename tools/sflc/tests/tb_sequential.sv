@@ -40,7 +40,7 @@ module tb_sequential;
     if(a[0]) l=l+1; else rr=rr+2;
     clk=1; #1;
     if(value!==r || memq!==q || busy!==(state!=0) || result!==res ||
-       left!==(a[0]?l:8'b0) || right!==(a[0]?8'b0:rr) || set_value!==15 || initialized!==5)
+       left!==(a[0]?l:8'b0) || right!==(a[0]?8'b0:rr) || set_value!==1 || initialized!==5)
        $fatal(1,"sequential mismatch check=%d r=%h/%h mem=%h/%h busy=%b state=%d result=%h/%h locals=%h/%h %h/%h",
          checks,value,r,memq,q,busy,state,result,res,left,l,right,rr);
     checks=checks+1;
@@ -52,7 +52,7 @@ module tb_sequential;
     #1; reset=1; #1;
     r=0;l=0;rr=0;state=0;data=0;res=0;
     if(value!==0 || busy!==0 || result!==0 || left!==0 || right!==0 ||
-       set_value!==15 || initialized!==5 || memq!==q) $fatal(1,"async reset mismatch");
+       set_value!==1 || initialized!==5 || memq!==q) $fatal(1,"async reset mismatch");
     reset=0; #1;
   endtask
   initial begin

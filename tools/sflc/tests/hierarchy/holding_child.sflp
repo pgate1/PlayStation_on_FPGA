@@ -1,0 +1,10 @@
+circuit holding_child {
+    instrin put(data), take;
+    input data<8>;
+    instrout offer(value);
+    output value<8>;
+    reg_wr stored<8>, pending;
+    instruct put { stored := data; pending := 0b1; }
+    instruct take pending := 0b0;
+    if(pending) offer(stored);
+}

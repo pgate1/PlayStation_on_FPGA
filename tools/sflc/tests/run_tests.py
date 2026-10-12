@@ -106,7 +106,7 @@ class CompilerTests(unittest.TestCase):
             ('instrself a(x); sel x; a();', ValueError),
             ('finish;', ValueError),
             ('stage_name s {task do();} stage s {first_state x; state x goto missing;}', NameError),
-            ('stage_name s {task a(); task b();}', NotImplementedError),
+            ('stage_name s {task a(); task a();}', ValueError),
             ('input a; sel a;', ValueError),
             ('sel __sfl_bad;', ValueError),
             ('output a; a=1#0xFF;', ValueError),
@@ -116,7 +116,7 @@ class CompilerTests(unittest.TestCase):
         for body, error in bad:
             with self.subTest(body=body):
                 with self.assertRaises(error): self.compile_text('circuit bad {'+body+'}')
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaises(FileNotFoundError):
             self.compile_text('%i "missing.h"\ncircuit bad {}')
 
     def test_06_conflicts_trip_at_runtime(self):
@@ -152,7 +152,7 @@ class CompilerTests(unittest.TestCase):
         self.assertIn('PASS widths vectors=65536', result.stdout)
 
     def test_09_supported_probes_elaborate(self):
-        unsupported = {'p08_gen', 'p15_submod'}
+        unsupported = {'p08_gen'}
         for path in sorted((ROOT/'tools/sflc/probe').glob('p*.sfl')):
             with self.subTest(probe=path.name):
                 if path.stem in unsupported:
@@ -160,8 +160,51 @@ class CompilerTests(unittest.TestCase):
                     continue
                 out = self.build/(path.stem+'.sv')
                 out.write_text(sflc.translate(path, assertions=True))
-                subprocess.run(['iverilog', '-g2012', '-t', 'null', str(out)],
+                extras = [str(ROOT/'tools/sflc/tests/interface_leaf.sv')] if path.stem == 'p15_submod' else []
+                subprocess.run(['iverilog', '-g2012', '-t', 'null', str(out), *extras],
                                check=True, capture_output=True, text=True, timeout=30)
+
+    def test_10_linked_clocked_and_interface_modules(self):
+        generated = sflc.translate(ROOT/'tools/sflc/tests/hierarchy/linked.sflp',
+                                   assertions=True, hierarchy=True)
+        leaf = (ROOT/'tools/sflc/tests/interface_leaf.sv').read_text()
+        result = self.simulate('tb_linked', {'linked_hierarchy': generated, 'leaf': leaf},
+                               ROOT/'tools/sflc/tests/hierarchy/tb_linked.sv')
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+        self.assertIn('PASS linked cycles=2000', result.stdout)
+        self.assertEqual(generated.count('module holding_child ('), 1)
+
+    def test_12_overlapping_stage_tasks(self):
+        result = self.simulate('tb_multi_task', {'p21': sflc.translate(
+            ROOT/'tools/sflc/probe/p21_multi_task.sfl', assertions=False)},
+            ROOT/'tools/sflc/tests/tb_multi_task.sv')
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+        self.assertIn('PASS multi-task checks=40', result.stdout)
+
+    def test_11_linker_rejects_bad_interfaces(self):
+        header = 'declare child interface {input a<8>; output b<8>; instrin put(a); instrout ack;}'
+        for body, error in [
+            ('child c; c.b=0;', ValueError),
+            ('child c; c.ack();', ValueError),
+            ('child c; c.put();', ValueError),
+            ('child c; output o; o=c.missing;', NameError),
+            ('missing c;', NameError),
+            ('child c; instruct c.b ;', ValueError),
+        ]:
+            with self.subTest(body=body):
+                with self.assertRaises(error):
+                    self.compile_text(header+'circuit bad {'+body+'}')
+        with self.assertRaisesRegex(ValueError, 'conflicting declarations'):
+            self.compile_text(header+'declare child interface {input a<7>;} circuit bad {}')
+        source = self.build/'recursive.sflp'
+        source.write_text('%i "recursive.h"\ncircuit recursive {recursive child;}')
+        with self.assertRaisesRegex(ValueError, 'recursive module'):
+            sflc.translate(source, hierarchy=True)
+        source.write_text('%i "cycle_a.h"\ncircuit recursive {}')
+        (self.build/'cycle_a.h').write_text('%i "cycle_b.h"')
+        (self.build/'cycle_b.h').write_text('%i "cycle_a.h"')
+        with self.assertRaisesRegex(ValueError, 'cyclic header'):
+            sflc.translate(source)
 
 
 if __name__ == '__main__':
