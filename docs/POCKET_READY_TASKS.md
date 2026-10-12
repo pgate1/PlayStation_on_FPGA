@@ -1,7 +1,8 @@
 # Work that can continue without the primary agent
 
 Baseline: **77b3f50**, diagnostic RTL/bench and 34-row probe matrix committed.
-Read [rolling checkpoints](POCKET_CHECKPOINTS.md) first. The user authorizes
+The three packets below are now complete; their claim records contain results.
+Do not duplicate them. Read [rolling checkpoints](POCKET_CHECKPOINTS.md) first. The user authorizes
 independent implementation and commits within the packets below. You do not need
 the primary agent to wake up, approve a routine choice, or repeat this permission.
 
@@ -13,7 +14,7 @@ Commit each bounded result, even if it is an explicitly documented failure.
 Finish by updating your claim with commands, results, commit, remaining blockers
 and whether the packet is done. Own the claim file plus only the listed paths.
 
-## Q-L2-04 — diagnostic regression runner and CI — READY
+## Q-L2-04 — diagnostic regression runner and CI — COMPLETE
 
 **Own:** `tools/pocket/run_diagnostic.py`,
 `.github/workflows/pocket-diagnostic.yml`, `docs/claims/Q-L2-04.md`.
@@ -32,7 +33,7 @@ failure returns nonzero without editing the real bench. CI installation needs
 Icarus only, not Quartus or proprietary references. If GitHub execution is
 unavailable, commit the runner/workflow with Linux result marked pending.
 
-## Q-L2-05 — reproducible pinned diagnostic reference fetch — READY
+## Q-L2-05 — reproducible pinned diagnostic reference fetch — COMPLETE
 
 **Own:** `tools/apf/fetch_diagnostic_reference.py`,
 `docs/claims/Q-L2-05.md`. Cache writes only under gitignored `Pocket/build/reference`.
@@ -54,7 +55,7 @@ a temporary destination and matches the documented hashes. Missing archive or
 network access is a specific pending check, not a reason to leave local verify
 mode unimplemented. Report exact outcomes and cache location.
 
-## Q-L1-06 — Pocket diagnostic test card — READY
+## Q-L1-06 — Pocket diagnostic test card — COMPLETE
 
 **Own:** `docs/POCKET_DIAGNOSTIC_TEST.md`, `docs/claims/Q-L1-06.md`.
 

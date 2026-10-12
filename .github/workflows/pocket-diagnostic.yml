@@ -1,0 +1,32 @@
+name: Pocket diagnostic simulation
+
+on:
+  push:
+    paths:
+      - "Pocket/diagnostic/diagnostic_core.sv"
+      - "Pocket/diagnostic/tb_diagnostic_core.sv"
+      - "tools/pocket/run_diagnostic.py"
+      - ".github/workflows/pocket-diagnostic.yml"
+  pull_request:
+    paths:
+      - "Pocket/diagnostic/diagnostic_core.sv"
+      - "Pocket/diagnostic/tb_diagnostic_core.sv"
+      - "tools/pocket/run_diagnostic.py"
+      - ".github/workflows/pocket-diagnostic.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Icarus Verilog
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes iverilog
+      - name: Run diagnostic simulation
+        run: python3 tools/pocket/run_diagnostic.py

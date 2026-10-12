@@ -5,6 +5,25 @@ new entries here record current ownership, discoveries and commits. Update after
 each bounded change or significant finding, and at least every 15 minutes during
 longer work. A checkpoint may explicitly report incomplete work or failing tests.
 
+## 2026-10-12 20:11 UTC — three more packets reviewed and ready to commit
+
+- `c0c2c07` commits the Linux bench fix and green 15-group evidence. Compiler
+  semantics are still f983b03; only scoreboard task storage changed.
+- Q-L2-04 complete: `tools/pocket/run_diagnostic.py` and dedicated workflow.
+  Root reran the bounded runner successfully. Linux diagnostic-only workflow
+  [38302415733](https://github.com/ollisulopuisto/PlayStation_on_FPGA/actions/runs/38302415733)
+  passes at isolated snapshot `8ff9642`; negative marker/fatal checks were tested
+  by the smaller-model owner on temporary copies, not the repository bench.
+- Q-L2-05 complete: reference fetch/verify script pins the archive, six documented
+  file hashes and full tree digest. Local archive import, modified-cache/corrupt
+  archive and unsafe-entry checks were exercised. Root independently verified
+  the existing cache. Network download mode remains unexercised.
+- Q-L1-06 complete: operator test card has blank artifact/build fields and all
+  hardware observations NOT RUN. These three packets' claims are closed on commit.
+- Next hard job: root integrates the diagnostic into an isolated APF project.
+  cache_boundaries is reading exact reference signal/clock/handshake mappings;
+  it has no edit ownership. No live PS1 top changes or hardware claims.
+
 ## 2026-10-12 19:22 UTC — Linux regression fixed; three independent packets active
 
 - **Linux PASS:** all 15 compiler groups and the diagnostic's 3-frame/618600-pixel
