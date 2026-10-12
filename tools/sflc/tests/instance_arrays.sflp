@@ -1,0 +1,21 @@
+// Constant-indexed instance arrays: slot[i] -> declared slot_XX (uppercase hex,
+// digit count taken from the declarations) and t[i] -> t_X. The leaf is
+// combinational Verilog (interface_leaf.sv); 18 elements cover hex letters.
+declare leaf interface {
+    input x<8>;
+    output q<8>;
+    instrin con(x);
+}
+circuit arr {
+    input pick<5>, d<8>, t_pick<2>;
+    output y<8>, z<8>;
+    leaf slot_00, slot_01, slot_02, slot_03, slot_04, slot_05, slot_06, slot_07, slot_08, slot_09, slot_0A, slot_0B, slot_0C, slot_0D, slot_0E, slot_0F, slot_10, slot_11;
+    leaf t_0, t_1, t_2, t_3;
+    any(i=0;i<18;i++){
+        pick==i : y = slot[i].con(d + i).q;
+        else : y = 0x00;
+    }
+    alt(i=0;i<4;i++){
+        t_pick==i : z = t[i].con(d @ i).q;
+    }
+}

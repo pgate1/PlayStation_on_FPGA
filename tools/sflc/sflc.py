@@ -77,6 +77,8 @@ class Scope:
                 raise NameError('undeclared ' + n[1])
             value = env[n[1]]
             return value if isinstance(value, tuple) else ('name', value)
+        if n[0] == 'index' and n[1][0] == 'name' and n[1][1] not in env:
+            return ('name', self.instance_element(n[1][1], constant(self.expr(n[2], env)), env))
         if n[0] == 'dot':
             member = n[2]
             # Local instruction calls return a named signal in the same scope.
@@ -87,6 +89,23 @@ class Scope:
         return tuple(self.expr(x, env) if isinstance(x, tuple) else
                      [self.expr(y, env) for y in x] if isinstance(x, list) else x
                      for x in n)
+
+    @staticmethod
+    def instance_element(base, value, env):
+        """Map base[value] to the declared instance base_XX (uppercase hex).
+
+        The digit count is taken from the declared names, never guessed, and
+        the element must itself be declared: nothing is invented.
+        """
+        found = {name[len(base) + 1:] for name in env
+                 if re.fullmatch(re.escape(base) + '_[0-9A-F]+', name)}
+        if not found: raise NameError('undeclared ' + base)
+        widths = {len(digits) for digits in found}
+        if len(widths) != 1: raise ValueError('ambiguous instance array ' + base)
+        if value < 0: raise ValueError('negative instance index')
+        name = '%s_%0*X' % (base, widths.pop(), value)
+        if name not in env: raise NameError('undeclared instance %s (from %s[%d])' % (name, base, value))
+        return env[name]
 
     @staticmethod
     def declaration(item):

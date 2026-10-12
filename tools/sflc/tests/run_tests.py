@@ -211,6 +211,27 @@ class CompilerTests(unittest.TestCase):
                         str(out), *[str(ROOT/n) for n in ('mul_s16.v', 'mul_s32.v', 'mul_u32.v')]],
                        check=True, capture_output=True, text=True, timeout=30)
 
+    def test_16_constant_indexed_instance_arrays(self):
+        generated = sflc.translate(ROOT/'tools/sflc/tests/instance_arrays.sflp', assertions=True)
+        leaf = (ROOT/'tools/sflc/tests/interface_leaf.sv').read_text()
+        result = self.simulate('tb_instance_arrays', {'arr': generated, 'leaf': leaf},
+                               ROOT/'tools/sflc/tests/tb_instance_arrays.sv')
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+        self.assertIn('PASS instance_arrays checks=4032', result.stdout)
+        header = 'declare leaf interface {input x<8>; output q<8>; instrin con(x);}\n'
+        bad = [
+            ('leaf s_0, s_2; par(i=0;i<2;i++){ s[i].con(d); }', NameError, 'undeclared instance s_1'),
+            ('leaf s_0, s_00; s[0].con(d);', ValueError, 'ambiguous instance array'),
+            ('leaf s_0a; s[0].con(d);', NameError, 'undeclared s'),
+            ('par(i=0;i<2;i++){ m[i].con(d); }', NameError, 'undeclared m'),
+            ('input n<2>; leaf s_0, s_1; s[n].con(d);', NotImplementedError, 'nonconstant'),
+            ('leaf s_0, s_1; s[0-1].con(d);', ValueError, 'negative instance index'),
+        ]
+        for body, error, message in bad:
+            with self.subTest(body=body):
+                with self.assertRaisesRegex(error, message):
+                    self.compile_text(header + 'circuit bad {input d<8>; ' + body + '}')
+
     def test_11_linker_rejects_bad_interfaces(self):
         header = 'declare child interface {input a<8>; output b<8>; instrin put(a); instrout ack;}'
         for body, error in [

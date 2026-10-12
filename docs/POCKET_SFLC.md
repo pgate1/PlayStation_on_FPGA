@@ -30,6 +30,10 @@ See the [current handoff](POCKET_HANDOFF_2026-10-12.md) for exact runs and comma
 - Bounded compile-time `par/any/alt` generators with independent iteration locals.
   Bounds are nonnegative, start-inclusive/end-exclusive, limited to 4096 cumulative
   iterations per circuit. `join` and runtime bounds remain unsupported.
+  Constant-indexed instance arrays (`ch[i]` inside a generator) resolve to a
+  declared `ch_XX` (uppercase hex; digit count taken from the declared names, the
+  element must exist, mixed digit counts are an error). The naming rule is inferred
+  from the DSP/PlayStation_core declarations, not from a native oracle.
 - Single- and multiple-task stages, captured register arguments, common actions,
   state guards, `goto` and `finish`.
 - Header/interface linking, lexical instances, child control calls, child output
@@ -139,8 +143,9 @@ The GTE hierarchy now elaborates with `--hierarchy --register-banks` plus real
 mul_s16/mul_s32/mul_u32 Verilog leaves. gte_DIVIDE translates without that flag.
 This is not GTE arithmetic proof. R3000A now stops at undeclared cache_hit_reg.
 This does not prove full CPU/GPU hierarchy support. Header macros shared across
-files, instance arrays and identifiers colliding with SystemVerilog keywords are
-not qualified; the last may currently fail during downstream elaboration.
+files, runtime-indexed instance arrays and identifiers colliding with SystemVerilog
+keywords are not qualified; the last may currently fail downstream (a fixture
+instance named `cell` did).
 
 ## Reproduce local evidence
 
