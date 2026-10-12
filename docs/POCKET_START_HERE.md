@@ -23,7 +23,9 @@ This is now a Git checkout, with existing committed and uncommitted work. Check
 commit `95d42dd` adds the portable HDL runner. Isolated validation branch
 `sfl-oracle-20261012` was pushed for Linux reference/regression runs; integration
 checkpoint `0422745` adds hierarchy linking, stages and the task queue.
-The follow-up selector checkpoint matches native p23–p26; its 13-group
+Checkpoint `e92456c` commits the 32-probe matrix; its checker passes, though
+p21 and oracle-status rows still need updating.
+The preceding selector checkpoint `d93175d` matches native p23–p26; its 13-group
 regression passes Linux CI run `38222767443` (snapshot `c2da886`).
 Preserve the original SFL files' CRLF/non-UTF-8 bytes. This session changed compiler,
 fixtures and documentation, not the cache source bytes or the live Pocket top.

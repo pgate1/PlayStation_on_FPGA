@@ -163,12 +163,14 @@ No external provider was automatically contacted; these are copyable assignments
 
 Other agents' work was read and preserved. Current local-only, uncommitted
 files include the RAM/SRAM replacements and benches, imported `hdl/`, APF fetch
-tooling, modified `Pocket/core.sflp` UART include, `.claude/`, and the four
-`tools/pocket/` manifest/matrix files. They were not bundled into the compiler
+tooling, modified `Pocket/core.sflp` UART include, `.claude/`, and three
+`tools/pocket/` files: `build_inputs.json`, `check_build_inputs.py`, and
+`check_p00_probes.py`. The matrix itself is committed in `e92456c`. They were not bundled into the compiler
 checkpoint. Review/commit them under their owners rather than treating them as
 part of a clean checkout. The 79-entry build manifest checker passes. The probe
-matrix checker **currently fails** on omitted p23–p26 rows; Q-L1-03 is explicitly
-assigned that refresh. Its old p21 status also needs updating. A passing schema
+matrix checker **passes for 32 probes** after `e92456c`. Q-L1-03 still needs
+to correct its stale p21 unsupported classification and reference statuses; the
+p23–p26 rows currently say oracle not run despite the comparisons above. A passing schema
 checker would not by itself prove the recorded compilation results.
 
 Keep the isolated memory frontend disconnected until request ownership, loader
