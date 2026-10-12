@@ -23,19 +23,22 @@ This is now a Git checkout, with existing committed and uncommitted work. Check
 commit `95d42dd` adds the portable HDL runner. Isolated validation branch
 `sfl-oracle-20261012` was pushed for Linux reference/regression runs; integration
 checkpoint `0422745` adds hierarchy linking, stages and the task queue.
-Checkpoint `e92456c` commits the 32-probe matrix; its checker passes, though
-p21 and oracle-status rows still need updating.
-The preceding selector checkpoint `d93175d` matches native p23–p26; its 13-group
-regression passes Linux CI run `38222767443` (snapshot `c2da886`).
+Checkpoint `e92456c` commits the 32-probe matrix; its checker passed at that
+checkpoint. It now needs p27/p28 rows plus p21 and oracle-status corrections.
+The selector checkpoint `d93175d` matches native p23–p26. Latest compiler
+checkpoint **f983b03** adds bounded generators, p28 comparison and opt-in banks.
+All 15 groups pass locally; current Linux CI fails the experimental bank fixture.
+The older green 13-group run does not validate this new bank feature.
+Checkpoint `31934fc` recovered authoritative diagnostic project/timing inputs.
 Preserve the original SFL files' CRLF/non-UTF-8 bytes. This session changed compiler,
 fixtures and documentation, not the cache source bytes or the live Pocket top.
 
 | Area | Actual evidence |
 |---|---|
-| Replacement SFL compiler | Expanded from combinational subset to registers, memory, local controls, lexical scopes, switch, multiple-task stages and hierarchy linking; **experimental**, not a full compiler |
+| Replacement SFL compiler | Expanded from combinational subset to registers, memory, local controls, lexical scopes, switch, multiple-task stages, hierarchy linking and bounded generators; **experimental**, not a full compiler |
 | P02 caches | Actual corrected SFL sources compile and pass 242 behavioral checks; reverting each existing suffix comparison makes the bench fail |
-| Compiler validation | Thirteen test groups pass, including 4,000 sequential cycles and 65,536 arithmetic vectors; 19 real leaf modules elaborate; linked fixture passes 2,000 cycles |
-| Reference equivalence | Fifteen combinational cases pass 4,000 vectors each; all five sequential cases pass 4,000 cycles each; sampled p18/p23–p26 selector mismatches fixed |
+| Compiler validation | 15 groups pass locally; 14 pass on Linux and bank initialization fails; GTE hierarchy elaborates only with experimental bank flag |
+| Reference equivalence | Fifteen combinational cases pass 4,000 vectors each; six sequential cases p17–p21/p28 pass 4,000 cycles each; p27 parallel memory is an explicit mismatch |
 | Cache lint | Both generated caches pass Verilator 5.052 without warnings |
 | P04 memory frontend | Isolated behavioral scoreboard already passed across multiple parameter sets; not integrated |
 | Replacement framebuffer RAM/SRAM blocks | Written and previously simulated; interface/timing assumptions remain |
@@ -47,29 +50,29 @@ assumptions and the next hard tasks. [POCKET_IMPLEMENTATION.md](POCKET_IMPLEMENT
 contains memory and earlier dependency evidence; historical sections there
 contain superseded status statements and are labeled accordingly.
 
-## Immediate next hard job: P00 sequential semantics and hierarchy
+## Immediate next hard job: P00 semantic compatibility
 
 The compiler now makes isolated cache validation possible without a proprietary
 license. Do not spend the next session redoing the parser spike or claiming that
 all sequential semantics have been recovered.
 
-1. Continue the selector/typed-expression audit described in
-   [POCKET_SFLC.md](POCKET_SFLC.md). Native register, stage and sampled selector
-   probes now agree, including inactive data, restart and overlapping starts.
-2. Expand finite-width expression evidence beyond p22 before trusting CPU/GTE.
-3. Implement constant generators and audit the linked hierarchy. Source defects
-   are inventoried separately; do not silently introduce implicit signals.
-4. Progress the independent [Pocket diagnostic milestone](POCKET_DIAGNOSTIC_PLAN.md).
-   [Authoritative inputs](POCKET_DIAGNOSTIC_INPUTS.md) are now recovered; the
-   smaller-model RTL/simulation task is ready. Quartus still gates fitting.
-   Its test pattern/input response does not prove game execution.
-5. Keep the frontend isolated and the existing CPU/GPU stalls in place until the
-   platform/controller integration prerequisites are met.
+1. Resolve the author-documented SFL+ versus archived native discrepancies:
+   parallel memory writes and wide reg_ws reset. The latter affects loader address
+   comparisons in Pocket/core.sflp. Current sampled native matches do not settle it.
+2. Reduce the Linux bank initialization failure and record exact tool versions;
+   Q-L2-03 assigns independent evidence gathering, leaving the compiler to L3.
+3. Broaden typed-expression/selector evidence and audit real hierarchy clients.
+   Constant par/any/alt expansion is implemented; join remains unsupported.
+4. Progress the [Pocket diagnostic milestone](POCKET_DIAGNOSTIC_PLAN.md).
+   [Authoritative inputs](POCKET_DIAGNOSTIC_INPUTS.md) now exist; diagnostic RTL
+   and simulation can start without Quartus. No such RTL existed at handoff.
+5. Preserve frontend isolation and CPU/GPU stalls until platform/controller
+   ownership, CDC and reset contracts are met.
 
 Run current local evidence:
 
 ```sh
-python3 tools/sflc/tests/run_tests.py
+PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/tests/run_tests.py
 ```
 
 The optional reference regression is
@@ -85,7 +88,8 @@ Do not evade that limit. See [P00 toolchain history](POCKET_P00_TOOLCHAIN.md).
 
 ## Integration blockers that still matter
 
-- No complete Pocket QPF/QSF/SDC project or verified PLL clock/phase setup.
+- The pinned official APF QPF/QSF/SDC/PLL reference is recovered. It has not yet
+  been integrated and fitted as our diagnostic or PS1 project; Quartus is missing.
 - The missing original SDRAM controller's ack convention is unresolved. Imported
   MIRLO controller/PHY files are pinned but not adapted to Pocket's clocks.
 - `core_top.v` OR-combines loader/core memory commands. The core broadcasts some

@@ -7,6 +7,11 @@ It does **not** yet build the console or qualify a Pocket bitstream. Small
 sequential probes now have independent reference evidence; this is not
 equivalence of the full core.
 
+Compiler checkpoint **f983b03**: 15 groups pass locally with Icarus 13, but the
+new experimental bank fixture fails initial-state checks on Linux CI. Six
+sequential native comparisons pass; parallel-memory p27 is a retained mismatch.
+See the [current handoff](POCKET_HANDOFF_2026-10-12.md) for exact runs and commands.
+
 ## Implemented boundary
 
 `tools/sflc/sflc.py` emits SystemVerilog (`iverilog -g2012`). It supports:
@@ -21,6 +26,9 @@ equivalence of the full core.
 - Lexically distinct local wires/registers, declaration after use, `switch`,
   `any`, `alt` with or without `else`, and oracle-tested data selector simplification.
   Inactive data is not universally zero; see the qualification below.
+- Bounded compile-time `par/any/alt` generators with independent iteration locals.
+  Bounds are nonnegative, start-inclusive/end-exclusive, limited to 4096 cumulative
+  iterations per circuit. `join` and runtime bounds remain unsupported.
 - Single- and multiple-task stages, captured register arguments, common actions,
   state guards, `goto` and `finish`.
 - Header/interface linking, lexical instances, child control calls, child output
@@ -39,8 +47,11 @@ included in this repository.
 
 Scopes are resolved before generating hardware. Registers preserve their values
 when no assignment is enabled. A `reg` without an initializer has no synthesized
-reset. `reg_ws` resets to numeric **1**, including wider registers (the earlier
-all-ones implementation was corrected against p17). Memory initialization happens once, not on `p_reset`. Multiple guarded
+reset. Current `reg_ws` resets to numeric **1**, matching archived native p17.
+However, the author's SFL+ notes specify all ones for a wide `reg_ws`. This is an
+unresolved version/preprocessor compatibility gap, not proof the author's behavior
+is wrong. `Pocket/core.sflp:473` uses wide `reg_ws` for loader address comparisons;
+resolve this before integration. Memory initialization happens once, not on `p_reset`. Multiple guarded
 writers select the address and data together, avoiding accidental multiport RAM
 from separate procedural assignments. No synthesis evidence yet proves BRAM
 inference or area savings.
@@ -52,13 +63,34 @@ check exercised traffic; they are not a static proof of mutually exclusive
 writers. Some valid SFL programs intentionally OR simultaneous writers; run
 reference equivalence without these optional exclusivity assertions.
 
+## Experimental parallel banks
+
+Two distinct constant write addresses in one memory require `--register-banks`
+(or `translate(..., register_banks=True)`). The conservative check does not prove
+guard exclusivity. Banks are limited to 256 words; each word receives guarded-OR
+writes. Dynamic-only multiple writers retain the previous selected-port lowering.
+Neither area nor RAM inference has been qualified.
+
+The local independent scoreboard passes 6065 checks over 2019 cycles, but this
+mode **does not match archived native 2010 p27**: native emits a priority chain
+rather than updating all selected words. The optional comparison exits 1 at
+post_edge cycle 4, q0=00 versus 9b. It is deliberately excluded from default
+reference cases and retained as an explicit counterexample, not masked.
+
+Linux CI also fails the bank fixture's first check (q0–q3 unknown at 2 ns).
+Changing initialization to explicit per-word assignments did not fix it; that
+attempt was reverted. Exact simulator/version diagnosis remains open. Keep the
+initialization assertion intact. This flag is not suitable for live integration.
+
 ## Sequential reference evidence and data/control qualification
 
-Linux oracle run `38184207585` generated native p17–p21 successfully. With the
-new `cosim_sequential.py`, all five cases p17–p21 pass 4,000 random cycles each
+Latest downloaded oracle run `38250146942` contains native p17–p21 and p28. With
+`cosim_sequential.py`, all six default cases pass 4,000 random cycles each
 (seed 1), comparing every output around manually driven clock/reset edges.
 Inputs include overlapping starts, simultaneous finish/generate and periodic
-asynchronous reset. The references remain external.
+asynchronous reset. p28 compares generated control/local-counter behavior against
+a small hand-expanded native fixture; it does not recover the missing SFL+
+preprocessor itself. The references remain external.
 
 Stages capture arguments on every generate, even while already active. Generate
 wins over same-edge finish. State is initialized on reset and changed by `goto`;
@@ -101,6 +133,9 @@ ordinary declared/source-backed modules receive `p_reset` and `m_clock`.
 The two-clocked-child plus combinational-leaf fixture passes 2,000 cycles,
 covering activation guards, captured data, child events, local call results and
 reset. ADSR and drawFillRect additionally elaborate with their real Verilog leaves.
+The GTE hierarchy now elaborates with `--hierarchy --register-banks` plus real
+mul_s16/mul_s32/mul_u32 Verilog leaves. gte_DIVIDE translates without that flag.
+This is not GTE arithmetic proof. R3000A now stops at undeclared cache_hit_reg.
 This does not prove full CPU/GPU hierarchy support. Header macros shared across
 files, instance arrays and identifiers colliding with SystemVerilog keywords are
 not qualified; the last may currently fail during downstream elaboration.
@@ -110,10 +145,10 @@ not qualified; the last may currently fail during downstream elaboration.
 From the project root, with Python 3, Icarus and vvp on PATH:
 
 ```sh
-python3 tools/sflc/tests/run_tests.py
+PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/tests/run_tests.py
 ```
 
-Executed successfully with Python 3.12 and Icarus 13.0. Thirteen test groups pass:
+Executed successfully with Python 3.12 and Icarus 13.0. Fifteen test groups pass locally; Linux has the bank failure above:
 
 | Evidence | Result and scope |
 |---|---|
@@ -124,10 +159,12 @@ Executed successfully with Python 3.12 and Icarus 13.0. Thirteen test groups pas
 | Cache mutations | Reverting the word-2 offset comparison in each temporary source copy causes the expected behavioral failure |
 | Error handling | Invalid assignments, undeclared signals, invalid widths/slices/cases/tasks, unsupported constructs and exercised conflicting writers are rejected |
 | Lexical scope | Sibling locals with identical spelling are independent; forward local declarations resolve |
-| Elaboration only | 19 real leaf modules and supported `p*` probes; p08 generators fail explicitly |
+| Elaboration only | 19 real leaf modules and supported `p*` probes; p08 join/sliced assignment remains unsupported; p27 needs the bank flag |
 | Linked modules | 2,000 cycles with clocked children, an external leaf, events and guarded call results; invalid interfaces and cycles rejected |
 | Multiple stage tasks | 40 directed checks including shared argument OR, sticky overlap, finish/generate and reset |
 | Data/control selectors | 4,096 input/control cases covering sole/shared/repeated values, direct writers, one-bit literal controls and nested guards |
+| Generators/banks | 6065 checks, 2019 cycles locally; default bank rejection checked; Linux initial-state failure remains |
+| GTE | Linked hierarchy elaborates under experimental bank flag; no arithmetic/fit proof |
 
 The texture bench supplies responses only after the request has crossed an
 accepting clock edge. It does not establish compatibility with a same-cycle ack
@@ -147,15 +184,16 @@ Executed with seed 1 and 4,000 vectors each: **all fifteen pass** (`p01`, `p03`,
 inputs, so it is a repeated constant-output check. The runner generates vectors
 in Python, checks output widths, supports arbitrary input widths, and fails on
 missing references, simulator failures, mismatches or missing PASS markers.
-Latest references are external artifacts from Linux run `38215563441`; p22 uses
+Earlier combinational references are external artifacts from Linux run `38215563441`; p22 uses
 native subtraction instead of the unary-minus spelling rejected by the oracle.
-This is combinational equivalence only. For all five sequential cases:
+That combinational suite was not rerun during the generator continuation. For the
+six default sequential cases, use references from run `38250146942`:
 
 ```sh
 python3 tools/sflc/cosim_sequential.py --reference-dir /path/to/sfl2vl-probe-out
 ```
 
-The complete suite passes at seed 1, 4,000 cycles each, including overlapping
+The six default cases pass at seed 1, 4,000 cycles each, including overlapping
 control inputs. No output masking is used to hide inactive-data mismatches.
 
 Both caches also passed **Verilator 5.052 lint without warnings**:
@@ -168,7 +206,7 @@ verilator --lint-only --top-module Cache_Texture /tmp/Cache_Texture.sv
 ```
 
 `.github/workflows/sflc.yml` adds the local regression to CI without downloading
-the proprietary compiler. The final 13-group compiler snapshot passed Linux CI in run
+the proprietary compiler. The **earlier** 13-group selector snapshot passed Linux CI in run
 [38222767443](https://github.com/ollisulopuisto/PlayStation_on_FPGA/actions/runs/38222767443)
 on isolated branch `sfl-oracle-20261012`, commit `c2da886`. This includes the final
 selector implementation and fixture corrections. The matching native oracle
@@ -177,22 +215,26 @@ also completed; individual probe exits must still be inspected because that
 workflow deliberately retains failures. Local reference comparisons used the
 same p17–p26 sources from previously downloaded run `38215563441`.
 
+Current 15-group Linux run [38250146881](https://github.com/ollisulopuisto/PlayStation_on_FPGA/actions/runs/38250146881)
+failed the bank fixture; 14 groups passed. Its compiler/test snapshot `3c14120`
+matches f983b03. The ineffective initialization experiment `8ad1d22` also failed
+in [38250348469](https://github.com/ollisulopuisto/PlayStation_on_FPGA/actions/runs/38250348469).
+Do not cite the older green run as validation of the current full suite.
+
 ## Next hard work, in order
 
-1. **L3: selector/typed-expression audit.** Broaden native evidence for equivalent
-   expressions and constant folding; the sampled p18/p23–p26 mismatch is closed.
-2. **L3: typed expression audit.** Broaden decimal sizing, mixed-width arithmetic,
-   overflow before slicing and sign-extension contexts beyond p22. Do this before
-   trusting GTE/CPU arithmetic.
-3. **L3: hierarchy audit.** Exercise real clients now that linking works; establish
-   remaining call side effects, lexical interfaces and error boundaries before
-   enabling CPU/GPU integration.
-4. **L3: constant generators and remaining constructs.** Implement compile-time
-   `par/any/alt` expansion and separately establish `join` ordering. Preserve
-   lexical instance/local names. String literals and `bus`/bidirectional
-   semantics also remain unsupported. Unsupported input must keep failing.
-5. **L3: platform/controller integration.** Return to P03/P04 once P00 can build
-   the hierarchy. Do not infer safety from these isolated tests or remove stalls.
+1. **L3: SFL+ versus archived SFL contract.** Resolve parallel-memory and wide
+   reg_ws discrepancies with the author's documented behavior. Recover the missing
+   preprocessor lowering or explicitly qualify separate versioned semantics.
+2. **L2 evidence, L3 fix: Linux initialization failure.** Minimal reproduction,
+   exact tool versions and unmodified initial-state assertions; see Q-L2-03.
+3. **L3: typed expressions and selectors.** Broaden symbolic equivalence, decimal
+   sizing, mixed widths, overflow before slicing and sign-extension contexts.
+4. **L3: hierarchy and remaining constructs.** Audit real clients, join ordering,
+   instance arrays, strings/buses and interface errors. Do not introduce implicit
+   wires to silence source defects.
+5. **L3: platform/controller integration.** Pinned diagnostic inputs now exist;
+   Quartus, wrapper/CDC review, fitting and hardware acceptance remain open.
 
 `DMA_CDR.sflp` currently fails on undeclared `dbg32` and `DMA_SPU.sflp` on
 undeclared `size_mul` under default defines. Determine intended build defines

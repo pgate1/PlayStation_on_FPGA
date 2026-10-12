@@ -1,8 +1,9 @@
 # P00 build recovery — dependency status and plan
 
-**Current update (2026-10-12):** the experimental compiler now links modules,
-generates both real caches, and passes 15 combinational plus five sequential
-native reference cases. Thirteen regression groups pass locally and on Linux.
+**Current update (2026-10-12):** compiler checkpoint f983b03 adds bounded generators.
+Fifteen groups pass locally; Linux fails the experimental bank initialization test.
+Six sequential reference cases pass; parallel-memory p27 is a known mismatch.
+Wide reg_ws also has an unresolved SFL+ versus archived-native semantic gap.
 Full-core compilation and a Pocket build remain open. Start with the exact
 [handoff](POCKET_HANDOFF_2026-10-12.md), then [compiler limits](POCKET_SFLC.md).
 The dated sections below are recovery history, not the current capability list.

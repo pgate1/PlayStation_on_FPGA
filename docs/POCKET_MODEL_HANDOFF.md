@@ -38,26 +38,79 @@ The tasks below are ready to claim by one provider at a time. They are provider-
 | Q-L1-01 P00 dependency manifest | **Done locally, uncommitted** — 79 entries; checker passes | L1 | None | `tools/pocket/build_inputs.json`, `tools/pocket/check_build_inputs.py` (closed) |
 | Q-L1-02 Portable regressions/evidence | **Done** — commit `95d42dd`; five bounded tests recorded | L1 | Icarus/VVP | `tools/pocket/run_regressions.sh`, `docs/POCKET_REGRESSION_EVIDENCE.md` (closed) |
 | Q-L2-01 Cache boundary fixtures | **Done** — commit `6fbe8bc`; 11 checks | L2 | Experimental compiler and Icarus | `tools/sflc/tests/tb_cache_boundaries.sv`, `tools/sflc/tests/run_cache_boundaries.py` (closed) |
-| Q-L1-03 P00 probe-result snapshot refresh | **Partially done — reconcile evidence** | L1 | Use the committed handoff snapshot, matched by CI branch `c2da886`; p20–p26 probes are present | `tools/pocket/p00_probe_matrix.json` only |
-| Q-L1-04 Read-only source-defect inventory | **Ready** | L1 | None; compiler diagnostics are optional evidence | New `docs/POCKET_SOURCE_DEFECTS.md` only |
-| Q-L1-05 Diagnostic input preflight | **Ready** | L1 | Read access to cached APF inputs and fetch manifest | New `Pocket/diagnostic/inputs.json`, `Pocket/diagnostic/check_inputs.py` only |
+| Q-L1-03 P00 probe-result snapshot refresh | **Partially done — reconcile evidence** | L1 | Use compiler checkpoint `f983b03`; p27 known mismatch and p28 comparison now exist | `tools/pocket/p00_probe_matrix.json` only |
+| Q-L1-04 Read-only source-defect inventory | **Done locally, owner commit pending** | L1 | None; compiler diagnostics are optional evidence | Existing `docs/POCKET_SOURCE_DEFECTS.md` only; do not duplicate |
+| Q-L1-05 Diagnostic input preflight | **Done locally, owner commit pending**; checker exits 2 (Quartus only) | L1 | Read access to cached APF inputs and fetch manifest | Existing `Pocket/diagnostic/inputs.json`, `Pocket/diagnostic/check_inputs.py` only |
 | Q-L2-02 Diagnostic display/input core | **Ready for RTL/simulation** | L2 | Pinned timing, interface and project sources in [diagnostic inputs](POCKET_DIAGNOSTIC_INPUTS.md); Quartus only gates fitting | New `Pocket/diagnostic/diagnostic_core.sv`, `Pocket/diagnostic/tb_diagnostic_core.sv` only |
+| Q-L2-03 Linux bank initialization reproduction | **Ready; evidence only** | L2 | f983b03 generated bank fixture; Linux Icarus access preferred | New `tools/sflc/tests/repro_bank_init.sv`, `docs/POCKET_BANK_INIT_REPRO.md` only |
 
 ### Ready packet Q-L1-03 — refresh P00 result snapshot
 
-**Copyable assignment:** the compiler is frozen for this handoff (see `POCKET_HANDOFF_2026-10-12.md`); use its committed snapshot and refresh only `tools/pocket/p00_probe_matrix.json` using the current probes and current tool availability. Commit `e92456c` adds p23–p26 and the checker passes all 32 rows. Correct the remaining stale p21 unsupported status and oracle not-run classifications against the handoff evidence. Include the new p20–p26 cases, distinguish local compiler/test evidence from archived sfl2vl oracle evidence, and retain exact commands, status, and concise diagnostics. Do not edit `tools/sflc/sflc.py`, `sflp_parse.py`, probe source, matrix checker, or other docs. Run `python3 tools/pocket/check_p00_probes.py` and `python3 tools/sflc/tests/run_tests.py`; report both exact outcomes. If the compiler is still changing, stop before writing and report the prerequisite as unmet.
+**Copyable assignment:** use the frozen compiler checkpoint **f983b03**, with
+outcomes recorded in `POCKET_HANDOFF_2026-10-12.md`. Own only
+`tools/pocket/p00_probe_matrix.json`. Commit e92456c added p23–p26; the 32-row
+matrix now lacks p27/p28 and has stale p21/oracle classifications. Record default
+p27 rejection, opt-in bank comparison **FAIL** (cycle 4, q0 00/9b), and p28 native
+comparison **PASS** separately. Do not turn successful native source translation
+into an equivalence claim. Record 15 local regression groups PASS and current
+Linux bank fixture FAIL, with commands/versions/run IDs. Refresh earlier statuses
+only from their cited evidence. Do not alter the compiler, probes, checker or other
+docs. Run `PYTHONDONTWRITEBYTECODE=1 python3 tools/pocket/check_p00_probes.py` and
+`PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/tests/run_tests.py`; report actual exit
+codes, including failures. If the schema cannot express separate outcomes, report
+that limitation rather than mislabeling a row or expanding your file ownership.
+Check that compiler sources still match f983b03 before writing.
 
-### Ready packet Q-L1-04 — read-only source-defect inventory
+### Completed locally Q-L1-04 — source-defect inventory
 
-**Copyable assignment:** inspect, but do not fix, these candidate source defects: missing `drawPoly.texture_full` port invoked by `GraphicProcessingUnit.sflp:567`; undeclared `under640` use in `drawRect.sflp:85,112`; `dbg32`/`dbg32_reg` assignment versus the `dbg`/`dbg_reg` declarations in `DMA_CDR.sflp:33–44`; `size_mul` call in `DMA_SPU.sflp:55`; duplicate `file_adrs` output declarations in `PlayStation_core.sflp:114–116`. Add only `docs/POCKET_SOURCE_DEFECTS.md`. For each item quote the minimum exact source evidence with file and line, classify as confirmed or unresolved, explain what compiler evidence supports that classification, and state any preprocess defines used. Record both default (`DEMO` undefined) and `DEMO`-defined context where applicable; do not silently “correct” likely typos or assert intended hardware behavior. Acceptance is a concise evidence table plus `rg`/compiler commands that another reviewer can reproduce; no source or compiler files change.
+`docs/POCKET_SOURCE_DEFECTS.md` now exists from another provider and was read during
+handoff. It records five source candidates under default and DEMO defines, without
+source fixes. Its owner should review/commit that exact file; do not repeat this
+packet or silently change original source bytes. A later L3 review should decide
+intent and fixes. This completion status does not certify intended hardware behavior.
 
-### Ready packet Q-L1-05 — diagnostic input preflight
+### Completed locally Q-L1-05 — diagnostic input preflight
 
-**Copyable assignment:** inventory existing `Pocket/build/apf/` files against `tools/apf/fetch_apf.sh`, the expected Pocket project/constraints and the current local tool availability. Add only `Pocket/diagnostic/inputs.json` and `Pocket/diagnostic/check_inputs.py`. The checker must be read-only, deterministic, and report missing QPF/QSF, Quartus, pixel timing reference, and generated/missing core IP as distinct states. It may hash local cached files; it must not download, fetch, alter APF files, or guess pins/clocks. Acceptance: `python3 Pocket/diagnostic/check_inputs.py` reports each required input and exits nonzero for a deliberately absent required field or hash mismatch. Refer to `docs/POCKET_DIAGNOSTIC_PLAN.md` for the bring-up gates.
+Existing `Pocket/diagnostic/inputs.json` now records the pinned reference QPF/QSF,
+the timing source (`core_top.v:519-524`, `mf_pllbase_0002.v:34,37`) and all 13 APF
+hashes. `check_inputs.py` exits 2 with only `quartus_sh` blocked. The PS1-only IP
+(`main_pll_0002`, `sdram128_burstn_ctrl_100`) is reported as missing but is not a
+diagnostic requirement. Owner should verify and commit the two files. Temporary-copy
+tests exit 1 for a hash mismatch and for a missing `timing_reference.pixel_clock_hz`.
 
 ### Ready packet Q-L2-02 — diagnostic display/input core
 
 **Copyable assignment:** use [POCKET_DIAGNOSTIC_INPUTS.md](POCKET_DIAGNOSTIC_INPUTS.md), which supplies the pinned primary reference, local cache, exact timing, hashes, pixel-domain interface and acceptance. Own only `Pocket/diagnostic/diagnostic_core.sv` and `Pocket/diagnostic/tb_diagnostic_core.sv`. The source prerequisite is now satisfied; start RTL and Icarus simulation without waiting for Quartus. L3 owns the APF wrapper, reset/CDC review, PLL, constraints and fitting. Report simulation evidence separately from the still-pending hardware gates.
+
+### Ready packet Q-L2-03 — reproduce Linux bank initialization
+
+**Copyable assignment:** compiler checkpoint f983b03 passes the generator/bank
+scoreboard locally under Icarus 13, but Ubuntu 22.04 run 38250146881 fails at 2 ns:
+q0–q3 are X where initialized zero is expected. An explicit constant-index
+initialization variant on isolated snapshot 8ad1d22/run 38250348469 failed too;
+that speculative patch was reverted on primary. Own only new
+`tools/sflc/tests/repro_bank_init.sv` and `docs/POCKET_BANK_INIT_REPRO.md`.
+
+Reduce the exact emitted unpacked array, initial assignments, constant output
+reads and per-word clocked writers. Compare variants with/without unrelated
+resettable counters; print internal cells and outputs before the first clock.
+Record exact Icarus/VVP versions, commands, generated-input hash, OS and results.
+First reproduce the original failure before changing a construct. If only local
+Icarus is available, supply the reproducer and mark Linux validation pending.
+Do not infer a simulator bug solely from differing results, remove assertions,
+mask X values, change compiler behavior, alter CI workflows or claim a fix.
+Acceptance: the smallest evidence-backed failing case plus a clearly stated
+hypothesis/next experiment. L3 owns the compiler fix and regression decisions.
+
+## Dispatch at this handoff
+
+No external provider was contacted automatically. Copy Q-L2-02 first to an HDL
+coder for the visible diagnostic milestone; give Q-L1-05 and Q-L1-03 to separate
+economical providers because their owned files do not overlap. Q-L2-03 is an
+independent investigation for a coder with Linux simulator access. The strongest
+model should resume the memory/reg_ws semantic contract before CPU/GTE integration.
+Local uncommitted inventory/preflight work belongs to its existing owners; ask
+for their completion report rather than overwriting or reassigning those files.
 
 ## Provider completion/report protocol
 

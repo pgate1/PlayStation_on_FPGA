@@ -1,14 +1,15 @@
 # Implementation checkpoint — 2026-10-12
 
-## Current continuation — hierarchy and native sequential probes
+## Current continuation — compiler checkpoint f983b03
 
-See [POCKET_SFLC.md](POCKET_SFLC.md) for the current boundary: hierarchy linking,
-multiple-task stages, thirteen local regression groups, fifteen combinational
-reference cases and five sequential reference cases pass. The p18 mismatch was
-traced to data selector qualification and fixed using native p23–p26. The earlier
-universal inactive-zero assumption was incorrect; see the qualified behavior
-and remaining expression-simplification limits in the compiler document. `reg_ws` wide-register reset
-was corrected from all-ones to numeric 1 using native evidence.
+See [current handoff](POCKET_HANDOFF_2026-10-12.md) and
+[compiler limits](POCKET_SFLC.md): bounded generators are implemented, 15 groups
+pass locally, and six sequential native cases pass. The experimental bank fixture
+fails Linux initialization and differs from native parallel-memory behavior.
+GTE hierarchy elaboration requires that experimental flag and proves no arithmetic.
+Current reg_ws follows archived numeric-1 reset, but the author's SFL+ notes specify
+all ones for wide registers. This compatibility gap affects Pocket loader addresses
+and remains unresolved; earlier wording treating all-ones as simply wrong is withdrawn.
 
 Commits `6fbe8bc` (compiler/cache milestone) and `95d42dd` (another agent's HDL
 runner/evidence) and `0422745` (hierarchy/stage milestone) exist. An isolated oracle branch was pushed for Linux CI.

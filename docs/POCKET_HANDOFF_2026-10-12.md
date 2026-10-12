@@ -1,194 +1,177 @@
-# Handoff — 2026-10-12, compiler/linker checkpoint
+# Handoff — 2026-10-12, bounded generator checkpoint
 
-This is the latest continuation record. Start here, then read
-[POCKET_SFLC.md](POCKET_SFLC.md) and [POCKET_START_HERE.md](POCKET_START_HERE.md).
-**Continuation:** official diagnostic timing/project sources are now recovered;
-see [POCKET_DIAGNOSTIC_INPUTS.md](POCKET_DIAGNOSTIC_INPUTS.md). Q-L2-02 can start
-RTL/simulation; Quartus fitting remains blocked. The platform-source absence
-statements in the original checkpoint below describe its earlier inventory.
+Latest **compiler checkpoint: `f983b03`** on `pocket-work`. This document supersedes
+the earlier continuation record. Read [compiler limits](POCKET_SFLC.md),
+[diagnostic inputs](POCKET_DIAGNOSTIC_INPUTS.md), and the
+[cross-provider queue](POCKET_MODEL_HANDOFF.md) before starting.
+The user requested winding down near 15% of the five-hour allowance; the last
+reported percentage before documentation was 18%. The agent cannot observe
+that quota directly. No automatic five-hour resume has been scheduled.
 
-The user requested a handoff after this checkpoint; do not restart the parser
-spike, repeat completed task packets, or assume a Pocket bitstream exists.
+## Outcome and commits
 
-## Goal and present outcome
+Target: original PS1 games on Analogue Pocket at correct guest speed, video first,
+roughly 30 newly rendered frames/s in selected simple games, sound later.
+**No new loadable Pocket bitstream, full-core build, fit/timing result, game boot,
+or hardware FPS improvement exists from this work.**
 
-Target: original PS1 games on Analogue Pocket at correct guest speed, roughly
-30 newly rendered frames/s in selected simple games, video first and sound later.
-Current progress is build recovery and correctness evidence. **No loadable new
-Pocket bitstream, full-core compile, fit/timing result, game boot, or hardware
-FPS improvement has been achieved.**
+- `6fbe8bc`: experimental compiler/cache milestone.
+- `95d42dd`: another agent's portable component regressions/evidence.
+- `0422745`: hierarchy linking, independent stage tasks and reference runner.
+- `d93175d`: native data-selector corrections and p24–p26 tests.
+- `e92456c`: commits the probe matrix, including p23–p26; its recorded statuses
+  still need reconciliation. Do not omit this checkpoint.
+- `9e1db93`: repairs the earlier handoff's missing e92456c history.
+- `31934fc`: recovers pinned official Pocket timing/project inputs and unblocks
+  the diagnostic RTL/simulation packet.
+- **`f983b03`: bounded `par/any/alt` generators; independent lexical locals;
+  p28 native comparison; explicit experimental register-bank flag; GTE hierarchy
+  elaboration; retained p27 mismatch and Linux regression.**
 
-The compiler now links modules and emits tested sequential behavior, enabling
-isolated cache and hierarchy validation without the unavailable original SFL+
-toolchain. Several incorrect initial assumptions were found with the native
-compiler oracle and corrected, rather than hidden by the testbench.
+Primary-branch commits above have not been pushed by this session. Only the
+isolated `sfl-oracle-20261012` validation branch was pushed to
+`https://github.com/ollisulopuisto/PlayStation_on_FPGA.git`. No PR or merge exists.
+The documentation commit following f983b03 is discoverable using
+`git log -1 --oneline -- docs/POCKET_HANDOFF_2026-10-12.md`; f983b03 denotes the
+compiler content, not an assertion that no later documentation commit exists.
 
-## Checkpoints and ownership
+## Current compiler boundary
 
-- `6fbe8bc`: first experimental compiler/cache milestone, probes and regressions.
-- `95d42dd`: another agent's portable HDL runner and evidence record. Read and
-  preserved; five bounded component tests are recorded there.
-- `0422745`: interface/hierarchy linking, multiple-task stages, sequential oracle
-  runner, diagnostic plan and cross-provider task queue.
-- The follow-up commit containing this handoff fixes native data selection and
-  adds probes p24–p26 plus the 4,096-case selector fixture. Find its hash with
-  `git log -1 --format=%h -- docs/POCKET_HANDOFF_2026-10-12.md`; it is `d93175d`.
-- `e92456c`: adds the p23–p26 rows to `tools/pocket/p00_probe_matrix.json`. Each
-  compiles and elaborates with Icarus (exit 0); oracle status stays `not-run`.
-  `tools/pocket/check_p00_probes.py` reports `OK: 32 probes recorded`.
+Existing linking, cache, stage and data-selector behavior remains. Generators
+require nonnegative compile-time bounds and `i++`, use a start-inclusive,
+end-exclusive range, and permit at most 4096 cumulative iterations per circuit.
+Each `par` iteration has separate lexical locals. `any` combines enabled arms;
+`alt` retains iteration/arm order. There is one final else outside the index
+scope. Empty ranges are supported; runtime bounds and `join` still fail.
 
-Primary branch is `pocket-work`. Its new checkpoint commits have **not** been
-pushed by this session. The isolated validation branch `sfl-oracle-20261012`
-**was** pushed to `https://github.com/ollisulopuisto/PlayStation_on_FPGA.git`.
-Its final tested snapshot is `c2da886cd385559f9e8c3a7031bfc367e58a239b`.
-It contains the matching compiler/tests/probes but is not a complete copy of
-the primary branch's documentation/platform work. No PR or merge was created.
+Memories with two distinct static write addresses are conservatively rejected
+by default, even if their guards might be exclusive. `--register-banks` opts
+into per-word guarded-OR writes for banks of at most 256 words. Same-address
+writers OR their data; different words can update together. This mode is
+**experimental, not native-equivalent and not hardware-qualified**. It has a
+known Linux simulation failure described below. Dynamic-only multiwrite
+patterns still use the previous selected-port lowering; they are not newly
+qualified as parallel banks. No area/BRAM inference claim is established.
 
-Other providers are working in this shared checkout. Check `git status` before
-editing or committing and stage exact owned paths. Do not discard their work.
-Original top-level `.sflp` files use CRLF/non-UTF-8 bytes; preserve them. This
-session did not rewrite cache or console source bytes.
+`GeometryTransformationEngine.sflp` plus linked gte_LIMIT/gte_DIVIDE and real
+mul_s16/mul_s32/mul_u32 Verilog leaves now elaborates under the bank flag.
+That is syntax/connectivity evidence only, not GTE arithmetic correctness.
+`gte_DIVIDE.sflp` translates without the bank flag. CPU now reaches an explicit
+undeclared `cache_hit_reg` error instead of stopping at generator syntax.
 
-## Implemented and independently checked
+## Validation, including failures
 
-**Linking:** explicit `%i` headers, inline interfaces, instance ports, guarded
-control calls, child output-event guards, call-result expressions, lexical
-instances, and `--hierarchy` dependency emission. Missing `foo.h` is derived only
-from the exact sibling `foo.sflp` public declarations. External Verilog leaves
-remain explicit build inputs. Bad directions/arity/ports, conflicting interfaces
-and include/instantiation cycles fail. A 2,000-cycle linked fixture exercises
-clocked children, a combinational leaf, captured arguments, responses and reset.
-
-**Registers/stages:** `reg_ws` resets to numeric 1, including wider registers;
-the earlier all-ones assumption was wrong. Stage state persists across
-finish/restart unless changed by `goto`. Generate captures arguments even while
-active and wins over simultaneous finish. Tasks within a stage have independent
-sticky active bits; generating a second task does not cancel the first. Shared
-argument and register writers use guarded OR, not source-order priority.
-
-**Data/control distinction:** the native `-O2` compiler does not force every
-inactive data output to zero. A sole distinct data value stays connected,
-repeated identical values need no selector, and the tested unconditional-writer
-cases OR their data continuously. Multiple distinct conditional values retain
-their guards. One-bit literal assignments act as Boolean control equations;
-one-bit variable data can remain continuously connected. Control terminal
-activation and register enables remain guarded. Native p18/p23–p26 exposed these
-differences; the implementation and old fixture assumptions were corrected.
-
-This is a sampled oracle match, **not a complete specification of the native
-optimizer**. `data_mux` currently recognizes syntactically identical emitted
-values and literal Boolean constants. Symbolically equivalent expressions and
-broader constant folding are unqualified. Keep this distinction in later work.
-`--assertions` checks simultaneous writers and is deliberately stricter than
-valid SFL programs that intentionally OR overlapping writers. Reference runners
-disable those assertions and compare all outputs without inactivity masks.
-
-## Exact evidence and reproduction
-
-Local tools: Python 3.12, Icarus 13.0/VVP, Verilator 5.052. Quartus and native SFL
-tools are not on PATH. Use `PYTHONDONTWRITEBYTECODE=1`: the repository still tracks
-an old parser `.pyc`, and imports without this setting can dirty it.
+Use `PYTHONDONTWRITEBYTECODE=1`: an old parser pyc is tracked. Python 3.12,
+Icarus 13.0 and Verilator 5.052 were available locally; Quartus was not on PATH.
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/tests/run_tests.py
 PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/tests/run_cache_boundaries.py
-PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim.py --reference-dir /tmp/psx-oracle-38215563441
-PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim_sequential.py --reference-dir /tmp/psx-oracle-38215563441
+gh run download 38250146942 --repo ollisulopuisto/PlayStation_on_FPGA \
+  --name sfl2vl-probe-out --dir /tmp/psx-oracle-38250146942
+PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim_sequential.py \
+  --reference-dir /tmp/psx-oracle-38250146942
+# Expected failure: retained counterexample, not part of the default cases.
+PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim_sequential.py \
+  --reference-dir /tmp/psx-oracle-38250146942 --cases p27_parallel_memory
 ```
 
-Results at this checkpoint:
-
-| Check | Evidence |
+| Check | Exact outcome |
 |---|---|
-| Local main regression | 13 groups PASS: 4,000 sequential cycles; 65,536 numerical pairs; 242 actual-cache checks and detection of both reverted suffix-comparison mutations; 19 real leaf elaborations; linker errors/2,000 cycles; 40 multi-task checks; 4,096 selector cases |
-| Standalone cache boundaries | 11 checks PASS, including single-word IR write, targeted/repeated clear, texture index 255 and long stall |
-| Combinational native comparison | 15 cases PASS, 4,000 vectors each, seed 1: p01, p03, p04, p09, p11, p12, p14, p15, p16, p22–p26, real bsr_s16 |
-| Sequential native comparison | All five p17–p21 PASS, 4,000 cycles each, seed 1; reset plus pre/post-edge outputs; overlapping inputs included |
-| Verilator | Both generated caches pass lint without warnings after the selector fix |
-| Linux regression | Final 13-group snapshot `c2da886` passes [run 38222767443](https://github.com/ollisulopuisto/PlayStation_on_FPGA/actions/runs/38222767443) |
-| Native oracle CI | Matching workflow [38222767521](https://github.com/ollisulopuisto/PlayStation_on_FPGA/actions/runs/38222767521) succeeds; local comparisons used downloaded earlier run 38215563441 with the same probe inputs |
+| Local current regression | **15 groups PASS**, including generator/bank scoreboard 6065 checks over 2019 cycles and GTE hierarchy elaboration |
+| Earlier retained local coverage | 4000 sequential cycles, 65536 numerical pairs, 242 actual-cache checks, both reverted-cache mutations detected, 19 leaves elaborate, linked fixture 2000 cycles, 40 stage checks, 4096 selector cases |
+| Current sequential native comparison | **Six cases PASS**, p17–p21 plus p28, 4000 cycles each, seed 1, all outputs around edges; p28 compares a generator fixture to a tiny hand-expanded native input |
+| Parallel-memory native comparison | **FAIL as expected**, p27 post_edge cycle 4, q0 reference=00 DUT=9b, exit 1 |
+| Earlier combinational native evidence | 15 cases PASS, 4000 vectors each, seed 1, references from run 38215563441; not rerun during this generator continuation |
+| Earlier standalone boundaries/lint | 11 cache boundary checks PASS; both generated caches lint clean; not rerun during this continuation |
+| Current Linux regression | **FAIL**, [38250146881](https://github.com/ollisulopuisto/PlayStation_on_FPGA/actions/runs/38250146881), snapshot `3c14120` matching f983b03 compiler/test files; 14 groups pass, bank fixture fails initial q0–q3=xx at 2 ns |
+| Attempted Linux initialization fix | Explicit constant initialization also **FAIL**, [38250348469](https://github.com/ollisulopuisto/PlayStation_on_FPGA/actions/runs/38250348469), isolated snapshot `8ad1d22`; ineffective patch reverted on primary branch |
+| Last completely green Linux checkpoint | 13-group selector snapshot `c2da886`, [38222767443](https://github.com/ollisulopuisto/PlayStation_on_FPGA/actions/runs/38222767443) |
+| Native oracle generation | [38250146942](https://github.com/ollisulopuisto/PlayStation_on_FPGA/actions/runs/38250146942) succeeds; p28 individual log exit=0; external references downloaded locally |
 
-Reference Verilog is external, not vendored. If `/tmp` artifacts disappear,
-download the known comparison artifact:
+The native workflow retains per-probe failures without failing its overall job;
+inspect individual logs and generated files. Licensed reference output is not
+vendored. The archived evaluation compiler has a 500-line limit: use tiny
+independent semantic probes, never compact or split real sources to evade it.
+Temporary oracle checkout: `/tmp/psx-sfl-oracle-pxkregzq`. Its extra branch trigger
+is validation-only; do not copy that workflow change into the main branch.
 
-```sh
-gh run download 38215563441 --repo ollisulopuisto/PlayStation_on_FPGA \
-  --name sfl2vl-probe-out --dir /tmp/psx-oracle-38215563441
-```
+## Hardest remaining issues, in order
 
-The native workflow deliberately captures failures without failing the overall
-job. Inspect individual `.log` exit statuses and `.v` presence, not just its green
-badge. Native p23 initially failed declaration ordering and was corrected;
-p22 unary minus was rejected, so the native probe uses `0x00-a`. The unsupported
-old p13 does not establish any stage behavior. Evaluation tool limit is 500
-lines: use small semantic probes, never compact/split real modules to evade it.
+1. **Resolve the SFL+ versus archived SFL semantic boundary.** Native 2010 p27
+   lowers the writes to one source-priority chain (wr, then cell3, cell2, cell1,
+   cell0), whereas the experimental bank mode writes all selected words.
+   The author's [SFL+ notes](https://pgate1.at-ninja.jp/memo/SFLP/) describe parallel
+   memory updates and a separate SFL+ preprocessor. A hand-expanded native probe
+   is not proof of that missing preprocessor's output. Recover the real lowering
+   or establish an explicit versioned semantic contract before integration.
+2. **Wide reg_ws is an unresolved compatibility gap.** The same author document
+   shows a four-bit reg_ws resetting to all ones; archived native p17 resets it
+   to numeric 1. Current sflc follows p17. Earlier docs calling all-ones simply
+   wrong were overbroad. `Pocket/core.sflp:473` uses reg_ws file_adrs<18> and
+   sram_adrs<11> in address comparisons: the difference can affect loader behavior.
+   Do not silently change it or claim SFL+ equivalence; preserve both references.
+3. **Linux bank initialization failure.** Reduce the emitted unpacked-array
+   initialization and constant read outputs on the CI simulator, record exact
+   simulator version, and compare against local Icarus 13. Both dynamic-loop and
+   explicit-word initialization failed. A simulator-version cause is only a
+   hypothesis. Keep the failing initial-state assertion; do not mask X outputs.
+4. Broaden typed-expression/selector evidence before trusting CPU/GTE arithmetic;
+   symbolic selector folding, overflow/slicing and mixed widths remain partial.
+   `join` ordering, instance arrays, strings/buses, nested stages and cross-header
+   macro propagation remain unsupported or unqualified.
 
-Temporary isolated checkout: `/tmp/psx-sfl-oracle-pxkregzq`. Its workflow adds the
-validation branch to the native probe trigger; do not inadvertently overwrite
-the primary branch workflow with that temporary change. No tool process is
-intentionally left running at handoff.
+First errors under default defines:
 
-## Next hard work and concrete blockers
-
-The compiler is frozen for this checkpoint so another provider can refresh the
-result matrix. For the next L3 implementation, use an isolated branch and retain
-all reference regressions. A high-value next feature is bounded compile-time
-`par/any/alt` generator expansion, with native tiny probes and lexical-scope tests.
-In parallel with that design, broaden typed expression/selector oracle coverage
-before trusting CPU/GTE arithmetic. Do not silently accept unsupported forms.
-
-Current first-error survey, default defines, using `sflc.translate`:
-
-| Source | First result |
+| Source | Current result |
 |---|---|
-| `R3000A.sflp` | `NotImplementedError: par generator` |
-| `GeometryTransformationEngine.sflp` | `NotImplementedError: par generator` (the filename is not `GTE.sflp`) |
-| `gte_DIVIDE.sflp` | `NotImplementedError: alt generator` |
-| `GraphicProcessingUnit.sflp` | `NameError: unknown port poly.texture_full`; call at line 567, missing from drawPoly public interface |
-| `PlayStation_core.sflp` | `ValueError: duplicate interface port file_adrs` |
-| `drawRect.sflp` | `NameError: undeclared under640` |
-| `DMA_CDR.sflp` | `NameError: undeclared dbg32` |
-| `DMA_SPU.sflp` | `NameError: undeclared size_mul` |
-| `ADSR.sflp`, `drawFillRect.sflp`, `drawPoly.sflp` | Translate individually; this is not full hierarchy/behavioral proof |
+| R3000A.sflp | undeclared cache_hit_reg |
+| GeometryTransformationEngine.sflp | default rejects parallel d writes; bank flag permits hierarchy elaboration |
+| gte_DIVIDE.sflp | translates, including alt generator |
+| GraphicProcessingUnit.sflp | unknown port poly.texture_full |
+| PlayStation_core.sflp | duplicate interface port file_adrs |
+| drawRect.sflp | undeclared under640 |
+| DMA_CDR.sflp | undeclared dbg32 |
+| DMA_SPU.sflp | undeclared size_mul |
 
-ADSR and drawFillRect were additionally elaborated earlier with their real
-Verilog leaves. Investigate source intent/defines before fixing these errors.
-No implicit wires or duplicate-port suppression. Also unqualified/unsupported:
-nested stages, `join`/relay ordering, strings, buses/bidirectional behavior,
-instance arrays, cross-header macro propagation, and SFL identifiers colliding
-with SystemVerilog keywords (these may currently fail downstream elaboration).
+## Other providers and next inexpensive tasks
 
-## Cross-provider tasks and remaining local work
+Two read-only internal reviews checked other providers' work during wind-down.
+No external provider was contacted. Use the precise copyable queue in
+[POCKET_MODEL_HANDOFF.md](POCKET_MODEL_HANDOFF.md):
 
-Use the claim queue in [POCKET_MODEL_HANDOFF.md](POCKET_MODEL_HANDOFF.md).
-Ready: Q-L1-03 result snapshot refresh; Q-L1-04 source-defect evidence inventory;
-Q-L1-05 diagnostic input preflight. Q-L2-02 display/input RTL waits for
-authoritative platform/timing inputs. Each has exact owned paths and acceptance.
-No external provider was automatically contacted; these are copyable assignments.
+- Q-L1-03: refresh the matrix against **f983b03**; include p27's default rejection
+  and opt-in mismatch separately, p28 PASS, and Linux FAIL. The 32-row e92456c
+  matrix is now stale; schema success alone is not evidence of current outcomes.
+- Q-L1-04: source inventory exists locally and was reviewed; owner should commit
+  it rather than assigning duplicate research.
+- Q-L1-05: done locally. `Pocket/diagnostic/check_inputs.py` exits 2 with the
+  pinned QPF/QSF, timing reference and 13 APF hashes present; only `quartus_sh`
+  is blocked (gates fitting, not RTL/simulation).
+- Q-L2-02: diagnostic RTL/bench is ready, no Quartus required for simulation.
+  No diagnostic_core.sv or tb_diagnostic_core.sv existed at this review.
+- Q-L2-03: produce the minimal Linux initialization reproduction, own new repro
+  files only; leave the compiler and assertions unchanged until reviewed.
 
-Other agents' work was read and preserved. Current local-only, uncommitted
-files include the RAM/SRAM replacements and benches, imported `hdl/`, APF fetch
-tooling, modified `Pocket/core.sflp` UART include, `.claude/`, and three
-`tools/pocket/` files: `build_inputs.json`, `check_build_inputs.py`, and
-`check_p00_probes.py`. The matrix itself is committed in `e92456c`. They were not bundled into the compiler
-checkpoint. Review/commit them under their owners rather than treating them as
-part of a clean checkout. The 79-entry build manifest checker passes. The probe
-matrix checker **passes for 32 probes** after `e92456c`. Q-L1-03 still needs
-to correct its stale p21 unsupported classification and reference statuses; the
-p23–p26 rows currently say oracle not run despite the comparisons above. A passing schema
-checker would not by itself prove the recorded compilation results.
+Other providers' uncommitted work was preserved: Pocket/core.sflp UART include,
+RAM/SRAM replacements and benches, hdl/, tools/apf/, .claude/, build manifest and
+checkers, docs/POCKET_SOURCE_DEFECTS.md and Pocket/diagnostic/ preflight files.
+Stage exact owned files; do not discard their work. Original SFL sources use
+CRLF/non-UTF-8 bytes. No original core/cache source bytes were changed here.
 
-Keep the isolated memory frontend disconnected until request ownership, loader
-CDC, common reset/flush, controller timing and platform clocks are resolved.
-Do not remove CPU/GPU drawing stalls based on isolated simulation results.
+## Pocket-visible path
 
-## Pocket-visible milestone and ETA limits
+Pinned full official core-template revision
+`da3a021b1eaf742604d86d8dc9b33a6666263e6a` is cached under
+`Pocket/build/reference/`. Matching QPF/QSF, pins, PLL and timing source exist.
+The diagnostic contract fixes 12,287,999 Hz, total 400x512, active 320x240 and
+register/phase details. This is an APF reference project, not a fitted PS1 project.
+Quartus/device installation, wrapper/CDC integration, fit/timing, packaging and
+physical Pocket test remain. An x86-64 Linux machine or appropriately provisioned
+GitHub Actions runner can host Quartus; no installation was performed here.
 
-[POCKET_DIAGNOSTIC_PLAN.md](POCKET_DIAGNOSTIC_PLAN.md) separates a test-pattern/
-button-response milestone from PS1 gameplay. Cached APF files exist, but no
-complete Pocket QPF/QSF, verified pins/video timing/PLL setup or working local
-Quartus was established. The diagnostic planning range is **1–3 focused workdays
-after those prerequisites exist**, not 1–3 days from this handoff. A game build
-with visible gameplay improvements remains weeks rather than days, with low
-confidence until full compilation and fit. None of the passing tests above
-establishes a visual or frame-rate improvement on physical hardware.
+Earlier diagnostic estimate was 1–3 focused workdays after build prerequisites;
+that remains a planning range, not a promised delivery date. Gameplay improvements
+remain unestimated pending full compilation and fit. Keep the memory frontend
+isolated and CPU/GPU drawing stalls in place until ownership/CDC/reset contracts
+and actual platform timing are established.
