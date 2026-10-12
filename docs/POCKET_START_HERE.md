@@ -1,5 +1,7 @@
 # Session checkpoint — start here
 
+**Current ownership and progress:** [rolling checkpoints](POCKET_CHECKPOINTS.md).
+
 Updated **2026-10-12**. Latest handoff: [POCKET_HANDOFF_2026-10-12.md](POCKET_HANDOFF_2026-10-12.md).
 Workspace:
 `/Users/dst/Documents/koodi/PlayStation_on_FPGA-master`.

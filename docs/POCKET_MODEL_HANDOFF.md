@@ -1,5 +1,9 @@
 # Assigning the roadmap to other models
 
+Check [rolling checkpoints](POCKET_CHECKPOINTS.md) for active claims and newer
+results before taking a packet. Q-L2-02 is claimed by `diagnostic_core` as of
+2026-10-12 17:20 UTC; root owns the Linux bank regression investigation.
+
 **Resume work from [POCKET_START_HERE.md](POCKET_START_HERE.md).** It records what was actually completed, installed tools, unresolved blockers and the next implementation packet. The [memory contract](POCKET_MEMORY_CONTRACT.md) now has isolated RTL; see [implementation evidence](POCKET_IMPLEMENTATION.md). The isolated memory frontend has passed behavioral simulation. Full-system simulation and live integration remain outstanding.
 
 Read [POCKET_ROADMAP.md](POCKET_ROADMAP.md) for the evidence, task contracts and dependency table, and [POCKET_BENCHMARKS.md](POCKET_BENCHMARKS.md) for acceptance. The goal is sound plus approximately 30 fps in selected original PS1 games at correct game speed.
