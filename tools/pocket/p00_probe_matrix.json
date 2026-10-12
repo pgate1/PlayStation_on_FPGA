@@ -2,8 +2,9 @@
   "schema": 1,
   "notes": [
     "Compile is the local tools/sflc/sflc.py result. Elaborate is Icarus -t null on that output only, and is recorded only when compile exits 0.",
-    "Oracle status is separate from local results; no independent sfl2vl output is recorded here.",
-    "Paths are repository-relative. <tmp> is a temporary directory."
+    "Oracle status is separate from local results: match/mismatch records functional simulation against archived sfl2vl output. Native conversion exit status is recorded in the row note; successful conversion alone is not equivalence.",
+    "Archived references are external, evaluation-restricted output. Current validation used /tmp/psx-oracle-38250146942; reference files are not vendored.",
+    "Paths are repository-relative unless explicitly identified as a temporary oracle directory. <tmp> is a temporary build directory."
   ],
   "rows": [
     {
@@ -48,9 +49,9 @@
         "pass_evidence": "exit 0, no diagnostics"
       },
       "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p01_ifelse.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim.py --reference-dir /tmp/psx-oracle-38250146942` exited 0; PASS p01_ifelse vectors=4000, seed=1."
     },
     {
       "probe": "p02_switch",
@@ -94,9 +95,9 @@
         "pass_evidence": "exit 0, no diagnostics"
       },
       "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p03_sel.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim.py --reference-dir /tmp/psx-oracle-38250146942` exited 0; PASS p03_sel vectors=4000, seed=1."
     },
     {
       "probe": "p04_ops",
@@ -117,9 +118,9 @@
         "pass_evidence": "exit 0, no diagnostics"
       },
       "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p04_ops.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim.py --reference-dir /tmp/psx-oracle-38250146942` exited 0; PASS p04_ops vectors=4000, seed=1."
     },
     {
       "probe": "p05_incdec",
@@ -227,9 +228,9 @@
         "pass_evidence": "exit 0, no diagnostics"
       },
       "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p09_prec.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim.py --reference-dir /tmp/psx-oracle-38250146942` exited 0; PASS p09_prec vectors=4000, seed=1."
     },
     {
       "probe": "p10_scoped",
@@ -273,9 +274,9 @@
         "pass_evidence": "exit 0, no diagnostics"
       },
       "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p11_pp.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim.py --reference-dir /tmp/psx-oracle-38250146942` exited 0; PASS p11_pp vectors=4000, seed=1."
     },
     {
       "probe": "p12_unops",
@@ -296,9 +297,9 @@
         "pass_evidence": "exit 0, no diagnostics"
       },
       "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p12_unops.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim.py --reference-dir /tmp/psx-oracle-38250146942` exited 0; PASS p12_unops vectors=4000, seed=1."
     },
     {
       "probe": "p13_stage",
@@ -343,9 +344,9 @@
         "pass_evidence": "exit 0, no diagnostics"
       },
       "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p14_any_alt.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim.py --reference-dir /tmp/psx-oracle-38250146942` exited 0; PASS p14_any_alt vectors=4000, seed=1."
     },
     {
       "probe": "p15_submod",
@@ -366,9 +367,9 @@
         "pass_evidence": "exit 0, no diagnostics"
       },
       "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p15_submod.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim.py --reference-dir /tmp/psx-oracle-38250146942` exited 0; PASS p15_submod vectors=4000, seed=1."
     },
     {
       "probe": "p16_circuit_kw",
@@ -389,119 +390,124 @@
         "pass_evidence": "exit 0, no diagnostics"
       },
       "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p16_circuit_kw.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim.py --reference-dir /tmp/psx-oracle-38250146942` exited 0; PASS p16_circuit_kw vectors=4000, seed=1."
     },
     {
       "probe": "p17_registers",
       "source": "tools/sflc/probe/p17_registers.sfl",
       "preprocessing": "none beyond sflc.py %i handling",
       "compiler_path": "tools/sflc/sflc.py (local)",
-      "capability": "local-only",
+      "capability": "supported",
       "compile": {
         "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p17_registers.sfl",
         "exit_status": 0,
         "first_diagnostic": "",
-        "pass_evidence": "exit 0, no diagnostics"
+        "pass_evidence": "exit 0, no diagnostics (checkpoint f983b03)."
       },
       "elaborate": {
         "command": "iverilog -g2012 -t null <tmp>/p17_registers.sv",
         "exit_status": 0,
         "first_diagnostic": "",
-        "pass_evidence": "exit 0, no diagnostics"
+        "pass_evidence": "exit 0 in the sequential co-simulation build."
       },
       "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p17_registers.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim_sequential.py --reference-dir /tmp/psx-oracle-38250146942 --cases p17_registers p18_controls p19_stage p20_retained_stage p21_multi_task p28_generator_controls` exited 0; PASS p17_registers cycles=4000, seed=1, including async reset and clock-edge checks."
     },
     {
       "probe": "p18_controls",
       "source": "tools/sflc/probe/p18_controls.sfl",
       "preprocessing": "none beyond sflc.py %i handling",
       "compiler_path": "tools/sflc/sflc.py (local)",
-      "capability": "local-only",
+      "capability": "supported",
       "compile": {
         "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p18_controls.sfl",
         "exit_status": 0,
         "first_diagnostic": "",
-        "pass_evidence": "exit 0, no diagnostics"
+        "pass_evidence": "exit 0, no diagnostics (checkpoint f983b03)."
       },
       "elaborate": {
         "command": "iverilog -g2012 -t null <tmp>/p18_controls.sv",
         "exit_status": 0,
         "first_diagnostic": "",
-        "pass_evidence": "exit 0, no diagnostics"
+        "pass_evidence": "exit 0 in the sequential co-simulation build."
       },
       "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p18_controls.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim_sequential.py --reference-dir /tmp/psx-oracle-38250146942 --cases p17_registers p18_controls p19_stage p20_retained_stage p21_multi_task p28_generator_controls` exited 0; PASS p18_controls cycles=4000, seed=1, including async reset and clock-edge checks."
     },
     {
       "probe": "p19_stage",
       "source": "tools/sflc/probe/p19_stage.sfl",
       "preprocessing": "none beyond sflc.py %i handling",
       "compiler_path": "tools/sflc/sflc.py (local)",
-      "capability": "local-only",
+      "capability": "supported",
       "compile": {
         "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p19_stage.sfl",
         "exit_status": 0,
         "first_diagnostic": "",
-        "pass_evidence": "exit 0, no diagnostics"
+        "pass_evidence": "exit 0, no diagnostics (checkpoint f983b03)."
       },
       "elaborate": {
         "command": "iverilog -g2012 -t null <tmp>/p19_stage.sv",
         "exit_status": 0,
         "first_diagnostic": "",
-        "pass_evidence": "exit 0, no diagnostics"
+        "pass_evidence": "exit 0 in the sequential co-simulation build."
       },
       "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p19_stage.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim_sequential.py --reference-dir /tmp/psx-oracle-38250146942 --cases p17_registers p18_controls p19_stage p20_retained_stage p21_multi_task p28_generator_controls` exited 0; PASS p19_stage cycles=4000, seed=1, including async reset and clock-edge checks."
     },
     {
       "probe": "p20_retained_stage",
       "source": "tools/sflc/probe/p20_retained_stage.sfl",
       "preprocessing": "none beyond sflc.py %i handling",
       "compiler_path": "tools/sflc/sflc.py (local)",
-      "capability": "local-only",
+      "capability": "supported",
       "compile": {
         "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p20_retained_stage.sfl",
         "exit_status": 0,
         "first_diagnostic": "",
-        "pass_evidence": "exit 0, no diagnostics"
+        "pass_evidence": "exit 0, no diagnostics (checkpoint f983b03)."
       },
       "elaborate": {
         "command": "iverilog -g2012 -t null <tmp>/p20_retained_stage.sv",
         "exit_status": 0,
         "first_diagnostic": "",
-        "pass_evidence": "exit 0, no diagnostics"
+        "pass_evidence": "exit 0 in the sequential co-simulation build."
       },
       "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p20_retained_stage.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim_sequential.py --reference-dir /tmp/psx-oracle-38250146942 --cases p17_registers p18_controls p19_stage p20_retained_stage p21_multi_task p28_generator_controls` exited 0; PASS p20_retained_stage cycles=4000, seed=1, including async reset and clock-edge checks."
     },
     {
       "probe": "p21_multi_task",
       "source": "tools/sflc/probe/p21_multi_task.sfl",
       "preprocessing": "none beyond sflc.py %i handling",
       "compiler_path": "tools/sflc/sflc.py (local)",
-      "capability": "unsupported-explicit",
+      "capability": "supported",
       "compile": {
         "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p21_multi_task.sfl",
-        "exit_status": 1,
-        "first_diagnostic": "tools/sflc/probe/p21_multi_task.sfl: NotImplementedError: multiple tasks in one stage",
-        "pass_evidence": ""
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics (checkpoint f983b03)."
       },
-      "elaborate": null,
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p21_multi_task.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0 in the sequential co-simulation build."
+      },
       "oracle": {
-        "status": "not-run",
-        "prerequisite": "Compiler feature not implemented; no oracle run applies."
-      }
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p21_multi_task.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim_sequential.py --reference-dir /tmp/psx-oracle-38250146942 --cases p17_registers p18_controls p19_stage p20_retained_stage p21_multi_task p28_generator_controls` exited 0; PASS p21_multi_task cycles=4000, seed=1, including async reset and clock-edge checks."
     },
     {
       "probe": "p22_widths",
@@ -522,9 +528,147 @@
         "pass_evidence": "exit 0, no diagnostics"
       },
       "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p22_widths.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim.py --reference-dir /tmp/psx-oracle-38250146942` exited 0; PASS p22_widths vectors=4000, seed=1."
+    },
+    {
+      "probe": "p23_call_args",
+      "source": "tools/sflc/probe/p23_call_args.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p23_call_args.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p23_call_args.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p23_call_args.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim.py --reference-dir /tmp/psx-oracle-38250146942` exited 0; PASS p23_call_args vectors=4000, seed=1."
+    },
+    {
+      "probe": "p24_shared_args",
+      "source": "tools/sflc/probe/p24_shared_args.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p24_shared_args.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p24_shared_args.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p24_shared_args.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim.py --reference-dir /tmp/psx-oracle-38250146942` exited 0; PASS p24_shared_args vectors=4000, seed=1."
+    },
+    {
+      "probe": "p25_selector_guards",
+      "source": "tools/sflc/probe/p25_selector_guards.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p25_selector_guards.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p25_selector_guards.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p25_selector_guards.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim.py --reference-dir /tmp/psx-oracle-38250146942` exited 0; PASS p25_selector_guards vectors=4000, seed=1."
+    },
+    {
+      "probe": "p26_data_controls",
+      "source": "tools/sflc/probe/p26_data_controls.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p26_data_controls.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p26_data_controls.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics"
+      },
+      "oracle": {
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p26_data_controls.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim.py --reference-dir /tmp/psx-oracle-38250146942` exited 0; PASS p26_data_controls vectors=4000, seed=1."
+    },
+    {
+      "probe": "p27_parallel_memory",
+      "source": "tools/sflc/probe/p27_parallel_memory.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local; --register-banks is opt-in and experimental)",
+      "capability": "local-only",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p27_parallel_memory.sfl --register-banks",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics with experimental bank lowering."
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p27_parallel_memory.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0 for the bank-enabled translation."
+      },
+      "oracle": {
+        "status": "mismatch"
+      },
+      "note": "Default local compile without --register-banks exits 1 with NotImplementedError: parallel memory writes need experimental --register-banks: cells. Bank-enabled local compile and elaboration succeed. Native sfl2vl compilation: workflow run 38250146942, p27_parallel_memory.log exit=0. Equivalence: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim_sequential.py --reference-dir /tmp/psx-oracle-38250146942 --cases p27_parallel_memory` exits 1 at post_edge cycle 4 (q0 ref=00, dut=9b). A direct probe-source comparison using the archived p27 reference also fails at that cycle/output. Native compilation is not equivalence."
+    },
+    {
+      "probe": "p28_generator_controls",
+      "source": "tools/sflc/probe/p28_generator_controls.sfl",
+      "preprocessing": "none beyond sflc.py %i handling",
+      "compiler_path": "tools/sflc/sflc.py (local)",
+      "capability": "supported",
+      "compile": {
+        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p28_generator_controls.sfl",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0, no diagnostics (checkpoint f983b03)."
+      },
+      "elaborate": {
+        "command": "iverilog -g2012 -t null <tmp>/p28_generator_controls.sv",
+        "exit_status": 0,
+        "first_diagnostic": "",
+        "pass_evidence": "exit 0 for local translation."
+      },
+      "oracle": {
+        "status": "match"
+      },
+      "note": "Native sfl2vl compilation: workflow run 38250146942, p28_generator_controls.log exit=0. Functional comparison: `PYTHONDONTWRITEBYTECODE=1 python3 tools/sflc/cosim_sequential.py --reference-dir /tmp/psx-oracle-38250146942 --cases p17_registers p18_controls p19_stage p20_retained_stage p21_multi_task p28_generator_controls` exited 0; PASS p28_generator_controls cycles=4000, seed=1. A direct probe-source comparison against the archived p28 reference also passed 4000 cycles. This is semantic evidence for this fixture, not whole-compiler equivalence."
     },
     {
       "probe": "q_lines00400",
@@ -641,98 +785,6 @@
         "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
       },
       "note": "Icarus elaboration with no timeout: exit 0 after about 50 min. Earlier 35 min run was stopped by SIGTERM."
-    },
-    {
-      "probe": "p23_call_args",
-      "source": "tools/sflc/probe/p23_call_args.sfl",
-      "preprocessing": "none beyond sflc.py %i handling",
-      "compiler_path": "tools/sflc/sflc.py (local)",
-      "capability": "supported",
-      "compile": {
-        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p23_call_args.sfl",
-        "exit_status": 0,
-        "first_diagnostic": "",
-        "pass_evidence": "exit 0, no diagnostics"
-      },
-      "elaborate": {
-        "command": "iverilog -g2012 -t null <tmp>/p23_call_args.sv",
-        "exit_status": 0,
-        "first_diagnostic": "",
-        "pass_evidence": "exit 0, no diagnostics"
-      },
-      "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
-    },
-    {
-      "probe": "p24_shared_args",
-      "source": "tools/sflc/probe/p24_shared_args.sfl",
-      "preprocessing": "none beyond sflc.py %i handling",
-      "compiler_path": "tools/sflc/sflc.py (local)",
-      "capability": "supported",
-      "compile": {
-        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p24_shared_args.sfl",
-        "exit_status": 0,
-        "first_diagnostic": "",
-        "pass_evidence": "exit 0, no diagnostics"
-      },
-      "elaborate": {
-        "command": "iverilog -g2012 -t null <tmp>/p24_shared_args.sv",
-        "exit_status": 0,
-        "first_diagnostic": "",
-        "pass_evidence": "exit 0, no diagnostics"
-      },
-      "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
-    },
-    {
-      "probe": "p25_selector_guards",
-      "source": "tools/sflc/probe/p25_selector_guards.sfl",
-      "preprocessing": "none beyond sflc.py %i handling",
-      "compiler_path": "tools/sflc/sflc.py (local)",
-      "capability": "supported",
-      "compile": {
-        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p25_selector_guards.sfl",
-        "exit_status": 0,
-        "first_diagnostic": "",
-        "pass_evidence": "exit 0, no diagnostics"
-      },
-      "elaborate": {
-        "command": "iverilog -g2012 -t null <tmp>/p25_selector_guards.sv",
-        "exit_status": 0,
-        "first_diagnostic": "",
-        "pass_evidence": "exit 0, no diagnostics"
-      },
-      "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
-    },
-    {
-      "probe": "p26_data_controls",
-      "source": "tools/sflc/probe/p26_data_controls.sfl",
-      "preprocessing": "none beyond sflc.py %i handling",
-      "compiler_path": "tools/sflc/sflc.py (local)",
-      "capability": "supported",
-      "compile": {
-        "command": "python3 tools/sflc/sflc.py tools/sflc/probe/p26_data_controls.sfl",
-        "exit_status": 0,
-        "first_diagnostic": "",
-        "pass_evidence": "exit 0, no diagnostics"
-      },
-      "elaborate": {
-        "command": "iverilog -g2012 -t null <tmp>/p26_data_controls.sv",
-        "exit_status": 0,
-        "first_diagnostic": "",
-        "pass_evidence": "exit 0, no diagnostics"
-      },
-      "oracle": {
-        "status": "not-run",
-        "prerequisite": "Archived sfl2vl reference output directory (not in repo, not committed) and tools/sflc/cosim.py --reference-dir."
-      }
     }
   ]
 }

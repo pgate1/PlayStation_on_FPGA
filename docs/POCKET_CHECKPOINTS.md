@@ -5,6 +5,28 @@ new entries here record current ownership, discoveries and commits. Update after
 each bounded change or significant finding, and at least every 15 minutes during
 longer work. A checkpoint may explicitly report incomplete work or failing tests.
 
+## 2026-10-12 17:50 UTC — diagnostic simulation and matrix complete
+
+- Diagnostic RTL and bench have been reviewed, including removal of the RTL
+  divider, an independent arithmetic color scoreboard, actual-output frame totals
+  and a watchdog. Root reran Icarus: **PASS**, 3 frames / 618600 checked pixels.
+  Verilator lint passed without warnings. This is a pixel-domain simulation;
+  APF wrapper, Quartus fit and physical Pocket test remain open.
+- Q-L1-03 matrix refresh completed against f983b03: **34 probes**; p21 status
+  corrected; p27 mismatch kept distinct from conversion success; p28 comparison
+  recorded. Agent reran 15 local groups, 15 combinational reference cases and
+  six sequential cases successfully. p27 still fails at the known cycle 4.
+- Other provider Q-L1-05 now records project/timing inputs correctly. Read-only
+  checker reports all 13 APF hashes and reference files present; only quartus_sh
+  blocks this preflight. Its two uncommitted files remain with their owner.
+- Linux diagnosis is running on isolated branch snapshot eea8b1f, run 38286792631.
+  The full bench fails, but a reduced bench reads initialized cells correctly.
+  Do not label this a memory-initialization compiler bug yet; root continues
+  reducing the full-bench interaction. Compiler semantics have not changed.
+- Next independent work: diagnostic simulation CI/runner, reference-cache fetch
+  automation and artifact manifest checks can proceed without root. Exact packets
+  will be placed in the model queue; no Quartus prerequisite for simulation CI.
+
 ## 2026-10-12 17:20 UTC — resumed from 42020ac
 
 - **Observed state:** local branch still ends at documentation commit `42020ac`,
