@@ -1,8 +1,9 @@
 # Assigning the roadmap to other models
 
 Check [rolling checkpoints](POCKET_CHECKPOINTS.md) for active claims and newer
-results before taking a packet. Q-L2-02 is claimed by `diagnostic_core` as of
-2026-10-12 17:20 UTC; root owns the Linux bank regression investigation.
+results before taking a packet. **Q-L1-03 and Q-L2-02 are complete in `77b3f50`.**
+Root owns the Linux bank regression; Q-L2-03 is claimed. Other models can start
+[the autonomous ready packets](POCKET_READY_TASKS.md) without waiting for root.
 
 **Resume work from [POCKET_START_HERE.md](POCKET_START_HERE.md).** It records what was actually completed, installed tools, unresolved blockers and the next implementation packet. The [memory contract](POCKET_MEMORY_CONTRACT.md) now has isolated RTL; see [implementation evidence](POCKET_IMPLEMENTATION.md). The isolated memory frontend has passed behavioral simulation. Full-system simulation and live integration remain outstanding.
 
@@ -42,13 +43,13 @@ The tasks below are ready to claim by one provider at a time. They are provider-
 | Q-L1-01 P00 dependency manifest | **Done locally, uncommitted** — 79 entries; checker passes | L1 | None | `tools/pocket/build_inputs.json`, `tools/pocket/check_build_inputs.py` (closed) |
 | Q-L1-02 Portable regressions/evidence | **Done** — commit `95d42dd`; five bounded tests recorded | L1 | Icarus/VVP | `tools/pocket/run_regressions.sh`, `docs/POCKET_REGRESSION_EVIDENCE.md` (closed) |
 | Q-L2-01 Cache boundary fixtures | **Done** — commit `6fbe8bc`; 11 checks | L2 | Experimental compiler and Icarus | `tools/sflc/tests/tb_cache_boundaries.sv`, `tools/sflc/tests/run_cache_boundaries.py` (closed) |
-| Q-L1-03 P00 probe-result snapshot refresh | **Partially done — reconcile evidence** | L1 | Use compiler checkpoint `f983b03`; p27 known mismatch and p28 comparison now exist | `tools/pocket/p00_probe_matrix.json` only |
+| Q-L1-03 P00 probe-result snapshot refresh | **Done — 77b3f50, 34 probes** | L1 | Use compiler checkpoint `f983b03`; p27 known mismatch and p28 comparison now exist | `tools/pocket/p00_probe_matrix.json` only |
 | Q-L1-04 Read-only source-defect inventory | **Done locally, owner commit pending** | L1 | None; compiler diagnostics are optional evidence | Existing `docs/POCKET_SOURCE_DEFECTS.md` only; do not duplicate |
 | Q-L1-05 Diagnostic input preflight | **Done locally, owner commit pending**; checker exits 2 (Quartus only) | L1 | Read access to cached APF inputs and fetch manifest | Existing `Pocket/diagnostic/inputs.json`, `Pocket/diagnostic/check_inputs.py` only |
-| Q-L2-02 Diagnostic display/input core | **Ready for RTL/simulation** | L2 | Pinned timing, interface and project sources in [diagnostic inputs](POCKET_DIAGNOSTIC_INPUTS.md); Quartus only gates fitting | New `Pocket/diagnostic/diagnostic_core.sv`, `Pocket/diagnostic/tb_diagnostic_core.sv` only |
-| Q-L2-03 Linux bank initialization reproduction | **Ready; evidence only** | L2 | f983b03 generated bank fixture; Linux Icarus access preferred | New `tools/sflc/tests/repro_bank_init.sv`, `docs/POCKET_BANK_INIT_REPRO.md` only |
+| Q-L2-02 Diagnostic display/input core | **Done — 77b3f50, simulation/lint pass** | L2 | Pinned timing, interface and project sources in [diagnostic inputs](POCKET_DIAGNOSTIC_INPUTS.md); Quartus only gates fitting | New `Pocket/diagnostic/diagnostic_core.sv`, `Pocket/diagnostic/tb_diagnostic_core.sv` only |
+| Q-L2-03 Linux bank initialization reproduction | **Claimed by root; Linux investigation active** | L2 | f983b03 generated bank fixture; Linux Icarus access preferred | New `tools/sflc/tests/repro_bank_init.sv`, `docs/POCKET_BANK_INIT_REPRO.md` only |
 
-### Ready packet Q-L1-03 — refresh P00 result snapshot
+### Archived assignment Q-L1-03 (completed) — refresh P00 result snapshot
 
 **Copyable assignment:** use the frozen compiler checkpoint **f983b03**, with
 outcomes recorded in `POCKET_HANDOFF_2026-10-12.md`. Own only
@@ -82,11 +83,11 @@ hashes. `check_inputs.py` exits 2 with only `quartus_sh` blocked. The PS1-only I
 diagnostic requirement. Owner should verify and commit the two files. Temporary-copy
 tests exit 1 for a hash mismatch and for a missing `timing_reference.pixel_clock_hz`.
 
-### Ready packet Q-L2-02 — diagnostic display/input core
+### Archived assignment Q-L2-02 (completed) — diagnostic display/input core
 
 **Copyable assignment:** use [POCKET_DIAGNOSTIC_INPUTS.md](POCKET_DIAGNOSTIC_INPUTS.md), which supplies the pinned primary reference, local cache, exact timing, hashes, pixel-domain interface and acceptance. Own only `Pocket/diagnostic/diagnostic_core.sv` and `Pocket/diagnostic/tb_diagnostic_core.sv`. The source prerequisite is now satisfied; start RTL and Icarus simulation without waiting for Quartus. L3 owns the APF wrapper, reset/CDC review, PLL, constraints and fitting. Report simulation evidence separately from the still-pending hardware gates.
 
-### Ready packet Q-L2-03 — reproduce Linux bank initialization
+### Claimed by root Q-L2-03 — reproduce Linux bank initialization
 
 **Copyable assignment:** compiler checkpoint f983b03 passes the generator/bank
 scoreboard locally under Icarus 13, but Ubuntu 22.04 run 38250146881 fails at 2 ns:
@@ -106,15 +107,12 @@ mask X values, change compiler behavior, alter CI workflows or claim a fix.
 Acceptance: the smallest evidence-backed failing case plus a clearly stated
 hypothesis/next experiment. L3 owns the compiler fix and regression decisions.
 
-## Dispatch at this handoff
+## Current dispatch
 
-No external provider was contacted automatically. Copy Q-L2-02 first to an HDL
-coder for the visible diagnostic milestone; give Q-L1-05 and Q-L1-03 to separate
-economical providers because their owned files do not overlap. Q-L2-03 is an
-independent investigation for a coder with Linux simulator access. The strongest
-model should resume the memory/reg_ws semantic contract before CPU/GTE integration.
-Local uncommitted inventory/preflight work belongs to its existing owners; ask
-for their completion report rather than overwriting or reassigning those files.
+The archived assignment text above records previous contracts, not ready tasks.
+Use [POCKET_READY_TASKS.md](POCKET_READY_TASKS.md) for new work that can finish
+independently. Root remains responsible for compiler semantics and APF integration;
+smaller providers should not wait on those tasks to implement a ready packet.
 
 ## Provider completion/report protocol
 
