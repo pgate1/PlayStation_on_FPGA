@@ -2,6 +2,11 @@
 
 This is the latest continuation record. Start here, then read
 [POCKET_SFLC.md](POCKET_SFLC.md) and [POCKET_START_HERE.md](POCKET_START_HERE.md).
+**Continuation:** official diagnostic timing/project sources are now recovered;
+see [POCKET_DIAGNOSTIC_INPUTS.md](POCKET_DIAGNOSTIC_INPUTS.md). Q-L2-02 can start
+RTL/simulation; Quartus fitting remains blocked. The platform-source absence
+statements in the original checkpoint below describe its earlier inventory.
+
 The user requested a handoff after this checkpoint; do not restart the parser
 spike, repeat completed task packets, or assume a Pocket bitstream exists.
 

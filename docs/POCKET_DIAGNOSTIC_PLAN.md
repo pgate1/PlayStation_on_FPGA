@@ -2,7 +2,17 @@
 
 Updated 2026-10-12 from a read-only inspection of this workspace. This plan defines a small visible hardware milestone that does not depend on the PS1 compiler, BIOS, main SDRAM controller, or game execution.
 
-## Current feasibility
+## Latest source recovery — 2026-10-12
+
+The pinned official template has now been downloaded, including its example
+video generator, exact PLL configuration and matching QPF/QSF/pin assignments.
+[POCKET_DIAGNOSTIC_INPUTS.md](POCKET_DIAGNOSTIC_INPUTS.md) records paths, hashes,
+timing and a copyable two-file implementation packet. Q-L2-02 is now **ready for
+RTL/simulation**. Quartus and hardware fitting remain unavailable. The earlier
+source-missing statements below are the pre-recovery inventory; use the new
+input packet for current source availability.
+
+## Earlier feasibility inventory
 
 The diagnostic core is a sensible first hardware milestone, but it is **not currently a start-to-finish local build**. The workspace has the Pocket APF shell files cached under `Pocket/build/apf/` (13 files, fetched by `tools/apf/fetch_apf.sh` at a pinned revision), an existing `Pocket/core_top.v`, and Icarus/VVP plus Verilator on PATH. `quartus_sh`, `quartus_map`, `sflp`, and `sfl2vl` are not on PATH. There is no Pocket `.qpf` or `.qsf`; the only checked-in fit summary is from an older successful fit, not a build recipe or evidence for current sources. No board pins, working diagnostic pixel timing, PLL settings, or currently usable Quartus installation were established by this inspection.
 
@@ -62,3 +72,7 @@ These packets have bounded files and can be assigned independently. L1 means inv
 ## Present blockers and next action
 
 The shortest useful next action is to secure D0 inputs: a working Quartus installation with Cyclone V support, the exact matching APF project/constraints, and a known-good Pocket video test-core timing reference. Once these are available, the diagnostic shell can proceed without waiting for the PS1 compiler or game-memory architecture. Until then, local work can inventory and review files, but cannot honestly produce a fitted bitstream or guarantee a visible image on hardware.
+
+The later input packet supersedes the D0 dependency for RTL/simulation: timing
+and matching project sources are now present. Quartus remains a prerequisite
+for D2, not for the isolated pixel-domain module.

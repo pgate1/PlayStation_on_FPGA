@@ -41,7 +41,7 @@ The tasks below are ready to claim by one provider at a time. They are provider-
 | Q-L1-03 P00 probe-result snapshot refresh | **Partially done — reconcile evidence** | L1 | Use the committed handoff snapshot, matched by CI branch `c2da886`; p20–p26 probes are present | `tools/pocket/p00_probe_matrix.json` only |
 | Q-L1-04 Read-only source-defect inventory | **Ready** | L1 | None; compiler diagnostics are optional evidence | New `docs/POCKET_SOURCE_DEFECTS.md` only |
 | Q-L1-05 Diagnostic input preflight | **Ready** | L1 | Read access to cached APF inputs and fetch manifest | New `Pocket/diagnostic/inputs.json`, `Pocket/diagnostic/check_inputs.py` only |
-| Q-L2-02 Diagnostic display/input core | **Blocked on D0** | L2 | Authoritative APF top interface, matching constraints and known video timing, per [diagnostic plan](POCKET_DIAGNOSTIC_PLAN.md) | New `Pocket/diagnostic/diagnostic_core.sv`, `Pocket/diagnostic/tb_diagnostic_core.sv` only |
+| Q-L2-02 Diagnostic display/input core | **Ready for RTL/simulation** | L2 | Pinned timing, interface and project sources in [diagnostic inputs](POCKET_DIAGNOSTIC_INPUTS.md); Quartus only gates fitting | New `Pocket/diagnostic/diagnostic_core.sv`, `Pocket/diagnostic/tb_diagnostic_core.sv` only |
 
 ### Ready packet Q-L1-03 — refresh P00 result snapshot
 
@@ -57,7 +57,7 @@ The tasks below are ready to claim by one provider at a time. They are provider-
 
 ### Ready packet Q-L2-02 — diagnostic display/input core
 
-**Copyable assignment:** claim this only after D0 of `docs/POCKET_DIAGNOSTIC_PLAN.md` is satisfied. Add only `Pocket/diagnostic/diagnostic_core.sv` and `Pocket/diagnostic/tb_diagnostic_core.sv`; use the supplied authoritative APF interface and timing, implement a static test pattern plus a visible controller-input response, and verify reset and pattern behavior in Icarus. Do not edit the live PS1 top, shared compiler, APF shell, or constraints. A simulation pass is not a claim of visible hardware output; include a separate D2/D3 checklist and report those gates as pending until fit and physical Pocket evidence exist.
+**Copyable assignment:** use [POCKET_DIAGNOSTIC_INPUTS.md](POCKET_DIAGNOSTIC_INPUTS.md), which supplies the pinned primary reference, local cache, exact timing, hashes, pixel-domain interface and acceptance. Own only `Pocket/diagnostic/diagnostic_core.sv` and `Pocket/diagnostic/tb_diagnostic_core.sv`. The source prerequisite is now satisfied; start RTL and Icarus simulation without waiting for Quartus. L3 owns the APF wrapper, reset/CDC review, PLL, constraints and fitting. Report simulation evidence separately from the still-pending hardware gates.
 
 ## Provider completion/report protocol
 

@@ -59,8 +59,9 @@ all sequential semantics have been recovered.
 2. Expand finite-width expression evidence beyond p22 before trusting CPU/GTE.
 3. Implement constant generators and audit the linked hierarchy. Source defects
    are inventoried separately; do not silently introduce implicit signals.
-4. Progress the independent [Pocket diagnostic milestone](POCKET_DIAGNOSTIC_PLAN.md)
-   once authoritative platform inputs and a working Quartus environment exist.
+4. Progress the independent [Pocket diagnostic milestone](POCKET_DIAGNOSTIC_PLAN.md).
+   [Authoritative inputs](POCKET_DIAGNOSTIC_INPUTS.md) are now recovered; the
+   smaller-model RTL/simulation task is ready. Quartus still gates fitting.
    Its test pattern/input response does not prove game execution.
 5. Keep the frontend isolated and the existing CPU/GPU stalls in place until the
    platform/controller integration prerequisites are met.
