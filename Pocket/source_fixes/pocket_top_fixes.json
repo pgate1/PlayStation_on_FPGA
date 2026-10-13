@@ -343,6 +343,36 @@
       "why": "diagnostic 40 MHz core clock (r10 on hardware halted with PC bit 22 lost after a backward branch; 50 MHz has -4.0 ns setup slack, about 40.6 MHz Fmax). SDRAM refresh every 7.8 us at 40 MHz: 312 cycles, 300 with the same margin as 380 at 50 MHz",
       "old": "\tsdram128_burstn_adapter sdram_ctrl_inst (\n",
       "new": "\tsdram128_burstn_adapter #(.T_REFI(300)) sdram_ctrl_inst ( // Q-L1-16 core-40mhz\n"
+    },
+    {
+      "option": "video-60hz",
+      "id": "O-V1",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "D",
+      "why": "with core-40mhz the picture (and the PSX vblank, which follows the VGA scan) ran at 47.95 Hz, so games ran 20% slow. The scan now advances every 40 MHz clock with 1274-clock lines: 1274 x 524 / 40 MHz = 59.92 Hz (upstream: 796 x 524 at 25 MHz = 59.94 Hz). 640 active pixels, each 320-wide source pixel shown for 2 clocks as before; the video clock becomes 40 MHz (PLL outputs 3/4). Requires core-40mhz. Scan step every clock.",
+      "old": "\tif(clock25M_div) vga.htiming();\n",
+      "new": "\tvga.htiming(); // Q-L1-16 video-60hz: 40 MHz pixel clock, 1274-clock lines\n"
+    },
+    {
+      "option": "video-60hz",
+      "id": "O-V2",
+      "file": "VGA_ctrl.sflp",
+      "upstream_sha256": "5a03104ac855953d74c235c4be5034137a1c4106cdfb93a1725282756c3e401b",
+      "class": "D",
+      "why": "with core-40mhz the picture (and the PSX vblank, which follows the VGA scan) ran at 47.95 Hz, so games ran 20% slow. The scan now advances every 40 MHz clock with 1274-clock lines: 1274 x 524 / 40 MHz = 59.92 Hz (upstream: 796 x 524 at 25 MHz = 59.94 Hz). 640 active pixels, each 320-wide source pixel shown for 2 clocks as before; the video clock becomes 40 MHz (PLL outputs 3/4). Requires core-40mhz. Line counter wide enough for 1274.",
+      "old": "\t\treg_wr h_tim<10>;\n",
+      "new": "\t\treg_wr h_tim<11>; // Q-L1-16 video-60hz\n"
+    },
+    {
+      "option": "video-60hz",
+      "id": "O-V3",
+      "file": "VGA_ctrl.sflp",
+      "upstream_sha256": "5a03104ac855953d74c235c4be5034137a1c4106cdfb93a1725282756c3e401b",
+      "class": "D",
+      "why": "with core-40mhz the picture (and the PSX vblank, which follows the VGA scan) ran at 47.95 Hz, so games ran 20% slow. The scan now advances every 40 MHz clock with 1274-clock lines: 1274 x 524 / 40 MHz = 59.92 Hz (upstream: 796 x 524 at 25 MHz = 59.94 Hz). 640 active pixels, each 320-wide source pixel shown for 2 clocks as before; the video clock becomes 40 MHz (PLL outputs 3/4). Requires core-40mhz. Line length 1274 clocks.",
+      "old": "\t\tif(h_tim==(796-1)) h_tim := 0;\n",
+      "new": "\t\tif(h_tim==(1274-1)) h_tim := 0; // Q-L1-16 video-60hz\n"
     }
   ],
   "generated_files": [

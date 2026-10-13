@@ -204,6 +204,11 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
         raise ValueError('unknown option(s): ' + ', '.join(sorted(set(options) - known)))
     chosen = [*spec['fixes'], *[o for o in spec.get('options', []) if o['option'] in options]]
     pll = list(PLL_40 if 'core-40mhz' in options else PLL)
+    if 'video-60hz' in options:
+        if 'core-40mhz' not in options:
+            raise ValueError('video-60hz requires core-40mhz')
+        # video clock = core clock (the scan advances every clock), plus its 90-degree copy
+        pll[3], pll[4] = ('40.000000 MHz', '0 ps'), ('40.000000 MHz', '6250 ps')
     # SDRAM clock (sdr_phy clk2x_90) phase in degrees of clk2x; MIRLO64 uses 180 at 125 MHz
     period_ps = round(1e6 / float(pll[2][0].split()[0]))
     pll[2] = (pll[2][0], '%d ps' % (period_ps * sdram_phase // 360))
@@ -228,7 +233,8 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
                    'Pocket/core_top.v': (git_head('Pocket/core_top.v'), stage / 'core/core_top.v'),
                    'view_ram_ctrl.sflp': ((sfl / 'view_ram_ctrl.sflp').read_bytes(), sfl / 'view_ram_ctrl.sflp'),
                    'DDS_50to33868800.sflp': ((sfl / 'DDS_50to33868800.sflp').read_bytes(),
-                                             sfl / 'DDS_50to33868800.sflp')}
+                                             sfl / 'DDS_50to33868800.sflp'),
+                   'VGA_ctrl.sflp': ((sfl / 'VGA_ctrl.sflp').read_bytes(), sfl / 'VGA_ctrl.sflp')}
         applied, inputs = [], {}
         for name, (raw, out) in targets.items():
             fixes = [f for f in chosen if f['file'] == name]
