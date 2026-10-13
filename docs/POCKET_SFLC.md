@@ -84,7 +84,20 @@ Two distinct constant write addresses in one memory require `--register-banks`
 (or `translate(..., register_banks=True)`). The conservative check does not prove
 guard exclusivity. Banks are limited to 256 words; each word receives guarded-OR
 writes. Dynamic-only multiple writers retain the previous selected-port lowering.
-Neither area nor RAM inference has been qualified.
+RAM inference has not been qualified.
+
+Since Q-L1-13 the per-word function is unchanged but dynamic-index writers of a
+bank are routed through shared selected ports (`__sfl_wport_<mem>_<k>_{en,a,d}`):
+writers with the same address expression share a port, and so do groups whose
+guards are syntactically proven exclusive (same expression compared with
+different constants, or a condition and its negation, after expanding local
+control terminals). Unproven pairs keep separate ports, so simultaneous writes
+to distinct words through different ports still all land (R3000A EX/MEM
+write-back relies on this). Constant-zero writers only extend the enable, and
+writers of one identical value are merged under an OR of their guards. Test 19
+(`tests/bank_ports.sflp`, independent per-word model, two failing mutations) and
+old-versus-new random co-simulation of the real bank modules cover this; see
+[area audit](POCKET_SFLC_AREA.md).
 
 The local independent scoreboard passes 6065 checks over 2019 cycles, but this
 mode **does not match archived native 2010 p27**: native emits a priority chain
