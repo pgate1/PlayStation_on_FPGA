@@ -228,7 +228,12 @@ verilator --binary --timing -O3 -Wno-fatal -Wno-lint -Wno-style --top-module tb_
 Result: exit 0, `PASS tb_resampler: mode=count-only inputs=26460000
 outputs=28800000 per-input-accounting-errors=0`. This is exactly 10 min ×
 48 000, and the exact count was also checked after every input. The same
-binary run without plusargs repeats the full value check.
+binary, run without plusargs, repeated the full value check: exit 0, with the
+same PASS line as Icarus (`mode=full … value-checks=96000`, 54.6/15.0 dB).
+This binary was built before one cosmetic RTL edit: the `32'(…)` casts in the
+top-level `SAMPLE_SRC=2` strobe were replaced by localparams. Those casts are
+in `pocket_audio_out` only, and `tb_resampler` does not instantiate that
+module. The Icarus suite above ran on the final RTL.
 
 ## Resource expectations (estimate, not synthesized)
 
