@@ -20,6 +20,12 @@ cache and untracked replacement modules are never modified. Quartus is not run.
 
 --check elaborates the translated `core` hierarchy with Icarus (structural
 only; interface stubs for Intel primitives are used for that check alone).
+
+Information-only variants (recorded in the manifest; not the Pocket build):
+  --device 5CEBA9F23C8   same F23 package and pins, larger die: measures the
+                         full requirement when the real device overflows;
+  --qsf-profile neutral  Quartus default synthesis settings instead of the
+                         template's speed-oriented ones (see NEUTRAL_QSF).
 """
 from __future__ import annotations
 
@@ -62,6 +68,13 @@ set_clock_groups -asynchronous \\
           ic|mpll|altera_pll_i|general[3].gpll~PLL_OUTPUT_COUNTER|divclk \\
           ic|mpll|altera_pll_i|general[4].gpll~PLL_OUTPUT_COUNTER|divclk }
 '''
+# --qsf-profile neutral: template value -> Quartus default (information only)
+NEUTRAL_QSF = {'OPTIMIZATION_TECHNIQUE SPEED': 'OPTIMIZATION_TECHNIQUE BALANCED',
+               'MUX_RESTRUCTURE OFF': 'MUX_RESTRUCTURE AUTO',
+               'SAFE_STATE_MACHINE ON': 'SAFE_STATE_MACHINE OFF',
+               'PRE_MAPPING_RESYNTHESIS ON': 'PRE_MAPPING_RESYNTHESIS OFF',
+               'ADV_NETLIST_OPT_SYNTH_WYSIWYG_REMAP ON': 'ADV_NETLIST_OPT_SYNTH_WYSIWYG_REMAP OFF',
+               'OPTIMIZATION_MODE "HIGH PERFORMANCE EFFORT"': 'OPTIMIZATION_MODE BALANCED'}
 CHECK_STUBS = '''// interface-only stubs for the Icarus structural check (never in the project)
 module sld_virtual_jtag #(parameter sld_auto_instance_index = "YES", sld_instance_index = 0,
   sld_ir_width = 1, sld_sim_action = "", sld_sim_n_scan = 0, sld_sim_total_length = 0,
@@ -130,7 +143,23 @@ def pll_source(template: str) -> str:
     return '// Q-L1-14: generated from the APF template mf_pllbase_0002.v (frequencies/phases only)\n' + text
 
 
-def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bool, timeout: int) -> None:
+def edit_qsf(text: str, device: str, profile: str) -> str:
+    def swap(text, old, new):
+        if text.count('-name ' + old + '\n') != 1:
+            raise ValueError('template QSF setting not found exactly once: ' + old)
+        return text.replace('-name ' + old + '\n', '-name ' + new + '\n')
+    # SignalTap file assignments are dropped below; do not leave SignalTap enabled
+    text = swap(text, 'ENABLE_SIGNALTAP ON', 'ENABLE_SIGNALTAP OFF')
+    if device != '5CEBA4F23C8':
+        text = swap(text, 'DEVICE 5CEBA4F23C8', 'DEVICE ' + device)
+    if profile == 'neutral':
+        for old, new in NEUTRAL_QSF.items():
+            text = swap(text, old, new)
+    return text
+
+
+def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bool, timeout: int,
+            device: str = '5CEBA4F23C8', profile: str = 'template') -> None:
     build_root = (ROOT / 'Pocket/build').resolve()
     destination = destination.absolute()
     if destination.is_symlink() or destination.exists():
@@ -213,7 +242,7 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
             pll_source((stage / 'core/mf_pllbase/mf_pllbase_0002.v').read_text()))
         (stage / 'core/core_constraints.sdc').write_text(SDC)
         qsf = stage / 'ap_core.qsf'
-        lines = qsf.read_text().splitlines(keepends=True)
+        lines = edit_qsf(qsf.read_text(), device, profile).splitlines(keepends=True)
         kept = [l for l in lines if not re.search(r'\b(USE_SIGNALTAP_FILE|SIGNALTAP_FILE|SLD_FILE)\b', l)]
         if len(lines) - len(kept) != 3:
             raise ValueError('expected three SignalTap assignments in the template QSF')
@@ -243,8 +272,10 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
                   for p in sorted(stage.rglob('*')) if p.is_file()}
         manifest = {
             'schema': 1, 'purpose': 'Pocket PS1 project, Q-L1-14 milestone 1 (resource measurement)',
-            'reference_revision': reference.REVISION, 'device': '5CEBA4F23C8', 'project': 'ap_core',
-            'variant': {'shared_spu': True, 'reverb_in_spu_ram': reverb_in_spu_ram, 'options': options},
+            'reference_revision': reference.REVISION, 'device': device, 'project': 'ap_core',
+            'variant': {'shared_spu': True, 'reverb_in_spu_ram': reverb_in_spu_ram, 'options': options,
+                        'qsf_profile': profile,
+                        'information_only': device != '5CEBA4F23C8' or profile != 'template' or bool(options)},
             'fixes_sha256': sha256(FIXES.read_bytes()), 'applied': applied,
             'core_sources_applied': core_sources.get('applied'),
             'tool_sha256': {p: sha256((ROOT / p).read_bytes()) for p in
@@ -269,11 +300,14 @@ def main() -> int:
     parser.add_argument('--reverb-in-spu-ram', action='store_true')
     parser.add_argument('--option', action='append', default=[],
                         help='extra pocket_top_fixes option (e.g. reverb-off; information only)')
+    parser.add_argument('--device', default='5CEBA4F23C8', choices=['5CEBA4F23C8', '5CEBA9F23C8'])
+    parser.add_argument('--qsf-profile', default='template', choices=['template', 'neutral'])
     parser.add_argument('--check', action='store_true')
     parser.add_argument('--timeout', type=int, default=1800)
     args = parser.parse_args()
     try:
-        prepare(args.output, args.reverb_in_spu_ram, args.option, args.check, args.timeout)
+        prepare(args.output, args.reverb_in_spu_ram, args.option, args.check, args.timeout,
+                args.device, args.qsf_profile)
     except (ValueError, OSError, subprocess.SubprocessError, reference.FetchError) as exc:
         print('ERROR: ' + str(exc), file=sys.stderr)
         return 1
