@@ -186,6 +186,16 @@
       "new": "// Q-L1-14 variant reverb-off: sw_spu_off and sw_spuenv_off removed, reverb tied off\npsx.sw_reverb_off();\n"
     },
     {
+      "option": "sound-off",
+      "id": "O-SND",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "D",
+      "why": "upstream state (the author's release has no sound): SPU register writes blocked, reverb and envelopes off; frees logic for debug builds. Exclusive with reverb-off",
+      "old": "// Q-L1-14: sound enabled (upstream ties sw_reverb_off, sw_spu_off, sw_spuenv_off removed)\n",
+      "new": "// Q-L1-16 variant sound-off: upstream ties restored\npsx.sw_reverb_off();\npsx.sw_spu_off();\npsx.sw_spuenv_off();\n"
+    },
+    {
       "option": "single-view-buffer",
       "id": "O-S1",
       "file": "view_ram_ctrl.sflp",
@@ -247,7 +257,7 @@
       "class": "D",
       "why": "hardware bring-up: shows loader stages (apf2sdram, check_file, apf2sram, wram_clear), SDRAM/SRAM acks, bridge handshakes, run flags and halt as live and sticky bit rows; no effect on the PSX core",
       "old": "\tif(((vga.h_count==10) | (vga.h_count==630) |\n\t    (vga.v_count==10) | (vga.v_count==470)) & /|psx.halt_code){\n\t\tif(psx.halt_part<7>){ // CPU halt\n\t\t\tvga.iR = 0xFF; vga.iG = 0x00; vga.iB = 0x00;\n\t\t}\n\t\telse{ // other halt\n\t\t\tvga.iR = 0xFF; vga.iG = 0xFF; vga.iB = 0x00;\n\t\t}\n\t}\n\telse{\n",
-      "new": "// Q-L1-16 variant debug-overlay: loader/handshake state bars at the top left.\n// Rows of 16 lines: live, ever-1 (sticky), ever-0 (sticky), fps || dbg_cpu.\n// Cell i (bit i, LSB left) is 32 pixels wide; green = 1, dark red = 0.\n\tsel dbg_live<32>, dbg_word<32>, dbg_sh<32>, dbg_hit, dbg_bit;\n\treg_wr dbg_ever1<32>, dbg_ever0<32>;\n\tdbg_live = 0b000000000000000 || /|psx.halt_code || psx.file_read_req || f_exe || f_bios ||\n\t\tpsx_run_ok || pass_1sec || exe_read_ok || wram_clear.do || sram.ack || set_sram_reg ||\n\t\tapf2sram.do || check_file.do || sdram_ack || ram_reloading || target_dataslot_read ||\n\t\tset_sdram_reg || apf2sdram.do;\n\tdbg_ever1 := dbg_ever1 | dbg_live;\n\tdbg_ever0 := dbg_ever0 | ^dbg_live;\n\tany{\n\t\tvga.v_count<5:4>==0b00 : dbg_word = dbg_live;\n\t\tvga.v_count<5:4>==0b01 : dbg_word = dbg_ever1;\n\t\tvga.v_count<5:4>==0b10 : dbg_word = dbg_ever0;\n\t\telse : dbg_word = 0x0000 || psx.dbg_cpu || fps;\n\t}\n\tdbg_sh = dbg_word >> vga.h_count<9:5>;\n\tdbg_bit = dbg_sh<0>;\n\tdbg_hit = (vga.v_count<9:6>==0b0000) & (vga.v_count<3:2>!=0b00) &\n\t\t(vga.h_count<9:8>!=0b11) & (vga.h_count<4:3>!=0b00);\n\tif(dbg_hit){\n\t\tif(dbg_bit){ vga.iR = 0x00; vga.iG = 0xFF; vga.iB = 0x00; }\n\t\telse{ vga.iR = 0x80; vga.iG = 0x00; vga.iB = 0x00; }\n\t}\n\telse if(((vga.h_count==10) | (vga.h_count==630) |\n\t    (vga.v_count==10) | (vga.v_count==470)) & /|psx.halt_code){\n\t\tif(psx.halt_part<7>){ // CPU halt\n\t\t\tvga.iR = 0xFF; vga.iG = 0x00; vga.iB = 0x00;\n\t\t}\n\t\telse{ // other halt\n\t\t\tvga.iR = 0xFF; vga.iG = 0xFF; vga.iB = 0x00;\n\t\t}\n\t}\n\telse{\n"
+      "new": "// Q-L1-16 variant debug-overlay: loader/handshake state bars at the top left.\n// Rows of 16 lines: live, ever-1 (sticky). Cell i (bit i, LSB left) is 32 pixels\n// wide; green = 1, dark red = 0. Halt is shown by the upstream border.\n\tsel dbg_live<16>, dbg_word<16>, dbg_sh<16>, dbg_hit, dbg_bit;\n\treg_wr dbg_ever1<16>;\n\tdbg_live = psx.file_read_req || f_exe || f_bios ||\n\t\tpsx_run_ok || pass_1sec || exe_read_ok || wram_clear.do || sram.ack || set_sram_reg ||\n\t\tapf2sram.do || check_file.do || sdram_ack || ram_reloading || target_dataslot_read ||\n\t\tset_sdram_reg || apf2sdram.do;\n\tdbg_ever1 := dbg_ever1 | dbg_live;\n\tif(vga.v_count<4>) dbg_word = dbg_ever1;\n\telse dbg_word = dbg_live;\n\tdbg_sh = dbg_word >> vga.h_count<8:5>;\n\tdbg_bit = dbg_sh<0>;\n\tdbg_hit = (vga.v_count<9:5>==0b00000) & (vga.v_count<3:2>!=0b00) &\n\t\t(vga.h_count<9>==0b0) & (vga.h_count<4:3>!=0b00);\n\tif(dbg_hit){\n\t\tif(dbg_bit){ vga.iR = 0x00; vga.iG = 0xFF; vga.iB = 0x00; }\n\t\telse{ vga.iR = 0x80; vga.iG = 0x00; vga.iB = 0x00; }\n\t}\n\telse if(((vga.h_count==10) | (vga.h_count==630) |\n\t    (vga.v_count==10) | (vga.v_count==470)) & /|psx.halt_code){\n\t\tif(psx.halt_part<7>){ // CPU halt\n\t\t\tvga.iR = 0xFF; vga.iG = 0x00; vga.iB = 0x00;\n\t\t}\n\t\telse{ // other halt\n\t\t\tvga.iR = 0xFF; vga.iG = 0xFF; vga.iB = 0x00;\n\t\t}\n\t}\n\telse{\n"
     }
   ],
   "generated_files": [
