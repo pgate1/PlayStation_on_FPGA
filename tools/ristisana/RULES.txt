@@ -1,0 +1,18 @@
+Shared Quartus host ristisana - rules (lead: Pocket PSX session; agreed 2026-10-13
+with Pocket N64 and Pocket Commodore). Questions/changes: message Pocket PSX.
+
+1. Start every Quartus job through E:\fpga-shared\qrun.ps1:
+     powershell -NoProfile -File E:\fpga-shared\qrun.ps1 -Session <yours> -WorkDir <dir> -Command "<quartus_sh ...>"
+   It waits for >= 6 GB free RAM and < 4 live jobs, writes E:\locks\<session>-<n>.txt,
+   starts the job detached from ssh, logs to <WorkDir>\qrun-*.log (+ .done = exit code),
+   and removes the registry file when the job ends. It returns immediately.
+2. Watch with qstatus.ps1. Stop only your own job with
+     qstop.ps1 -Session <yours> -Reg E:\locks\<yours>-<n>.txt
+   Never kill by image name (no taskkill /IM, Stop-Process -Name, pkill).
+3. Sessions and directories (use only your own; never clean others' dirs or db/):
+     pocket-psx        E:\psx\...                (PlayStation_on_FPGA; Claude + Codex)
+     pocket-n64-*      E:\mirlo, E:\winfit_out   (Pocket N64)
+     pocket-c64        C:\Users\guest\myc64-build (Pocket Commodore)
+4. Do not edit these scripts locally; ask the lead. Do not run long jobs in an
+   attached ssh session: OpenSSH kills the whole session tree when the link closes.
+5. Quartus 25.1std: E:\altera\quartus (qrun puts quartus\bin64 first on PATH).

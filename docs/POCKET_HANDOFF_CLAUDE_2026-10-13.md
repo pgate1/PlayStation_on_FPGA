@@ -2,6 +2,18 @@
 
 ## Shared Windows host `ristisana`: rules agreed 2026-10-13 (mandatory)
 
+**Lead: the Pocket PSX Claude session (user decision).** Start every Quartus job
+through the shared launcher, never directly in an ssh session:
+
+```
+powershell -NoProfile -File E:\fpga-shared\qrun.ps1 -Session pocket-psx -WorkDir E:\psx\<job> -Command "quartus_sh --flow compile <proj>"
+```
+
+`qstatus.ps1` shows usage; `qstop.ps1 -Session pocket-psx -Reg E:\locks\pocket-psx-<n>.txt`
+stops only our own job. PS1 work lives under `E:\psx\` only. Versioned copies
+are in `tools/ristisana/`; the box copy in `E:\fpga-shared` is authoritative, and
+changes go through the lead. The detailed rules follow.
+
 Three projects share the box: PS1 (this repo), Pocket N64 (`E:\mirlo`,
 `E:\winfit_out`) and Pocket Commodore (`C:\Users\guest\myc64-build`). All
 sessions agreed to these rules:
