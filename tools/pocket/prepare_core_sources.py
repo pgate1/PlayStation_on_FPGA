@@ -14,7 +14,9 @@ only: not native-sfl2vl equivalence, synthesis, timing or hardware behaviour.
 --shared-spu replaces upstream DigitalSignalProcessor (24 x dsp_ch) with the
 time-shared engine in Pocket/spu/ (linked through DigitalSignalProcessor.h).
 
-Usage: prepare_core_sources.py OUT_DIR [--check] [--shared-spu] [--timeout SECONDS]
+--reverb-in-spu-ram applies option O1 (reverb work area in SPU RAM, no 64-block buffer).
+
+Usage: prepare_core_sources.py OUT_DIR [--check] [--shared-spu] [--reverb-in-spu-ram] [--timeout SECONDS]
 """
 import argparse
 import hashlib
@@ -40,9 +42,12 @@ def fail(message):
     sys.exit(1)
 
 
-def apply_fixes(out, spec):
+def apply_fixes(out, spec, options=()):
     by_file = {}
-    for fix in spec['fixes']:
+    chosen = [o for o in spec.get('options', []) if o['option'] in options]
+    unknown = set(options) - {o['option'] for o in chosen}
+    if unknown: fail('unknown option(s): %s' % ', '.join(sorted(unknown)))
+    for fix in [*spec['fixes'], *chosen]:
         by_file.setdefault(fix['file'], []).append(fix)
     applied = []
     for name, fixes in sorted(by_file.items()):
@@ -116,6 +121,7 @@ def main():
     parser.add_argument('out', type=Path)
     parser.add_argument('--check', action='store_true')
     parser.add_argument('--shared-spu', action='store_true')
+    parser.add_argument('--reverb-in-spu-ram', action='store_true')
     parser.add_argument('--timeout', type=int, default=600)
     args = parser.parse_args()
     out = args.out.resolve()
@@ -129,7 +135,7 @@ def main():
     for src in sorted([*REPO.glob('*.sflp'), *REPO.glob('*.v')]):
         shutil.copyfile(src, out / src.name)
     shutil.copytree(REPO / 'demo', out / 'demo')
-    applied = apply_fixes(out, spec)
+    applied = apply_fixes(out, spec, ['reverb-in-spu-ram'] if args.reverb_in_spu_ram else [])
     if args.shared_spu:
         (out / 'DigitalSignalProcessor.sflp').unlink()
         for name in SPU_FILES:

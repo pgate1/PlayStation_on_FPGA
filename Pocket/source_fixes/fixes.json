@@ -90,5 +90,29 @@
       "sha256": "dcd000a2d3dff5c7814450eab7b5b599208180075ea89b48ebf41b467be50327",
       "evidence": "git show 2526d25^:mul_u16.v (upstream pgate1, deleted 2025-11-10)."
     }
+  ],
+  "options": [
+    {
+      "option": "reverb-in-spu-ram",
+      "id": "O1",
+      "file": "reverb.sflp",
+      "upstream_sha256": "7075cc760f4e96402a3df20f3357012a07fd96c336cd56bd872613f18da3f21b",
+      "class": "option",
+      "reason": "Upstream selects a private 32K x 16 reverb buffer (64 RAM blocks) with '#define USE_BUF_RAM'; without it the unchanged code keeps the reverb work area in SPU RAM through the memory port, as the PS1 does (and work areas larger than 64 KB no longer alias).",
+      "evidence": "reverb.sflp:6 define; :146-158 read/write select buffer or read_wait/write_wait on the SPU memory port; the author's comment on the define says internal RAM is also fine.",
+      "old": "#define USE_BUF_RAM",
+      "new": "//#define USE_BUF_RAM // Q-L1-12 O1: reverb work area in SPU RAM"
+    },
+    {
+      "option": "reverb-in-spu-ram",
+      "id": "O1b",
+      "file": "reverb.sflp",
+      "upstream_sha256": "7075cc760f4e96402a3df20f3357012a07fd96c336cd56bd872613f18da3f21b",
+      "class": "option",
+      "reason": "The reset path always generates ram_clean, whose body (clearing the private buffer) exists only under USE_BUF_RAM; with the work area in SPU RAM there is no private buffer to clear.",
+      "evidence": "reverb.sflp:80-84 declare/generate ram_clean outside #ifdef; :485-494 body inside #ifdef USE_BUF_RAM.",
+      "old": "\t\tgenerate ram_clean.do();\n",
+      "new": "//\t\tgenerate ram_clean.do(); // Q-L1-12 O1b: no private buffer to clear\n"
+    }
   ]
 }
