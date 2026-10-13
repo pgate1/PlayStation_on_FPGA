@@ -1,1 +1,2 @@
 *.sflp linguist-language=C
+Pocket/source_fixes/** -text
