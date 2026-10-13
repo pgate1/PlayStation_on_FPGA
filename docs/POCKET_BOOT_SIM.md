@@ -33,5 +33,10 @@ not available to confirm it.
 
 No halt codes, no memory request collisions. This is the first evidence that the
 translated CPU, GTE, GPU, DMA and (time-shared) SPU run the real BIOS correctly
-enough to reach the boot animation. Not established: reaching the BIOS menu/shell,
-sound output, CD access, games, and hardware timing.
+enough to reach the boot animation. 1,000 M cycles (20 s, 1,200 frames): frame 480 shows the complete "SONY COMPUTER
+ENTERTAINMENT" logo screen; from frame ~660 the BIOS shell (no disc) draws its animated
+blue background with moving spheres (pc settles at 80050f24, 238 M display writes,
+still no halts or collisions). The menu buttons (Memory Card / CD Player) are not
+visible at frame 1200: not yet explained (still fading in, or missing).
+
+Not established: menu buttons, sound output, CD access, games, hardware timing.
