@@ -49,7 +49,8 @@ import fetch_diagnostic_reference as reference  # noqa: E402
 
 FIXES = ROOT / 'Pocket/source_fixes/pocket_top_fixes.json'
 SFLC = ROOT / 'tools/sflc/sflc.py'
-OWNED_RTL = ['Pocket/rtl/sdram128_burstn_adapter.sv', 'Pocket/audio/pocket_audio_out.sv']
+OWNED_RTL = ['Pocket/rtl/sdram128_burstn_adapter.sv', 'Pocket/audio/pocket_audio_out.sv',
+             'Pocket/rtl/ram_320x240x15_dp_2k5.sv']
 SPU_SV = ['spu_dsp_shared.sv', 'DigitalSignalProcessor_shared.sv']
 # PLL outputs as core_top.v uses them: clk_50, dram_ctrl_clk, dram_clk source
 # (sdr_phy clk2x_90), clk_25 (video), clk_25_90deg (video DDR clock).
@@ -182,7 +183,8 @@ def edit_qsf(text: str, device: str, profile: str) -> str:
 
 
 def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bool, timeout: int,
-            device: str = '5CEBA4F23C8', profile: str = 'template', sdram_phase: int = 90) -> None:
+            device: str = '5CEBA4F23C8', profile: str = 'template', sdram_phase: int = 90,
+            view_ram_2k5: bool = False) -> None:
     build_root = (ROOT / 'Pocket/build').resolve()
     destination = destination.absolute()
     if destination.is_symlink() or destination.exists():
@@ -241,7 +243,13 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
 
         # 3. generated interfaces/shims and pinned untracked inputs
         for gen in spec['generated_files']:
-            (stage / 'ps1' / gen['file']).write_text(gen['content'])
+            content = gen['content']
+            if view_ram_2k5 and gen['file'] == 'rtl/pocket_top_shims.v':
+                # Q-L1-16: both view buffers as 2K x 5 M10K slices (Pocket/rtl/ram_320x240x15_dp_2k5.sv)
+                if content.count('  ram_320x240x15_dp u (') != 1:
+                    raise ValueError('view RAM shim instance not found exactly once')
+                content = content.replace('  ram_320x240x15_dp u (', '  ram_320x240x15_dp_2k5 u (')
+            (stage / 'ps1' / gen['file']).write_text(content)
         for item in spec['copied_inputs']:
             data = (ROOT / item['source']).read_bytes()
             if sha256(data) != item['sha256']:
@@ -308,7 +316,7 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
             'schema': 1, 'purpose': 'Pocket PS1 project, Q-L1-14 milestone 1 (resource measurement)',
             'reference_revision': reference.REVISION, 'device': device, 'project': 'ap_core',
             'variant': {'shared_spu': True, 'reverb_in_spu_ram': reverb_in_spu_ram, 'options': options,
-                        'qsf_profile': profile, 'sdram_phase_deg': sdram_phase,
+                        'qsf_profile': profile, 'sdram_phase_deg': sdram_phase, 'view_ram_2k5': view_ram_2k5,
                         'information_only': device != '5CEBA4F23C8' or profile != 'template' or bool(options)},
             'fixes_sha256': sha256(FIXES.read_bytes()), 'applied': applied,
             'core_sources_applied': core_sources.get('applied'),
@@ -338,12 +346,14 @@ def main() -> int:
     parser.add_argument('--qsf-profile', default='template', choices=['template', 'neutral'])
     parser.add_argument('--sdram-phase', type=int, default=90, choices=[0, 90, 180, 270],
                         help='SDRAM clock phase in degrees of the SDRAM controller clock (clk2x)')
+    parser.add_argument('--view-ram-2k5', action='store_true',
+                        help='view buffers packed as 2K x 5 M10K slices (two buffers fit)')
     parser.add_argument('--check', action='store_true')
     parser.add_argument('--timeout', type=int, default=1800)
     args = parser.parse_args()
     try:
         prepare(args.output, args.reverb_in_spu_ram, args.option, args.check, args.timeout,
-                args.device, args.qsf_profile, args.sdram_phase)
+                args.device, args.qsf_profile, args.sdram_phase, args.view_ram_2k5)
     except (ValueError, OSError, subprocess.SubprocessError, reference.FetchError) as exc:
         print('ERROR: ' + str(exc), file=sys.stderr)
         return 1
