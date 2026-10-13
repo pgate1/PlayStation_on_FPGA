@@ -5,6 +5,21 @@ new entries here record current ownership, discoveries and commits. Update after
 each bounded change or significant finding, and at least every 15 minutes during
 longer work. A checkpoint may explicitly report incomplete work or failing tests.
 
+## 2026-10-13 09:45 UTC — sound fits area-wise; core 2% over; Pocket top next
+
+- Q-L1-12 (Claude): time-shared SPU engine `Pocket/spu/` (eb67c92, a6e781b), exact
+  against upstream DSP in co-simulation; 2,780 ALMs / 5 DSP incl. reverb. Build option
+  `--reverb-in-spu-ram` (f8bcb96) verified equivalent to the private buffer.
+- Q-L1-13 (Claude Fable): sflc shared bank write ports (104f91f): SPU-off core now
+  FITS (17,406/18,480 ALMs). Round 2 running (GTE/R3000A banks, GTE lowering).
+- Full core with sound, new sflc, shared SPU, virtual pins: 1,877 LABs needed of 1,848
+  (18,481 ALMs, 64/66 DSP; reverb buffer 64 RAM blocks); with reverb in SPU RAM 1,893
+  LABs, 0 RAM blocks. Pocket top (~1.5k ALMs) still to add.
+- Q-L2-12 (Claude subagent): Pocket audio output path in simulation (0b0df22).
+- Q-L1-14 (Claude): Pocket PS1 top assembly milestone 1 (full Quartus project and
+  real fit numbers) started. Shared host rules: `tools/ristisana/RULES.txt`.
+- Never run docker/OrbStack on the Mac (user rule).
+
 ## 2026-10-13 08:00 UTC — full PlayStation_core translates; shared Windows host lead
 
 - **Q-L1-11 done (Claude, `e501549`..`66dc2f6`):**
