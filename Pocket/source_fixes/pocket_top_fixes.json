@@ -172,6 +172,51 @@
       "why": "replace the template silence generator, per docs/POCKET_AUDIO_OUT.md integration notes",
       "old": "//\n// audio i2s silence generator\n// see other examples for actual audio generation\n//\n\nassign audio_mclk = audgen_mclk;\nassign audio_dac = audgen_dac;\nassign audio_lrck = audgen_lrck;\n\n// generate MCLK = 12.288mhz with fractional accumulator\n    reg         [21:0]  audgen_accum;\n    reg                 audgen_mclk;\n    parameter   [20:0]  CYCLE_48KHZ = 21'd122880 * 2;\nalways @(posedge clk_74a) begin\n    audgen_accum <= audgen_accum + CYCLE_48KHZ;\n    if(audgen_accum >= 21'd742500) begin\n        audgen_mclk <= ~audgen_mclk;\n        audgen_accum <= audgen_accum - 21'd742500 + CYCLE_48KHZ;\n    end\nend\n\n// generate SCLK = 3.072mhz by dividing MCLK by 4\n    reg [1:0]   aud_mclk_divider;\n    wire        audgen_sclk = aud_mclk_divider[1] ;// synthesis keep;\n    reg         audgen_lrck_1;\nalways @(posedge audgen_mclk) begin\n    aud_mclk_divider <= aud_mclk_divider + 1'b1;\nend\n\n// shift out audio data as I2S \n// 32 total bits per channel, but only 16 active bits at the start and then 16 dummy bits\n//\n    reg     [4:0]   audgen_lrck_cnt;    \n    reg             audgen_lrck;\n    reg             audgen_dac;\nalways @(negedge audgen_sclk) begin\n    audgen_dac <= 1'b0;\n    // 48khz * 64\n    audgen_lrck_cnt <= audgen_lrck_cnt + 1'b1;\n    if(audgen_lrck_cnt == 31) begin\n        // switch channels\n        audgen_lrck <= ~audgen_lrck;\n        \n    end \nend\n\n\n",
       "new": "//\n// Q-L1-14: SPU mix to I2S (Pocket/audio/pocket_audio_out.sv, SAMPLE_SRC=1: run33 / 768)\n//\n\twire core_rst_50;\nsynch_3 s_core_rst(~reset_n, core_rst_50, clk_50);\n\npocket_audio_out #(.SAMPLE_SRC(1)) u_audio (\n\t.clk_core(clk_50), .rst_core(core_rst_50),\n\t.in_l(sound_L), .in_r(sound_R), .sample_en(1'b0), .run33(run33_o),\n\t.clk_74a(clk_74a),\n\t.audio_mclk(audio_mclk), .audio_lrck(audio_lrck), .audio_dac(audio_dac),\n\t.dbg_in_count(), .dbg_out_count(), .dbg_ovf_count(),\n\t.dbg_udf_count(), .dbg_level_min(), .dbg_running());\n\n\n"
+    },
+    {
+      "id": "C9",
+      "file": "Pocket/core_top.v",
+      "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
+      "class": "B",
+      "why": "r9-r12 on hardware: the CPU ran garbage at varying places. The loader strobe ram1_word_wr is one clk_74a cycle (13.5 ns); upstream synchronised it into the 100 MHz controller clock, Q-L1-14 into clk_50 (20 ns, 25 ns at 40 MHz), so about a third to a half of the BIOS words were never written. Dual-clock FIFO (pocket_audio_afifo, 512 x 56) instead of synch_3.",
+      "old": "    wire word_wr_s, word_wr_r;\nsynch_3 s3(ram1_word_wr, word_wr_s, clk_50, word_wr_r); // Q-L1-14: adapter command side runs on clk_50\n",
+      "new": "    // Q-L1-16: loader words cross clk_74a -> clk_50 through a dual-clock FIFO (a 13.5 ns strobe\n    // cannot be sampled by synch_3 in a 20-25 ns clock). The FIFO drains into the adapter only\n    // when it is ready and the core does not strobe; the core sees the SDRAM busy while words\n    // are queued. sdram_dbg: [0] FIFO overflow (sticky), [1] adapter dropped a command, [2] stray read.\n    reg [1:0] ldf_rst_50 = 2'b11;\n    always @(posedge clk_50) ldf_rst_50 <= {ldf_rst_50[0], ~reset_n};\n    wire ldf_full;\n    wire [9:0] ldf_level;\n    wire [55:0] ldf_q;\n    reg ldf_ovf_74 = 1'b0;\n    always @(posedge clk_74a) if (ram1_word_wr & ldf_full) ldf_ovf_74 <= 1'b1;\n    wire core_sdram_write_w, core_sdram_read_w;\n    wire sdram_mem_ready, sdram_mem_ack, sdram_stray;\n    wire [15:0] sdram_dropped;\n    reg [1:0] ldf_cool = 2'd0;   // rdata is the new head two cycles after a pop\n    wire ldf_go = (ldf_level != 10'd0) & (ldf_cool == 2'd0) & sdram_mem_ready &\n                  ~core_sdram_write_w & ~core_sdram_read_w;\n    pocket_audio_afifo #(.W(56), .AW(9)) u_ldfifo (\n        .wclk(clk_74a), .wrst(~reset_n), .we(ram1_word_wr), .wdata({ram1_word_addr, ram1_word_data}),\n        .wfull(ldf_full), .wlevel(),\n        .rclk(clk_50), .rrst(ldf_rst_50[1]), .re(ldf_go), .rdata(ldf_q), .rlevel(ldf_level));\n    always @(posedge clk_50)\n        if (ldf_rst_50[1]) ldf_cool <= 2'd0;\n        else if (ldf_go) ldf_cool <= 2'd2;\n        else if (ldf_cool != 2'd0) ldf_cool <= ldf_cool - 2'd1;\n    reg [1:0] ldf_ovf_s;\n    always @(posedge clk_50) ldf_ovf_s <= {ldf_ovf_s[0], ldf_ovf_74};\n    wire [7:0] sdram_dbg = {5'd0, sdram_stray, sdram_dropped != 16'd0, ldf_ovf_s[1]};\n"
+    },
+    {
+      "id": "C10",
+      "file": "Pocket/core_top.v",
+      "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
+      "class": "B",
+      "why": "r9-r12 on hardware: the CPU ran garbage at varying places. The loader strobe ram1_word_wr is one clk_74a cycle (13.5 ns); upstream synchronised it into the 100 MHz controller clock, Q-L1-14 into clk_50 (20 ns, 25 ns at 40 MHz), so about a third to a half of the BIOS words were never written. Command mux: FIFO head when ldf_go, else the core; the core sees ack only with the FIFO empty.",
+      "old": "\tassign sdram_write = word_wr_r | core_sdram_write;\n\tassign sdram_adrs = (word_wr_r ? {ram1_word_addr, 1'b0} : 25'b0) | ((core_sdram_write | core_sdram_read) ? core_sdram_adrs : 25'b0);\n\tassign sdram_din = (word_wr_r ? {96'b0, ram1_word_data} : 128'b0) | (core_sdram_write ? core_sdram_din : 128'b0);\n\tassign sdram_enable = (word_wr_r ? 16'h000F : 16'b0) | (core_sdram_write ? core_sdram_enable : 16'b0);\n\tassign sdram_burst = (word_wr_r ? 2 : 0) | ((core_sdram_write | core_sdram_read) ? core_sdram_burst : 0);\n\tassign sdram_read = core_sdram_read;\n",
+      "new": "\t// Q-L1-16: loader FIFO head or the core (the core has priority; see ldf_go)\n\tassign core_sdram_write_w = core_sdram_write;\n\tassign core_sdram_read_w = core_sdram_read;\n\tassign sdram_write = ldf_go | core_sdram_write;\n\tassign sdram_adrs = ldf_go ? {ldf_q[55:32], 1'b0} : core_sdram_adrs;\n\tassign sdram_din = ldf_go ? {96'b0, ldf_q[31:0]} : core_sdram_din;\n\tassign sdram_enable = ldf_go ? 16'h000F : core_sdram_enable;\n\tassign sdram_burst = ldf_go ? 4'd2 : core_sdram_burst;\n\tassign sdram_read = core_sdram_read;\n\tassign sdram_ack_100 = sdram_mem_ack & (ldf_level == 10'd0);\n"
+    },
+    {
+      "id": "C11",
+      "file": "Pocket/core_top.v",
+      "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
+      "class": "B",
+      "why": "r9-r12 on hardware: the CPU ran garbage at varying places. The loader strobe ram1_word_wr is one clk_74a cycle (13.5 ns); upstream synchronised it into the 100 MHz controller clock, Q-L1-14 into clk_50 (20 ns, 25 ns at 40 MHz), so about a third to a half of the BIOS words were never written. Adapter ack/ready/debug outputs for the loader FIFO arbiter.",
+      "old": "\t\t.ack(sdram_ack_100), .dropped(), .stray(),\n",
+      "new": "\t\t.ack(sdram_mem_ack), .ready(sdram_mem_ready), .dropped(sdram_dropped), .stray(sdram_stray),\n"
+    },
+    {
+      "id": "C12",
+      "file": "Pocket/core_top.v",
+      "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
+      "class": "B",
+      "why": "Q-L1-16 top-level debug bits into the core (used only by debug overlays).",
+      "old": "\t\t.target_dataslot_read(target_dataslot_read_s), .ram_reloading(ram_reloading_s)\n",
+      "new": "\t\t.target_dataslot_read(target_dataslot_read_s), .ram_reloading(ram_reloading_s),\n\t\t.dbg_ext(sdram_dbg) // Q-L1-16\n"
+    },
+    {
+      "id": "T10",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "B",
+      "why": "Q-L1-16 top-level debug bits input (core_top sdram_dbg), read only by debug overlays",
+      "old": "\tinput target_dataslot_read, ram_reloading;\n",
+      "new": "\tinput target_dataslot_read, ram_reloading;\n\tinput dbg_ext<8>; // Q-L1-16: top-level debug bits (core_top sdram_dbg), overlays only\n"
     }
   ],
   "options": [
@@ -267,7 +312,7 @@
       "class": "D",
       "why": "hardware bring-up after r9 showed a CPU halt: pc_out, opcode_out, psx.dbg (cpu.dbg latched on a CPU halt), halt_code and halt_part as bit rows. Exclusive with debug-overlay",
       "old": "\tif(((vga.h_count==10) | (vga.h_count==630) |\n\t    (vga.v_count==10) | (vga.v_count==470)) & /|psx.halt_code){\n\t\tif(psx.halt_part<7>){ // CPU halt\n\t\t\tvga.iR = 0xFF; vga.iG = 0x00; vga.iB = 0x00;\n\t\t}\n\t\telse{ // other halt\n\t\t\tvga.iR = 0xFF; vga.iG = 0xFF; vga.iB = 0x00;\n\t\t}\n\t}\n\telse{\n",
-      "new": "// Q-L1-16 variant debug-overlay-cpu: CPU state as bit rows at the top left.\n// Rows of 16 lines: pc_out, opcode_out, dbg, halt_code || halt_part || 0.\n// Cell = 16 pixels, MSB left; 1 = green/cyan, 0 = dark red/purple (colour\n// alternates per nibble).\n\tsel dbg_word<32>, dbg_sh<32>, dbg_hit, dbg_bit;\n\tany{\n\t\tvga.v_count<5:4>==0b00 : dbg_word = psx.pc_out;\n\t\tvga.v_count<5:4>==0b01 : dbg_word = psx.opcode_out;\n\t\tvga.v_count<5:4>==0b10 : dbg_word = psx.dbg;\n\t\telse : dbg_word = psx.halt_code || psx.halt_part || 0b000000000000000;\n\t}\n\tdbg_sh = dbg_word << vga.h_count<8:4>;\n\tdbg_bit = dbg_sh<31>;\n\tdbg_hit = (vga.v_count<9:6>==0b0000) & (vga.v_count<3:2>!=0b00) &\n\t\t(vga.h_count<9>==0b0) & (vga.h_count<3:2>!=0b00);\n\tif(dbg_hit){\n\t\tif(dbg_bit){ vga.iR = 0x00; vga.iG = 0xFF; vga.iB = 8#vga.h_count<6>; }\n\t\telse{ vga.iR = 0x80; vga.iG = 0x00; vga.iB = 8#vga.h_count<6>; }\n\t}\n\telse if(((vga.h_count==10) | (vga.h_count==630) |\n\t    (vga.v_count==10) | (vga.v_count==470)) & /|psx.halt_code){\n\t\tif(psx.halt_part<7>){ // CPU halt\n\t\t\tvga.iR = 0xFF; vga.iG = 0x00; vga.iB = 0x00;\n\t\t}\n\t\telse{ // other halt\n\t\t\tvga.iR = 0xFF; vga.iG = 0xFF; vga.iB = 0x00;\n\t\t}\n\t}\n\telse{\n"
+      "new": "// Q-L1-16 variant debug-overlay-cpu: CPU state as bit rows at the top left.\n// Rows of 16 lines: pc_out, opcode_out, dbg_ext || dbg<23:0>, halt_code || halt_part || 0.\n// Cell = 16 pixels, MSB left; 1 = green/cyan, 0 = dark red/purple (colour\n// alternates per nibble).\n\tsel dbg_word<32>, dbg_sh<32>, dbg_hit, dbg_bit;\n\tany{\n\t\tvga.v_count<5:4>==0b00 : dbg_word = psx.pc_out;\n\t\tvga.v_count<5:4>==0b01 : dbg_word = psx.opcode_out;\n\t\tvga.v_count<5:4>==0b10 : dbg_word = dbg_ext || psx.dbg<23:0>;\n\t\telse : dbg_word = psx.halt_code || psx.halt_part || 0b000000000000000;\n\t}\n\tdbg_sh = dbg_word << vga.h_count<8:4>;\n\tdbg_bit = dbg_sh<31>;\n\tdbg_hit = (vga.v_count<9:6>==0b0000) & (vga.v_count<3:2>!=0b00) &\n\t\t(vga.h_count<9>==0b0) & (vga.h_count<3:2>!=0b00);\n\tif(dbg_hit){\n\t\tif(dbg_bit){ vga.iR = 0x00; vga.iG = 0xFF; vga.iB = 8#vga.h_count<6>; }\n\t\telse{ vga.iR = 0x80; vga.iG = 0x00; vga.iB = 8#vga.h_count<6>; }\n\t}\n\telse if(((vga.h_count==10) | (vga.h_count==630) |\n\t    (vga.v_count==10) | (vga.v_count==470)) & /|psx.halt_code){\n\t\tif(psx.halt_part<7>){ // CPU halt\n\t\t\tvga.iR = 0xFF; vga.iG = 0x00; vga.iB = 0x00;\n\t\t}\n\t\telse{ // other halt\n\t\t\tvga.iR = 0xFF; vga.iG = 0xFF; vga.iB = 0x00;\n\t\t}\n\t}\n\telse{\n"
     },
     {
       "option": "core-40mhz",

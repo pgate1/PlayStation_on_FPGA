@@ -56,6 +56,7 @@ module sdram128_burstn_wordside (
     input  wire          read,
     output logic [127:0] dout,
     output logic         ack,
+    output logic         ready,        // ack without the ~strobe term (for a second master's arbiter)
     output logic [15:0]  dropped,      // saturating count of strobes while busy
     output logic         stray,        // sticky: read data without a request
     // MIRLO sdr_ctrl request/response side
@@ -82,7 +83,8 @@ module sdram128_burstn_wordside (
     logic [31:0]  rbuf [5];
 
     wire strobe = read | write;
-    assign ack = ctrl_ready & (st == S_IDLE) & ~strobe;
+    assign ready = ctrl_ready & (st == S_IDLE);
+    assign ack = ready & ~strobe;
 
     // request decode (combinational, used on acceptance)
     wire [3:0]   len    = (burst == 4'd0 || burst > 4'd8) ? 4'd8 : burst;
@@ -167,6 +169,8 @@ module sdram128_burstn_adapter #(
     input  wire          manual_refresh,
     input  wire          refresh_go,
     output logic         ack,
+    output logic         ready,        // ack without the ~strobe term: a second master may strobe when
+                                       // ready and the first one does not (Q-L1-16 loader FIFO)
     output logic [15:0]  dropped,
     output logic         stray,
     // SDRAM pads
@@ -195,7 +199,7 @@ module sdram128_burstn_adapter #(
     logic [2:0]  req_tag, rd_tag, rd_next_tag;
 
     sdram128_burstn_wordside u_word (
-        .clk, .rst, .write, .adrs, .din, .enable, .burst, .read, .dout, .ack,
+        .clk, .rst, .write, .adrs, .din, .enable, .burst, .read, .dout, .ack, .ready,
         .dropped, .stray, .ctrl_ready, .req_valid, .req_we, .req_addr, .req_wdata,
         .req_be, .req_tag, .req_ready, .rd_valid, .rd_data, .rd_tag);
 

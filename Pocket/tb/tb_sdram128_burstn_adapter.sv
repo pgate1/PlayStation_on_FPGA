@@ -20,7 +20,7 @@ module tb_sdram128_burstn_adapter;
     logic [127:0] din = 0, dout;
     logic [15:0]  enable = 0, dropped;
     logic [3:0]   burst = 0;
-    logic         ack, stray;
+    logic         ack, ready, stray;
     logic         ctrl_ready = 0, req_valid, req_we, req_ready, rd_valid;
     logic [23:0]  req_addr;
     logic [31:0]  req_wdata, rd_data;
