@@ -11,7 +11,10 @@ the hash of every prepared file. Upstream files are never modified.
 --register-banks) and elaborates it with Icarus. That is structural evidence
 only: not native-sfl2vl equivalence, synthesis, timing or hardware behaviour.
 
-Usage: prepare_core_sources.py OUT_DIR [--check] [--timeout SECONDS]
+--shared-spu replaces upstream DigitalSignalProcessor (24 x dsp_ch) with the
+time-shared engine in Pocket/spu/ (linked through DigitalSignalProcessor.h).
+
+Usage: prepare_core_sources.py OUT_DIR [--check] [--shared-spu] [--timeout SECONDS]
 """
 import argparse
 import hashlib
@@ -23,6 +26,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 FIXES = REPO / 'Pocket' / 'source_fixes' / 'fixes.json'
+SPU = REPO / 'Pocket' / 'spu'
+SPU_FILES = ('DigitalSignalProcessor.h', 'spu_dsp_shared.sv', 'DigitalSignalProcessor_shared.sv')
 TOP = 'PlayStation_core'
 
 
@@ -78,17 +83,26 @@ def run(cmd, timeout, **kw):
         fail('timeout after %ds: %s' % (timeout, cmd[0]))
 
 
-def check(out, timeout):
-    sv = out / (TOP + '.sv')
-    result = run([sys.executable, '-I', REPO / 'tools' / 'sflc' / 'sflc.py', '--hierarchy',
-                  '--register-banks', TOP + '.sflp'], timeout, cwd=out,
-                 env={'PYTHONDONTWRITEBYTECODE': '1', 'LC_ALL': 'C', 'PATH': '/usr/bin:/bin'})
+def translate(out, source, flags, timeout):
+    sv = out / (source[:-5] + '.sv')
+    result = run([sys.executable, '-I', REPO / 'tools' / 'sflc' / 'sflc.py', *flags, source], timeout,
+                 cwd=out, env={'PYTHONDONTWRITEBYTECODE': '1', 'LC_ALL': 'C', 'PATH': '/usr/bin:/bin'})
     if result.returncode:
-        fail('sflc exit %d: %s' % (result.returncode, result.stderr.strip()[-2000:]))
+        fail('sflc %s exit %d: %s' % (source, result.returncode, result.stderr.strip()[-2000:]))
     sv.write_text(result.stdout)
     print('translated %s: %d bytes' % (sv.name, sv.stat().st_size))
+    return sv
+
+
+def check(out, timeout, shared_spu):
+    sv = translate(out, TOP + '.sflp', ['--hierarchy', '--register-banks'], timeout)
+    extra = []
+    if shared_spu:
+        # The external DSP leaf instantiates the unchanged reverb module.
+        extra = [translate(out, 'reverb.sflp', ['--hierarchy'], timeout).name,
+                 'spu_dsp_shared.sv', 'DigitalSignalProcessor_shared.sv']
     leaves = sorted(p.name for p in out.glob('*.v'))
-    result = run(['iverilog', '-g2012', '-s', TOP, '-t', 'null', sv.name, *leaves], timeout, cwd=out)
+    result = run(['iverilog', '-g2012', '-s', TOP, '-t', 'null', sv.name, *extra, *leaves], timeout, cwd=out)
     output = (result.stdout + result.stderr).strip()
     if output: print(output[-4000:])
     if result.returncode:
@@ -101,6 +115,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     parser.add_argument('out', type=Path)
     parser.add_argument('--check', action='store_true')
+    parser.add_argument('--shared-spu', action='store_true')
     parser.add_argument('--timeout', type=int, default=600)
     args = parser.parse_args()
     out = args.out.resolve()
@@ -115,6 +130,11 @@ def main():
         shutil.copyfile(src, out / src.name)
     shutil.copytree(REPO / 'demo', out / 'demo')
     applied = apply_fixes(out, spec)
+    if args.shared_spu:
+        (out / 'DigitalSignalProcessor.sflp').unlink()
+        for name in SPU_FILES:
+            shutil.copyfile(SPU / name, out / name)
+        applied.append('shared-spu')
     files = {str(p.relative_to(out)): sha256(p.read_bytes())
              for p in sorted(out.rglob('*')) if p.is_file()}
     (out / 'core_sources.json').write_text(json.dumps({
@@ -122,7 +142,7 @@ def main():
         'applied': applied, 'files': files}, indent=2) + '\n')
     print('PREPARED %d files, fixes %s -> %s' % (len(files), ' '.join(applied), out))
     if args.check:
-        check(out, args.timeout)
+        check(out, args.timeout, args.shared_spu)
 
 
 if __name__ == '__main__':
