@@ -1,0 +1,25 @@
+// Register-bank writers for the shared-port lowering (docs/POCKET_SFLC_AREA.md).
+// Every word keeps guarded-OR semantics: a parallel clear, a constant-index
+// writer, two same-address writers, one free dynamic writer and two writers
+// issued from mutually exclusive stage states.
+circuit bank_ports {
+    input a<8>, b<8>, c<8>, i1<3>, i2<3>, ix<3>;
+    input clr, ws, wa, wb, wx, go;
+    output q0<8>, q1<8>, q2<8>, q3<8>, q4<8>, q5<8>, q6<8>, q7<8>, busy, st;
+    mem m[8]<8> = {0};
+    stage_name S { task run(); }
+    if(clr) par(i=0;i<8;i++){ m[i] := 0; }
+    if(ws) m[3] := a;
+    if(wa) m[i1] := a;
+    if(wb) m[i1] := b;
+    if(wx) m[i1] := c;
+    if(go) generate S.run();
+    busy = S.run;
+    stage S {
+        first_state s1;
+        state s1 par{ m[i2] := c; st = 0b0; goto s2; }
+        state s2 par{ m[ix] := a; st = 0b1; goto s1; finish; }
+    }
+    q0 = m[0]; q1 = m[1]; q2 = m[2]; q3 = m[3];
+    q4 = m[4]; q5 = m[5]; q6 = m[6]; q7 = m[7];
+}

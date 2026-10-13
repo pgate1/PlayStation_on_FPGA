@@ -310,6 +310,8 @@ class Gen:
         self.drivers = {}     # target -> [(guards, expression)]
         self.writes = {}      # memory -> [(guards, address, expression)]
         self.write_indices = {}  # matching static index or None for each write
+        self.write_widths = {}   # address expression width of each write
+        self._ports = {}         # bank -> shared dynamic write ports (memoised)
         self.temps = []
         self.interfaces = dict(interfaces or {})
         self.instances = {}   # instance name -> (Interface, port alias mapping)
@@ -524,6 +526,7 @@ class Gen:
             if index is not None and not 0 <= index < self.memories[name][0]:
                 raise ValueError('constant memory write index out of bounds: ' + name)
             self.write_indices.setdefault(name, []).append(index)
+            self.write_widths.setdefault(name, []).append(self.width(lhs[2]))
             self.writes.setdefault(name, []).append((list(guards), self.expr(lhs[2]),
                                                      self.expr(rhs, self.decls[name])))
         elif lhs[0] == 'name':
@@ -689,9 +692,17 @@ class Gen:
     def guard(guards):
         return ' && '.join('(%s)' % x for x in guards) or "1'b1"
 
+    def merge_terms(self, terms):
+        """Combine writers of the same value: (g1 ? v : 0) | (g2 ? v : 0) is
+        ((g1 || g2) ? v : 0). Order of first occurrence is kept."""
+        merged = {}
+        for gs, val in terms: merged.setdefault(val, []).append(gs)
+        return [(' || '.join('(%s)' % self.guard(gs) for gs in gl) if len(gl) > 1 else self.guard(gl[0]), val)
+                for val, gl in merged.items()]
+
     def mux(self, terms):
-        return ' | '.join('((%s) ? (%s) : \'0)' % (self.guard(gs), val)
-                          for gs, val in terms) or "'0"
+        return ' | '.join('((%s) ? (%s) : \'0)' % (cond, val)
+                          for cond, val in self.merge_terms(terms)) or "'0"
 
     def data_mux(self, terms, width):
         # Native -O2 data selectors omit selection for a single distinct value
@@ -706,6 +717,30 @@ class Gen:
         if len(values) == 1 or any(not guards for guards, _ in terms):
             return ' | '.join('(%s)' % value for value in values)
         return self.mux(terms)
+
+    @staticmethod
+    def is_zero(value):
+        return re.fullmatch(r"(?:\d+'[bdho]0+|'0)", value.strip('()')) is not None
+
+    def word_update(self, target, terms):
+        """One clocked update with guarded-OR data, written so that a
+        constant-zero writer (a parallel clear) costs no data logic.
+
+        OR-ing a zero term contributes nothing to the data, so zero-valued
+        writers only extend the enable. With a single nonzero writer the
+        update is written as a priority pair: the nonzero value when its
+        guard holds, else zero when only clears are active. Both forms are
+        the same function as the plain guarded OR.
+        """
+        enable = ' || '.join('(%s)' % self.guard(g) for g, _ in terms)
+        data = [(g, v) for g, v in terms if not self.is_zero(v)]
+        if not data:
+            return "  always @(posedge m_clock) if (%s) %s <= '0;" % (enable, target)
+        merged = self.merge_terms(data)
+        if len(merged) == 1 and len(terms) > len(data):
+            return ("  always @(posedge m_clock) if (%s) %s <= %s; else if (%s) %s <= '0;" %
+                    (merged[0][0], target, merged[0][1], enable, target))
+        return '  always @(posedge m_clock) if (%s) %s <= %s;' % (enable, target, self.mux(data))
 
     def conflict_checks(self, terms, label):
         if not self.assertions: return []
@@ -731,11 +766,112 @@ class Gen:
                         banks.add(name)
         return banks
 
+    # ---- guard exclusivity (syntactic, sound; "unknown" means not exclusive) ----
+    @staticmethod
+    def literal(text):
+        """Classify an emitted guard string as ('not', X), ('eq'/'ne', lhs, value) or ('atom', X)."""
+        def outer(s):
+            # True when s is wrapped by one matching pair of parentheses.
+            if not (s.startswith('(') and s.endswith(')')): return False
+            depth = 0
+            for i, ch in enumerate(s):
+                depth += (ch == '(') - (ch == ')')
+                if depth == 0: return i == len(s) - 1
+            return False
+        t = text.strip()
+        while outer(t): t = t[1:-1].strip()
+        if t.startswith('!') and outer(t[1:]):
+            return ('not', Gen.literal(t[1:]))
+        depth = 0
+        for i in range(len(t) - 1):
+            depth += (t[i] == '(') - (t[i] == ')')
+            if depth == 0 and t[i:i+2] in ('==', '!='):
+                lhs, rhs = t[:i].strip(), t[i+2:].strip()
+                while outer(lhs): lhs = lhs[1:-1].strip()
+                while outer(rhs): rhs = rhs[1:-1].strip()
+                m = re.fullmatch(r"(?:\d+)?'([bdho])([0-9a-fA-F_]+)", rhs) or re.fullmatch(r'()(\d+)', rhs)
+                if m:
+                    base = {'b': 2, 'o': 8, 'd': 10, 'h': 16, '': 10}[m.group(1)]
+                    return ('eq' if t[i:i+2] == '==' else 'ne', lhs, int(m.group(2).replace('_', ''), base))
+                break
+        return ('atom', t)
+
+    @staticmethod
+    def contradict(a, b):
+        if a[0] == 'not' and a[1] == b: return True
+        if b[0] == 'not' and b[1] == a: return True
+        if a[0] in ('eq', 'ne') and b[0] in ('eq', 'ne') and a[1] == b[1]:
+            if a[0] == 'eq' and b[0] == 'eq': return a[2] != b[2]
+            if a[0] != b[0]: return a[2] == b[2]
+        return False
+
+    def dnf(self, guards, depth=0):
+        """Expand a guard conjunction to a list of literal conjunctions.
+
+        Local control terminals (instrself/instrout) are replaced by the OR of
+        their activation guards, so writes issued from different stage states
+        through different terminals can be recognised as exclusive. Expansion
+        is bounded; anything beyond the budget stays an opaque atom.
+        """
+        result = [[]]
+        for g in guards:
+            lit = self.literal(g)
+            drivers = self.drivers.get(g) if lit[0] == 'atom' else None
+            if drivers and depth < 4 and self.kinds.get(g) in ('instrself', 'instrout') and len(drivers) * len(result) <= 64:
+                options = []
+                for dg, _ in drivers:
+                    options += self.dnf(dg, depth + 1)
+            else:
+                options = [[lit]]
+            result = [conj + extra for conj in result for extra in options]
+            if len(result) > 256: return None
+        return result
+
+    def exclusive(self, ga, gb):
+        da, db = self.dnf(ga), self.dnf(gb)
+        if da is None or db is None: return False
+        return all(any(self.contradict(x, y) for x in ca for y in cb) for ca in da for cb in db)
+
+    def bank_ports(self, name):
+        """Shared physical ports for the dynamic-index writers of a bank.
+
+        Writers with the same address expression share one port because
+        (g1 && A==i ? v1 : 0) | (g2 && A==i ? v2 : 0) equals
+        A==i ? ((g1 ? v1 : 0) | (g2 ? v2 : 0)) : 0 for every word i. Groups of
+        writers that are provably never active together also share a port:
+        at most one group drives it in any cycle, so the OR-selected address
+        and data are that group's. Each port keeps the per-word guarded-OR
+        semantics of the earlier lowering exactly; constant-index writers
+        remain per word.
+        """
+        if name in self._ports: return self._ports[name]
+        dynamic = [(g, a, v, w) for (g, a, v), s, w in zip(self.writes[name], self.write_indices[name],
+                                                          self.write_widths[name]) if s is None]
+        groups = {}
+        for g, a, v, w in dynamic: groups.setdefault(a, []).append((g, a, v, w))
+        ports = []
+        for address, members in groups.items():
+            for port in ports:
+                if all(self.exclusive(g, h) for g, _, _, _ in members for h, _, _, _ in port):
+                    port += members; break
+            else: ports.append(list(members))
+        out = []
+        for k, members in enumerate(ports):
+            base = '__sfl_wport_%s_%d' % (name, k)
+            out.append(dict(name=base, enable=' || '.join('(%s)' % self.guard(g) for g, _, _, _ in members),
+                            width=max(w for _, _, _, w in members),
+                            address=self.mux([(g, a) for g, a, _, _ in members]),
+                            data=self.mux([(g, v) for g, _, v, _ in members]),
+                            terms=[(g, v) for g, _, v, _ in members]))
+        self._ports[name] = out
+        return out
+
     def bank_terms(self, name, index):
         terms = []
         for (guards, address, value), static in zip(self.writes[name], self.write_indices[name]):
-            if static is None: terms.append((guards + ['(%s) == %d' % (address, index)], value))
-            elif static == index: terms.append((guards, value))
+            if static == index: terms.append((guards, value))
+        for port in self.bank_ports(name):
+            terms.append(([port['name'] + '_en', '(%s_a) == %d' % (port['name'], index)], port['name'] + '_d'))
         return terms
 
     def emit(self):
@@ -757,6 +893,11 @@ class Gen:
             connections = [] if interface.external else ['.p_reset(p_reset)', '.m_clock(m_clock)']
             connections += ['.%s(%s)' % (member, alias) for member, alias in aliases.items()]
             L.append('  %s %s (%s);' % (interface.name, instance, ', '.join(connections)))
+        for name in banks:
+            for port in self.bank_ports(name):
+                L.append('  wire %s_en = %s;' % (port['name'], port['enable']))
+                L.append('  wire %s%s_a = %s;' % (rng(port['width']), port['name'], port['address']))
+                L.append('  wire %s%s_d = %s;' % (rng(self.decls[name]), port['name'], port['data']))
         for n, kind in self.kinds.items():
             if kind in ('sel', 'output', 'instrself', 'instrout'):
                 terms = self.drivers.get(n, [])
@@ -787,13 +928,11 @@ class Gen:
                 L.append('  end')
             writes = self.writes.get(name, [])
             if name in banks:
-                L.append('  // Parallel constant-index writes: explicit per-word register bank.')
+                L.append('  // Parallel constant-index writes: explicit per-word register bank;'
+                         ' dynamic-index writers share %d selected port(s).' % len(self.bank_ports(name)))
                 for index in range(depth):
                     terms = self.bank_terms(name, index)
-                    if not terms: continue
-                    enable = ' || '.join('(%s)' % self.guard(g) for g, _ in terms)
-                    L.append('  always @(posedge m_clock) if (%s) %s[%d] <= %s;' %
-                             (enable, name, index, self.mux(terms)))
+                    if terms: L.append(self.word_update('%s[%d]' % (name, index), terms))
                 continue
             # A single physical write port: select the address and data under
             # the same guards. Assert multiple writers instead of inventing
@@ -821,6 +960,8 @@ class Gen:
                     checks += self.conflict_checks(terms, n)
             for n, writes in self.writes.items():
                 if n in banks:
+                    for port in self.bank_ports(n):
+                        checks += self.conflict_checks(port['terms'], port['name'])
                     for index in range(self.memories[n][0]):
                         checks += self.conflict_checks(self.bank_terms(n, index), '%s[%d]' % (n, index))
                 else: checks += self.conflict_checks([(g, v) for g, _, v in writes], n)

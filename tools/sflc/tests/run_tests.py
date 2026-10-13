@@ -261,6 +261,30 @@ class CompilerTests(unittest.TestCase):
             with self.subTest(body=body):
                 with self.assertRaises(error): self.compile_text('circuit bad {'+body+'}')
 
+    def test_19_bank_shared_ports(self):
+        source = ROOT/'tools/sflc/tests/bank_ports.sflp'
+        generated = sflc.translate(source, assertions=False, register_banks=True)
+        # Same-address writers share a port; the two stage-state writers are
+        # provably exclusive and share another; the free writers do not merge.
+        self.assertIn('share 2 selected port(s)', generated)
+        result = self.simulate('tb_bank_ports', {'bank_ports': generated},
+                               ROOT/'tools/sflc/tests/tb_bank_ports.sv')
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+        self.assertIn('PASS bank_ports checks=24000', result.stdout)
+        # Mutations: merging non-exclusive writers into one port loses parallel
+        # distinct-word writes; dropping nonzero data from the OR loses values.
+        mutations = {'exclusive': lambda self, a, b: True, 'is_zero': staticmethod(lambda v: True)}
+        for name, fake in mutations.items():
+            original = getattr(sflc.Gen, name)
+            setattr(sflc.Gen, name, fake)
+            try:
+                mutated = sflc.translate(source, assertions=False, register_banks=True)
+            finally:
+                setattr(sflc.Gen, name, original)
+            result = self.simulate('tb_bank_ports', {'bank_ports': mutated},
+                                   ROOT/'tools/sflc/tests/tb_bank_ports.sv')
+            self.assertNotEqual(result.returncode, 0, 'bank mutation escaped: ' + name)
+
     def test_11_linker_rejects_bad_interfaces(self):
         header = 'declare child interface {input a<8>; output b<8>; instrin put(a); instrout ack;}'
         for body, error in [
