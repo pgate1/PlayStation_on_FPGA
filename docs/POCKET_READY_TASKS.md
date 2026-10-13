@@ -24,6 +24,30 @@ Keep commits local; the latest handoff records the user's no-push constraint.
 | Q-L2-10 | Reproducible prepared-wrapper structural lint | Quartus, compiler changes |
 | Q-L2-11 | Instance-array boundary/rejection tests | APF, native compiler |
 | Q-L1-10 | Official Pocket packaging contract | Quartus installation, RTL changes |
+| Q-L1-13 | sflc area audit: why the core overflows the device | RTL changes; uses the shared Windows host |
+
+### Q-L1-13 — sflc area audit (fit blocker) — READY
+
+**Own:** new `docs/POCKET_SFLC_AREA.md`, new `tools/sflc/area/` (scripts and
+fixtures only), `docs/claims/Q-L1-13.md`. Do not edit `sflc.py`; propose changes.
+
+Evidence: `docs/POCKET_CORE_TRANSLATION.md` "First Quartus results". With the SPU
+tied off, the sflc-generated core needs 2,022 LABs (device: 1,848) without any
+Pocket top, while the author's native build fit everything at 17,060/18,480 ALMs.
+Find where sflc output is larger than native and by how much, per module.
+
+1. A/B per module: for modules that are plain SFL (no SFL+-only syntax) and under
+   the archived sfl2vl 500-line limit, obtain native Verilog through the existing
+   `sfl2vl.yml` CI path (never commit the binary or its outputs) and the sflc
+   output, then run `quartus_map` on each alone via `E:\fpga-shared\qrun.ps1`
+   (read `tools/ristisana/RULES.txt`; session `pocket-psx`, dirs under `E:\psx\`).
+   Report comb. ALUTs, registers and DSP per module, native vs sflc.
+2. Structural inspection where no native output is possible: count emitted guarded
+   OR selectors, duplicated expression copies per guard, register banks and
+   memories implemented as registers (e.g. `PAD_controller` `data_buf[256]` with a
+   256-way `par` clear). Rank by measured ALUTs from the map reports.
+3. Output: a ranked list of concrete sflc lowering changes with expected savings,
+   each with a tiny reproducer. Do not tune real sources or split modules.
 
 ### Q-L2-10 — prepared-wrapper lint runner — READY
 

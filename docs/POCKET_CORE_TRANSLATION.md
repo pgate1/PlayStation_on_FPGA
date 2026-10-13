@@ -63,6 +63,28 @@ needs judgement; re-check these first if behaviour differs.
 - Test 18 (`tests/core_gaps.sflp`, `tb_core_gaps.sv`): `PASS core_gaps
   checks=1000`; a byte-reversed string encoding is caught. Full suite: 18 OK.
 
+## First Quartus results (2026-10-13, ristisana, Quartus 25.1std Lite, 5CEBA4F23C8)
+
+Synthesis only (`quartus_map`) of the prepared core, then a fit with all pins
+virtual. Projects: `E:\psx\core-map`, `core-map-spuoff`, `core-fit-spuoff`.
+
+| Run | Comb. ALUTs | Registers | Block mem bits | DSP | ALM estimate / fit |
+|---|---|---|---|---|---|
+| Full `PlayStation_core` (switches as pins) | 63,399 | 24,766 | 629,248 | 122 | ~37,874 (map estimate) |
+| SPU switches tied off as upstream Pocket does | 31,530 | 14,763 | 104,960 | 59 | ~19,749 (map); **fit fails: 2,022 LABs needed, 1,848 exist** |
+| Upstream author's native Pocket fit (18.1.1, whole top) | — | 13,386 | 2,406,963 | 58 | 17,060 / 18,480 ALMs |
+
+Largest blocks, full run (comb. ALUTs / registers / DSP): 24 x `dsp_ch` ~29,800 /
+~11,500 / 72; `R3000A` 15,770 (GTE 9,292 of it) / 5,206 / 42; `GraphicProcessingUnit`
+4,419 / 2,292 / 7; `PAD_controller` 5,565 / 2,197 / 0; `reverb` 1,204 / 999 / 3
+plus 512 Kbit. With the SPU off the DSP count matches native (59 vs 58), but the
+core alone already overflows the device without any Pocket top, while the native
+build fit everything at 92%. Two consequences:
+
+1. Sound requires replacing the 24 parallel voices (Q-L1-12, time-shared engine).
+2. sflc-generated logic is larger than native by roughly 20% or more; this needs
+   its own audit (READY packet Q-L1-13) before a full Pocket build can fit.
+
 ## Not established
 
 - `--register-banks` is still the experimental mode with the retained native
