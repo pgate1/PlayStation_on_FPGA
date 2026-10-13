@@ -1,5 +1,39 @@
 # Handoff: what the Claude session did while the root (Codex) agent was out
 
+## Codex continuation checkpoint (2026-10-13)
+
+Latest committed checkpoint: `1d438de` (`Support documented SFL join reductions`),
+after delegated boundary/packaging/lint commits through `f1c3612`. All are local
+and unpushed. The diagnostic Quartus project remains unbuilt and untested on
+Pocket hardware.
+
+The SFL+ author examples now establish bounded `join` ordering and accumulator
+placeholder semantics. `sflc.py` lowers the constrained one-assignment form,
+resolves method-qualified constant instance arrays alongside a same-named
+selector, handles constant slices, and permits unused empty stage declarations
+while rejecting attempts to generate them. The real
+`DigitalSignalProcessor.sflp` hierarchy translates with register-bank support;
+Icarus elaborates the 251 KB generated file when given its multiplier and ROM
+modules. This is compiler/elaboration evidence, not native equivalence or FPGA
+timing evidence. `PYTHONDONTWRITEBYTECODE=1 python3 -I tools/sflc/tests/run_tests.py`
+passes all 17 tests.
+
+Quartus host research is in `POCKET_QUARTUS_BUILD.md`. The user has a beefy
+Windows machine; if it is x86-64 and has about 40 GB free, that is currently the
+most direct first build host. The official Lite 18.1 Windows installer plus
+Cyclone V support and Update 1 are documented there. We do not yet have a way
+to access that machine or its specs, so no install/build has started. Oracle3
+was checked read-only and is unsuitable: ARM64, 11 GiB RAM, 15 GiB free, and no
+Quartus installation.
+
+For another provider, the bounded easy task is to review the Windows command
+sequence in `POCKET_QUARTUS_BUILD.md` against the official Quartus 18.1.1
+installer instructions and report any incorrect flags or paths; do not download
+or install software and do not change the prepared QPF/QSF. The hard next task
+is running the documented compile on the user's Windows host, then archiving
+logs/reports and checking timing. No source or build input changes are needed
+before that host result.
+
 Written 2026-10-13 ~00:55 local for the Codex agent returning after its usage
 limit reset (01:10). Read this, then `POCKET_CHECKPOINTS.md` and
 `POCKET_READY_TASKS.md`. Branch `pocket-work`; nothing has been pushed.
