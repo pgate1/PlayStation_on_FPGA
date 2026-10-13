@@ -247,6 +247,20 @@ class CompilerTests(unittest.TestCase):
                 with self.assertRaisesRegex(error, message):
                     self.compile_text(header + 'circuit bad {input d<8>; ' + body + '}')
 
+    def test_18_string_constants_and_empty_calls(self):
+        result = self.simulate('tb_core_gaps', {'core_gaps': sflc.translate(
+            ROOT/'tools/sflc/tests/core_gaps.sflp', assertions=False)},
+            ROOT/'tools/sflc/tests/tb_core_gaps.sv')
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+        self.assertIn('PASS core_gaps checks=1000', result.stdout)
+        bad = [
+            ('output s<8>; s = "";', NotImplementedError),
+            ('input a<8>, b<8>; output x<8>, y<8>; instrout r(x, y); r(a);', ValueError),
+        ]
+        for body, error in bad:
+            with self.subTest(body=body):
+                with self.assertRaises(error): self.compile_text('circuit bad {'+body+'}')
+
     def test_11_linker_rejects_bad_interfaces(self):
         header = 'declare child interface {input a<8>; output b<8>; instrin put(a); instrout ack;}'
         for body, error in [

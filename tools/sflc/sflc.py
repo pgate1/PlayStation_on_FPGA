@@ -86,6 +86,13 @@ class Scope:
                 raise NameError('undeclared ' + n[1])
             value = env[n[1]]
             return value if isinstance(value, tuple) else ('name', value)
+        if n[0] == 'str':
+            # "SCEI" is an 8-bit-per-character constant, first character in the
+            # most significant byte (CDROM_controller slices str<31:24> first).
+            text = n[1][1:-1] if n[1][:1] == '"' else n[1]
+            if not text or not all(32 <= ord(c) < 127 and c != '\\' for c in text):
+                raise NotImplementedError('string constant ' + n[1])
+            return ('const', '0x' + text.encode('ascii').hex().upper())
         if n[0] == 'index' and n[1][0] == 'name' and n[1][1] not in env:
             return ('name', self.instance_element(n[1][1], constant(self.expr(n[2], env)), env))
         if n[0] == 'dot':
@@ -529,7 +536,11 @@ class Gen:
         if name not in self.instructions or self.kinds[name] == 'instrin':
             raise ValueError('cannot invoke ' + name)
         args = self.instructions[name]
-        if len(args) != len(actuals): raise ValueError('argument count for ' + name)
+        # An empty call to a local instrout activates it without driving its
+        # formals; the SPU re-issues held requests this way (mem_read_req()).
+        # Other terminals keep the exact-count rule: no source evidence yet.
+        empty_ok = not actuals and self.kinds[name] == 'instrout'
+        if len(args) != len(actuals) and not empty_ok: raise ValueError('argument count for ' + name)
         self.drive(name, guards, "1'b1")
         for formal, actual in zip(args, actuals):
             self.drive(formal, guards, self.expr(actual, self.decls[formal]))

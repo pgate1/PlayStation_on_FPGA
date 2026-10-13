@@ -1,0 +1,16 @@
+// Constructs used by the real core that sflc gained in Q-L1-11:
+// string constants (CDROM_controller GetID) and an empty call that only
+// activates an argument-carrying control terminal (SoundProcessingUnit re-issue).
+circuit core_gaps {
+    input pick, a<8>, go, hold;
+    output s<32>, first<8>;
+    output req_a<8>;
+    instrout req(req_a);
+    sel str<32>;
+    if(pick) str = "FPGA";
+    else str = "SCEI";
+    s = str;
+    first = str<31:24>;
+    if(go) req(a);
+    if(hold) req();
+}

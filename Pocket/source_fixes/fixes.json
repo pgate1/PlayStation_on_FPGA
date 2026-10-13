@@ -1,0 +1,94 @@
+{
+  "schema": 1,
+  "about": "Minimal repairs applied to copies of the pristine upstream SFL+ sources so the PlayStation_core hierarchy translates. Upstream files in the repo root are never modified. Each fix pins the upstream SHA-256; a changed upstream file must be re-reviewed. In 'old'/'new', \\n stands for the file's own line ending (CRLF for every upstream .sflp). See docs/POCKET_CORE_TRANSLATION.md.",
+  "fixes": [
+    {
+      "id": "F1",
+      "file": "PlayStation_core.sflp",
+      "upstream_sha256": "1e08033f78c2446294d08df5a8fb797ed16024f9fa137fe8a533e089ec2b5c49",
+      "class": "A",
+      "reason": "output file_adrs<32> is declared twice in one interface (lines 114 and 116, identical). Drop the second copy.",
+      "evidence": "d2bf610 (2025-05-15) added the second declaration; both are byte-identical.",
+      "old": "\toutput file_adrs<32>;\n\tinstrout file_read_req, file_preload;\n\toutput file_adrs<32>;\n",
+      "new": "\toutput file_adrs<32>;\n\tinstrout file_read_req, file_preload;\n//\toutput file_adrs<32>; // Q-L1-11 F1: duplicate declaration\n"
+    },
+    {
+      "id": "F7",
+      "file": "PlayStation_core.sflp",
+      "upstream_sha256": "1e08033f78c2446294d08df5a8fb797ed16024f9fa137fe8a533e089ec2b5c49",
+      "class": "B",
+      "reason": "Line 757 'else : read_io_wait.do();' names a stage task without generate; it is the only such statement in all sources. The two sibling branches (747, 755) use 'generate read_io_wait.do();', and only that stage acknowledges this CPU read, so a no-op would leave the CPU waiting. Interpreted as generate.",
+      "evidence": "Present since 93fbb63 (2021, PSX_core rename); rg over all *.sflp finds no other bare stage-task call. The native meaning of the bare form is not recorded locally.",
+      "old": "\t\t\t\telse : read_io_wait.do();\n",
+      "new": "\t\t\t\telse : generate read_io_wait.do(); // Q-L1-11 F7: 'generate' missing upstream\n"
+    },
+    {
+      "id": "F2",
+      "file": "R3000A.sflp",
+      "upstream_sha256": "9d85c29225dc47731dc564be6bdde7a118ad9e9a70d37c82cbdf9b6e290b47c6",
+      "class": "A",
+      "reason": "cache_hit_reg is assigned once (line 195, column 0) and never declared or read anywhere. Comment the stray write out; no width is invented.",
+      "evidence": "Introduced by 32e1b76 (2025-11-30); the only reference in all sources.",
+      "old": "cache_hit_reg := 0b00;\n",
+      "new": "//cache_hit_reg := 0b00; // Q-L1-11 F2: undeclared, unread\n"
+    },
+    {
+      "id": "F3",
+      "file": "DMA_CDR.sflp",
+      "upstream_sha256": "0e23c85595c76dad3dac90bdc2afccf056de2ada40f7a3e750033c732e307a14",
+      "class": "A",
+      "reason": "dbg32 = dbg32_reg; is left over after 3fa770f renamed DMA_CDR's dbg32/dbg32_reg to dbg/dbg_reg. PlayStation_core reads cdr.dbg32 from CDROM_controller, not from DMA_CDR.",
+      "evidence": "3fa770f diff: -output dbg32<32>; -reg_wr dbg32_reg<32>; +output dbg<32>; +reg_wr dbg_reg<32>. PlayStation_core.sflp:113 'CDROM_controller cdr;', :173 'dbg32 = cdr.dbg32'.",
+      "old": "dbg32 = dbg32_reg;\n",
+      "new": "//dbg32 = dbg32_reg; // Q-L1-11 F3: stale after rename to dbg/dbg_reg\n"
+    },
+    {
+      "id": "F4",
+      "file": "drawRect.sflp",
+      "upstream_sha256": "bdc0d96deb11fe4b56ab5ef14bf8b78b07d3a3fc6323ecd47ee4f9523b0b13be",
+      "class": "A",
+      "reason": "under640 is assigned (line 85) and read (line 112) at circuit scope but never declared. Declare it as a one-bit sel, exactly as drawPoly.sflp:321 does; the assigned expression is a single bit select <10>.",
+      "evidence": "Added by d699e96 (2025-10-22) together with its use; drawPoly.sflp:321 'sel under640;' and :324 the same assignment.",
+      "old": "\tunder640 = (vx1-0b01010000000)<10>; // x < 640\n",
+      "new": "\tsel under640; // Q-L1-11 F4: declaration missing upstream (as drawPoly)\n\tunder640 = (vx1-0b01010000000)<10>; // x < 640\n"
+    },
+    {
+      "id": "F5",
+      "file": "GraphicProcessingUnit.sflp",
+      "upstream_sha256": "36f955ad9b2b9767b3e78d3842a1827eefcd5f970a6a47d895eb4175de4c1160",
+      "class": "B",
+      "reason": "GPU forwards texture_full to poly.texture_full(), but no published drawPoly.sflp has a texture_full terminal. Make GPU's texture_full a no-op; drawPoly behaves as published. The author's unpublished texture_full mode is therefore absent.",
+      "evidence": "5f4ab66 (2023-01-11) added the forwarding; texture_full/texture_thin never appear in drawPoly.sflp at 5f4ab66, 10244b8, a216a99, d699e96 or 8467f78. PlayStation_core.sflp:561 calls gpu.texture_full() every cycle.",
+      "old": "\tinstruct texture_full if(^dispW) poly.texture_full();\n",
+      "new": "//\tinstruct texture_full if(^dispW) poly.texture_full(); // Q-L1-11 F5: port absent in published drawPoly\n"
+    },
+    {
+      "id": "F6",
+      "file": "DMA_SPU.sflp",
+      "upstream_sha256": "23adeea76b9212c257eed9dcb7d193071ea6d7da4249fd47f3e1bd68b558f517",
+      "class": "B",
+      "reason": "dma_size = size_mul.con(bcr<31:16>, bcr<15:0>).dout<30:0> || 0b0 (BA*BS*2 halfwords) still uses the mul_u16 instance and a 32-bit bcr that 3fa770f removed/narrowed. Restore the three declarations from 3fa770f^ (declare mul_u16 interface, mul_u16 size_mul, 32-bit bcr; reset style 'reg' kept) and supply mul_u16.v from 2526d25^.",
+      "evidence": "3fa770f diff: -declare mul_u16 interface{...}; -mul_u16 size_mul; -reg_wr bcr<32>; +reg bcr<16>. 2526d25 (same day) deleted mul_u16.v; Pocket/source_fixes/mul_u16.v is that file byte-for-byte (git show 2526d25^:mul_u16.v).",
+      "old": "\ncircuit DMA_SPU\n{\n",
+      "new": "\n// Q-L1-11 F6: restored from 3fa770f^ (mul_u16.v from 2526d25^)\ndeclare mul_u16 interface\n{\n\tinput a<16>, b<16>;\n\toutput dout<32>;\n\tinstrin con;\n\tinstr_arg con(a, b);\n}\n\ncircuit DMA_SPU\n{\n"
+    },
+    {
+      "id": "F6b",
+      "file": "DMA_SPU.sflp",
+      "upstream_sha256": "23adeea76b9212c257eed9dcb7d193071ea6d7da4249fd47f3e1bd68b558f517",
+      "class": "B",
+      "reason": "Second half of F6: 32-bit bcr and the size_mul instance.",
+      "evidence": "See F6.",
+      "old": "\treg bcr<16>;\n",
+      "new": "\treg bcr<32>; // Q-L1-11 F6: 16 upstream, but bcr<31:16> is read\n\tmul_u16 size_mul; // Q-L1-11 F6\n"
+    }
+  ],
+  "extra_files": [
+    {
+      "file": "mul_u16.v",
+      "source": "Pocket/source_fixes/mul_u16.v",
+      "sha256": "dcd000a2d3dff5c7814450eab7b5b599208180075ea89b48ebf41b467be50327",
+      "evidence": "git show 2526d25^:mul_u16.v (upstream pgate1, deleted 2025-11-10)."
+    }
+  ]
+}

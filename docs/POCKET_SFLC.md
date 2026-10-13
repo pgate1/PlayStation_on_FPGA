@@ -40,6 +40,10 @@ See the [current handoff](POCKET_HANDOFF_2026-10-12.md) for exact runs and comma
   from the DSP/PlayStation_core declarations, not from a native oracle. A member-
   qualified `bus[i].port` resolves as an instance even if `bus` is also a selector;
   bare `bus[i]` retains normal signal/memory indexing.
+- String constants (`"SCEI"`: 8 bits per character, first character most
+  significant) and empty calls of a local argument-carrying `instrout`
+  (activation only). See [core translation](POCKET_CORE_TRANSLATION.md): the
+  full `PlayStation_core` now translates and elaborates from patched copies.
 - Single- and multiple-task stages, captured register arguments, common actions,
   state guards, `goto` and `finish`.
 - Header/interface linking, lexical instances, child control calls, child output
