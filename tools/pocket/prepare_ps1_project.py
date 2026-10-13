@@ -94,6 +94,12 @@ NEUTRAL_QSF = {'OPTIMIZATION_TECHNIQUE SPEED': 'OPTIMIZATION_TECHNIQUE BALANCED'
                'PRE_MAPPING_RESYNTHESIS ON': 'PRE_MAPPING_RESYNTHESIS OFF',
                'ADV_NETLIST_OPT_SYNTH_WYSIWYG_REMAP ON': 'ADV_NETLIST_OPT_SYNTH_WYSIWYG_REMAP OFF',
                'OPTIMIZATION_MODE "HIGH PERFORMANCE EFFORT"': 'OPTIMIZATION_MODE BALANCED'}
+# --qsf-profile area: appended after the template settings (later assignments win). Used for
+# every fitting 5CEBA4 build since r6; MUX_RESTRUCTURE ON alone saves about 1,800 ALMs (r16).
+AREA_QSF = ['OPTIMIZATION_MODE "AGGRESSIVE AREA"', 'OPTIMIZATION_TECHNIQUE AREA',
+            'PHYSICAL_SYNTHESIS_REGISTER_DUPLICATION OFF', 'PHYSICAL_SYNTHESIS_COMBO_LOGIC OFF',
+            'PHYSICAL_SYNTHESIS_REGISTER_RETIMING OFF', 'PHYSICAL_SYNTHESIS_ASYNCHRONOUS_SIGNAL_PIPELINING OFF',
+            'ALM_REGISTER_PACKING_EFFORT HIGH', 'MUX_RESTRUCTURE ON']
 CHECK_STUBS = '''// interface-only stubs for the Icarus structural check (never in the project)
 module sld_virtual_jtag #(parameter sld_auto_instance_index = "YES", sld_instance_index = 0,
   sld_ir_width = 1, sld_sim_action = "", sld_sim_n_scan = 0, sld_sim_total_length = 0,
@@ -184,7 +190,7 @@ def edit_qsf(text: str, device: str, profile: str) -> str:
 
 def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bool, timeout: int,
             device: str = '5CEBA4F23C8', profile: str = 'template', sdram_phase: int = 90,
-            view_ram_2k5: bool = False) -> None:
+            view_ram_2k5: bool = False, seed: int = 0) -> None:
     build_root = (ROOT / 'Pocket/build').resolve()
     destination = destination.absolute()
     if destination.is_symlink() or destination.exists():
@@ -303,6 +309,12 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
             out.write('# Q-L1-16 SDRAM pad registers (MIRLO64 platform/pocket/pocket.tcl)\n')
             for a, pin in SDRAM_IO:
                 out.write('set_instance_assignment -name %s ON -to %s\n' % (a, pin))
+            if profile == 'area':
+                out.write('# Q-L1-16 --qsf-profile area\n')
+                for a in AREA_QSF:
+                    out.write('set_global_assignment -name %s\n' % a)
+            if seed:
+                out.write('set_global_assignment -name SEED %d\n' % seed)
             for src in sources:
                 kind = 'SYSTEMVERILOG_FILE' if src.endswith('.sv') else 'VERILOG_FILE'
                 out.write('set_global_assignment -name %s %s\n' % (kind, src))
@@ -322,7 +334,7 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
             'schema': 1, 'purpose': 'Pocket PS1 project, Q-L1-14 milestone 1 (resource measurement)',
             'reference_revision': reference.REVISION, 'device': device, 'project': 'ap_core',
             'variant': {'shared_spu': True, 'reverb_in_spu_ram': reverb_in_spu_ram, 'options': options,
-                        'qsf_profile': profile, 'sdram_phase_deg': sdram_phase, 'view_ram_2k5': view_ram_2k5,
+                        'qsf_profile': profile, 'sdram_phase_deg': sdram_phase, 'view_ram_2k5': view_ram_2k5, 'seed': seed,
                         'information_only': device != '5CEBA4F23C8' or profile != 'template' or bool(options)},
             'fixes_sha256': sha256(FIXES.read_bytes()), 'applied': applied,
             'core_sources_applied': core_sources.get('applied'),
@@ -349,7 +361,8 @@ def main() -> int:
     parser.add_argument('--option', action='append', default=[],
                         help='extra pocket_top_fixes option (e.g. reverb-off; information only)')
     parser.add_argument('--device', default='5CEBA4F23C8', choices=['5CEBA4F23C8', '5CEBA9F23C8'])
-    parser.add_argument('--qsf-profile', default='template', choices=['template', 'neutral'])
+    parser.add_argument('--qsf-profile', default='template', choices=['template', 'neutral', 'area'])
+    parser.add_argument('--seed', type=int, default=0, help='fitter SEED (0: template default)')
     parser.add_argument('--sdram-phase', type=int, default=90, choices=[0, 90, 180, 270],
                         help='SDRAM clock phase in degrees of the SDRAM controller clock (clk2x)')
     parser.add_argument('--view-ram-2k5', action='store_true',
@@ -359,7 +372,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         prepare(args.output, args.reverb_in_spu_ram, args.option, args.check, args.timeout,
-                args.device, args.qsf_profile, args.sdram_phase, args.view_ram_2k5)
+                args.device, args.qsf_profile, args.sdram_phase, args.view_ram_2k5, args.seed)
     except (ValueError, OSError, subprocess.SubprocessError, reference.FetchError) as exc:
         print('ERROR: ' + str(exc), file=sys.stderr)
         return 1

@@ -241,11 +241,11 @@ First boot to the BIOS CD-player shell with pad input: r13. Current best fit: r1
 ```
 python3 -I tools/pocket/prepare_ps1_project.py --output Pocket/build/<new> \
   --reverb-in-spu-ram --option reverb-off --option no-jtag-debug \
-  --option core-40mhz --option video-60hz --sdram-phase 270 --view-ram-2k5
-# QSF additions used for every fitting build since r6 (not yet in the preparer):
-#   OPTIMIZATION_MODE "AGGRESSIVE AREA", OPTIMIZATION_TECHNIQUE AREA,
-#   PHYSICAL_SYNTHESIS_* OFF, ALM_REGISTER_PACKING_EFFORT HIGH,
-#   MUX_RESTRUCTURE ON (about -1,800 ALMs), SEED 4
+  --option core-40mhz --option video-60hz --sdram-phase 270 --view-ram-2k5 \
+  --qsf-profile area --seed 4
+# area profile: AGGRESSIVE AREA, technique AREA, physical synthesis off,
+# ALM_REGISTER_PACKING_EFFORT HIGH, MUX_RESTRUCTURE ON (about -1,800 ALMs).
+# Checked: same QSF settings and sources as the r19b build directory.
 ```
 
 r19b: 17,093 / 18,480 ALMs, 253 / 308 M10K, setup slack +0.97 ns (40 MHz core);
