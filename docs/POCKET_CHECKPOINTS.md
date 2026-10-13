@@ -5,6 +5,20 @@ new entries here record current ownership, discoveries and commits. Update after
 each bounded change or significant finding, and at least every 15 minutes during
 longer work. A checkpoint may explicitly report incomplete work or failing tests.
 
+## 2026-10-13 08:00 UTC — full PlayStation_core translates; shared Windows host lead
+
+- **Q-L1-11 done (Claude, `e501549`..`66dc2f6`):**
+  `tools/pocket/prepare_core_sources.py OUT --check` copies upstream sources,
+  applies 8 hash-pinned fixes from `Pocket/source_fixes/fixes.json` (upstream files
+  untouched), translates `PlayStation_core` (1.7 MB SV) and elaborates it with
+  Icarus. sflc gained string constants and empty local-instrout activation.
+  Compiler suite 18/18. Details and the A/B repair ledger: `POCKET_CORE_TRANSLATION.md`.
+- **ristisana:** the user made the Pocket PSX Claude session lead for the shared
+  Windows box. All Quartus jobs go through `E:\fpga-shared\qrun.ps1` (see
+  `tools/ristisana/RULES.txt` and the handoff). PS1 directories are `E:\psx\` only.
+- **Running:** first synthesis-only `quartus_map` of the full core on 5CEBA4F23C8
+  (`E:\psx\core-map`), started 10:58 local. No fit, timing or Pocket top yet.
+
 ## 2026-10-12 22:17 UTC — Claude handoff reviewed; diagnostic integration checkpoint
 
 **Implementation checkpoint: `a097ed4`** (local, not pushed). Later documentation
