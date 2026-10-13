@@ -104,6 +104,11 @@ same core with the SPU tied off needed 2,022 LABs, so full sound now costs about
 130 LABs (~1,300 ALMs); the remaining overflow is the general sflc overhead
 (Q-L1-13), not sound.
 
+**Milestone (2026-10-13 14:51):** with sflc after Q-L1-13 (dca809a) and source fix F8,
+the full `PlayStation_core` with full sound (shared SPU, reverb in its private buffer),
+virtual pins, **fits: 16,725 / 18,480 ALMs (91 %), 13,177 registers, 84 / 308 RAM
+blocks, 63 / 66 DSP**. About 1,750 ALMs remain for the Pocket top.
+
 Quartus 25.1 frontend pitfalls hit on the way (now avoided): a RAM with two
 asynchronous read ports crashes VRFX (`ConnectReadArrayPort` /
 `SplitDualReadRams`); nested `N'(signed'(...))` casts in nonblocking assignments

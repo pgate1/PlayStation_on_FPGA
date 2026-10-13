@@ -5,6 +5,16 @@ new entries here record current ownership, discoveries and commits. Update after
 each bounded change or significant finding, and at least every 15 minutes during
 longer work. A checkpoint may explicitly report incomplete work or failing tests.
 
+## 2026-10-13 12:00 UTC — full core with sound FITS; BIOS boot simulation running
+
+- Source fix F8 (PAD_controller, found by Q-L1-13 round 2) + sflc dca809a: full core with
+  shared SPU and reverb, virtual pins: 16,725/18,480 ALMs, 84 RAM blocks, 63/66 DSP.
+- Q-L1-13: compiler at its floor for this source (round 2: CSE only); optional GTE-d
+  single-port (~500 ALMs) held back (relies on a cross-module CPU-stall invariant).
+- Q-L1-15: Verilator BIOS boot simulation (`Pocket/sim/`) runs SCPH-1001 v2.2 from the
+  user's backup (never in repo); CPU executes the BIOS; long run in progress.
+- Q-L1-14 (Pocket top assembly, milestone 1) running.
+
 ## 2026-10-13 09:45 UTC — sound fits area-wise; core 2% over; Pocket top next
 
 - Q-L1-12 (Claude): time-shared SPU engine `Pocket/spu/` (eb67c92, a6e781b), exact
