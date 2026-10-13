@@ -75,6 +75,13 @@ set_clock_groups -asynchronous \\
           ic|mpll|altera_pll_i|general[3].gpll~PLL_OUTPUT_COUNTER|divclk \\
           ic|mpll|altera_pll_i|general[4].gpll~PLL_OUTPUT_COUNTER|divclk }
 '''
+# SDRAM pad registers in the IOEs, as in MIRLO64's platform/pocket/pocket.tcl (whose sdr_phy
+# this build uses); without them the fitter places the pad registers in the fabric.
+SDRAM_IO = ([('FAST_OUTPUT_REGISTER', 'dram_a[%d]' % i) for i in range(13)] +
+            [('FAST_OUTPUT_REGISTER', p) for p in ('dram_ba[0]', 'dram_ba[1]', 'dram_dqm[0]', 'dram_dqm[1]',
+                                                   'dram_ras_n', 'dram_cas_n', 'dram_we_n')] +
+            [(a, 'dram_dq[%d]' % i) for a in ('FAST_OUTPUT_REGISTER', 'FAST_INPUT_REGISTER',
+                                             'FAST_OUTPUT_ENABLE_REGISTER') for i in range(16)])
 # cram1 pin locations Quartus 25.1 reports as illegal (171016) on 5CEBA9F23C8
 A9_ILLEGAL_PINS = ['cram1_a[16]', 'cram1_a[17]', 'cram1_a[18]', 'cram1_a[19]', 'cram1_a[20]',
                    'cram1_a[21]', 'cram1_clk', 'cram1_ce0_n', 'cram1_we_n', 'cram1_ub_n', 'cram1_lb_n',
@@ -175,7 +182,7 @@ def edit_qsf(text: str, device: str, profile: str) -> str:
 
 
 def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bool, timeout: int,
-            device: str = '5CEBA4F23C8', profile: str = 'template') -> None:
+            device: str = '5CEBA4F23C8', profile: str = 'template', sdram_phase: int = 90) -> None:
     build_root = (ROOT / 'Pocket/build').resolve()
     destination = destination.absolute()
     if destination.is_symlink() or destination.exists():
@@ -194,7 +201,10 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
     if set(options) - known:
         raise ValueError('unknown option(s): ' + ', '.join(sorted(set(options) - known)))
     chosen = [*spec['fixes'], *[o for o in spec.get('options', []) if o['option'] in options]]
-    pll = PLL_40 if 'core-40mhz' in options else PLL
+    pll = list(PLL_40 if 'core-40mhz' in options else PLL)
+    # SDRAM clock (sdr_phy clk2x_90) phase in degrees of clk2x; MIRLO64 uses 180 at 125 MHz
+    period_ps = round(1e6 / float(pll[2][0].split()[0]))
+    pll[2] = (pll[2][0], '%d ps' % (period_ps * sdram_phase // 360))
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.ps1-stage-', dir=destination.parent) as tmp:
@@ -276,6 +286,9 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
             for a in ('PLL_COMPENSATION_MODE NORMAL', 'PLL_CHANNEL_SPACING "0.0 KHz"',
                       'PLL_AUTO_RESET OFF', 'PLL_BANDWIDTH_PRESET AUTO'):
                 out.write('set_instance_assignment -name %s -to "*main_pll_0002*|altera_pll:altera_pll_i*|*"\n' % a)
+            out.write('# Q-L1-16 SDRAM pad registers (MIRLO64 platform/pocket/pocket.tcl)\n')
+            for a, pin in SDRAM_IO:
+                out.write('set_instance_assignment -name %s ON -to %s\n' % (a, pin))
             for src in sources:
                 kind = 'SYSTEMVERILOG_FILE' if src.endswith('.sv') else 'VERILOG_FILE'
                 out.write('set_global_assignment -name %s %s\n' % (kind, src))
@@ -295,7 +308,7 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
             'schema': 1, 'purpose': 'Pocket PS1 project, Q-L1-14 milestone 1 (resource measurement)',
             'reference_revision': reference.REVISION, 'device': device, 'project': 'ap_core',
             'variant': {'shared_spu': True, 'reverb_in_spu_ram': reverb_in_spu_ram, 'options': options,
-                        'qsf_profile': profile,
+                        'qsf_profile': profile, 'sdram_phase_deg': sdram_phase,
                         'information_only': device != '5CEBA4F23C8' or profile != 'template' or bool(options)},
             'fixes_sha256': sha256(FIXES.read_bytes()), 'applied': applied,
             'core_sources_applied': core_sources.get('applied'),
@@ -323,12 +336,14 @@ def main() -> int:
                         help='extra pocket_top_fixes option (e.g. reverb-off; information only)')
     parser.add_argument('--device', default='5CEBA4F23C8', choices=['5CEBA4F23C8', '5CEBA9F23C8'])
     parser.add_argument('--qsf-profile', default='template', choices=['template', 'neutral'])
+    parser.add_argument('--sdram-phase', type=int, default=90, choices=[0, 90, 180, 270],
+                        help='SDRAM clock phase in degrees of the SDRAM controller clock (clk2x)')
     parser.add_argument('--check', action='store_true')
     parser.add_argument('--timeout', type=int, default=1800)
     args = parser.parse_args()
     try:
         prepare(args.output, args.reverb_in_spu_ram, args.option, args.check, args.timeout,
-                args.device, args.qsf_profile)
+                args.device, args.qsf_profile, args.sdram_phase)
     except (ValueError, OSError, subprocess.SubprocessError, reference.FetchError) as exc:
         print('ERROR: ' + str(exc), file=sys.stderr)
         return 1
