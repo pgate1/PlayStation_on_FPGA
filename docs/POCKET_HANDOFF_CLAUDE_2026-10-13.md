@@ -2,9 +2,9 @@
 
 ## Codex continuation checkpoint (2026-10-13)
 
-Latest root checkpoint is being prepared after `1d438de` (`Support documented
-SFL join reductions`), following delegated boundary/packaging/lint commits
-through `f1c3612`. The compiler commits are local and unpushed. Quartus now
+Latest root checkpoint: `d631467` (`Build and package Pocket diagnostic
+bitstream`), after compiler checkpoint `1d438de` and delegated boundary,
+packaging and lint commits through `f1c3612`. All commits are local and unpushed. Quartus now
 builds the isolated diagnostic image on `ristisana`; the new `.rbf_r` package
 is ready for its first physical Pocket test. No Pocket hardware observations
 exist yet.
