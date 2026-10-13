@@ -159,7 +159,7 @@ module spu_dsp_shared (
     wire  [17:0] rvb_A;
     wire  [15:0] rvb_Dout;
     wire         rvb_read_req, rvb_write_req;
-    logic [7:0]  doing;
+    logic [7:0]  doing, resume;
     always @* begin
         case (rvb_add_L[20:15])
             6'b111110: rvb_clip_L = 16'h8000;
@@ -298,13 +298,21 @@ module spu_dsp_shared (
     end
 
     always @(posedge m_clock) begin
-        if (p_reset) begin doing <= '0; hold <= 1'b0; hold_head <= 1'b0; hold_adrs <= '0; end
+        if (p_reset) begin doing <= '0; resume <= '0; hold <= 1'b0; hold_head <= 1'b0; hold_adrs <= '0; end
         else begin
             if (dv && !hold && want && !ack) begin
                 hold <= 1'b1; hold_head <= new_head; hold_adrs <= new_adrs;
             end
             if (ack && dv) hold <= 1'b0;
-            if (ack || (!read_req && !write_req)) doing <= doing == 8'd24 ? 8'd0 : doing + 8'd1;
+            // Rotation as in the original DSP (0..23 voices, 24 reverb), except that a
+            // pending reverb access is served next: voices have a two-word prefetch,
+            // the reverb pass (one access per step) has a hard 22.05 kHz deadline.
+            if (ack || (!read_req && !write_req)) begin
+                if (doing == 8'd24) doing <= resume;
+                else if (rvb_read_req || rvb_write_req || doing == 8'd23) begin
+                    doing <= 8'd24; resume <= doing == 8'd23 ? 8'd0 : doing + 8'd1;
+                end else doing <= doing + 8'd1;
+            end
         end
     end
 

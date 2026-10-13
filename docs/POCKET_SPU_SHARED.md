@@ -62,8 +62,34 @@ vvp -n $SC/spu.vvp            # add -P tb_spu_shared.INTPL=1 for interpolation s
 | Run | Result |
 |---|---|
 | 200 ticks, interpolation off | `PASS spu_shared exact`: 1,176 per-voice output checks (L and R), 1,200 ADSR readbacks, 0 differences |
-| 1,600 ticks, interpolation off | 9,576 output checks, 9,600 ADSR readbacks: **1 differing sample** (voice 14, tick 1331, L only, max 120); under investigation (suspected parameter-write timing window) |
+| 1,600 ticks, interpolation off | 9,576 output checks, 9,600 ADSR readbacks: 1 differing sample (voice 14, tick 1331): explained below |
 | 1,600 ticks, interpolation on | statistics only: RMS difference 636, max 17,721 (16-bit scale), from the different interpolation shape |
+
+The one 1,600-tick difference: voice 14 was keyed on again at tick 1333 while the
+engine was still finishing tick 1331 for it. Key-on side effects that must reach
+the fetch unit at once (prefetch flush, restart) happened before the engine
+computed that older sample, so the last pre-retrigger sample of that voice
+differed. Known, deliberate limitation (a voice that is being restarted anyway).
+
+## Reverb work area in SPU RAM (`--reverb-in-spu-ram`, option O1/O1b)
+
+Upstream already contains this path; `#define USE_BUF_RAM` selected a private
+32K x 16 buffer (64 RAM blocks) instead. O1 removes the define, O1b drops the reset
+generate of the buffer clear (no buffer to clear).
+
+- `Pocket/spu/tb_reverb_equiv.sv`: buffer build vs SPU-RAM build of the unchanged
+  reverb, identical inputs, after the buffer build's 32,768-cycle reset clear:
+  `PASS reverb_equiv` 400 passes (399 with non-zero output), 0 differences, with
+  memory latency 2..15 and 2..40 cycles.
+- In the shared DSP the reverb originally got 1 of 25 memory slots; at 2..40 cycle
+  latency it fell behind (71 of 100 passes). The engine now serves a pending reverb
+  access next (voices have a two-word prefetch): `tb_reverb_mem.sv` 99/100 passes
+  done, no backlog, at 2..15 and 2..40 cycles; exact voice test still PASS.
+- Upstream quirk noted: during the buffer clear after reset (~0.65 ms) the buffer
+  build's reverb results are corrupted; the SPU-RAM build has no such window.
+
+Cost: about 36 SPU-RAM accesses per 22.05 kHz pass (~0.8 M/s). On the Pocket this
+competes with CPU/VRAM on the shared SDRAM unless SPU RAM moves to a PSRAM chip.
 
 ## Quartus (ristisana, 25.1std Lite, 5CEBA4F23C8, virtual pins)
 
@@ -85,8 +111,7 @@ crash `VeriTypeCast::Evaluate`.
 
 ## Open
 
-- The single 1,600-tick difference (above).
-- Reverb buffer (64 RAM blocks) should move to SPU RAM in SDRAM as on the real PS1;
-  the RAM blocks are needed elsewhere in a full Pocket build.
+- Default for reverb placement (option exists and is verified; decide with the
+  Pocket memory layout, ideally SPU RAM on PSRAM).
 - Audio output to the Pocket (44.1 -> 48 kHz, I2S): Q-L2-12.
 - No hardware test yet.
