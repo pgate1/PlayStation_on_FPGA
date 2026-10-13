@@ -29,11 +29,17 @@ See the [current handoff](POCKET_HANDOFF_2026-10-12.md) for exact runs and comma
   Inactive data is not universally zero; see the qualification below.
 - Bounded compile-time `par/any/alt` generators with independent iteration locals.
   Bounds are nonnegative, start-inclusive/end-exclusive, limited to 4096 cumulative
-  iterations per circuit. `join` and runtime bounds remain unsupported.
+  iterations per circuit. A bounded `join` with one assignment and one direct
+  self-reference lowers to one binary reduction expression; accumulator on the
+  right preserves ascending term order, while accumulator on the left reverses it.
+  This matches both concrete expansions in the author's [SFL+ examples](https://pgate1.at-ninja.jp/memo/SFLP/).
+  Other join shapes, empty joins and runtime bounds remain unsupported.
   Constant-indexed instance arrays (`ch[i]` inside a generator) resolve to a
   declared `ch_XX` (uppercase hex; digit count taken from the declared names, the
   element must exist, mixed digit counts are an error). The naming rule is inferred
-  from the DSP/PlayStation_core declarations, not from a native oracle.
+  from the DSP/PlayStation_core declarations, not from a native oracle. A member-
+  qualified `bus[i].port` resolves as an instance even if `bus` is also a selector;
+  bare `bus[i]` retains normal signal/memory indexing.
 - Single- and multiple-task stages, captured register arguments, common actions,
   state guards, `goto` and `finish`.
 - Header/interface linking, lexical instances, child control calls, child output
@@ -43,7 +49,7 @@ See the [current handoff](POCKET_HANDOFF_2026-10-12.md) for exact runs and comma
   wires, bit reversal and sign extension including constants and expressions.
 
 The language author's [SFL+ notes](https://pgate1.at-ninja.jp/memo/SFLP/)
-provide the source semantics for register reset variants, parallel assignments,
+provide source semantics for join ordering, register reset variants, parallel assignments,
 local instruction arguments, lexical locals, memory initialization and stages.
 The old [sfl2vl probe artifacts](POCKET_P00_TOOLCHAIN.md) remain the independent
 oracle for the already-tested combinational subset. The implementation and

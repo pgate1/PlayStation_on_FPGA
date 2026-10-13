@@ -34,6 +34,15 @@ def constant(n):
         return int(n[1].replace('_', ''), 0)
     if k == 'paren':
         return constant(n[1])
+    if k == 'slice':
+        value = constant(n[1])
+        high = constant(n[2])
+        low = high if n[3] is None else constant(n[3])
+        if min(high, low) < 0:
+            raise ValueError('negative constant slice bound')
+        if high < low:
+            raise NotImplementedError('reversed constant slice')
+        return (value >> low) & ((1 << (high - low + 1)) - 1)
     if k == 'un' and n[1] == '-':
         return -constant(n[2])
     if k == 'chain':
@@ -81,11 +90,25 @@ class Scope:
             return ('name', self.instance_element(n[1][1], constant(self.expr(n[2], env)), env))
         if n[0] == 'dot':
             member = n[2]
+            owner = n[1]
+            # `ch[i].port` is unambiguous as a component reference even when
+            # `ch` is also declared as a selector. Bare `ch[i]` still follows
+            # ordinary signal/memory indexing rules; this contextual rule is
+            # needed by SFL+ designs that use the component prefix as a bus.
+            if owner[0] == 'index' and owner[1][0] == 'name':
+                base = owner[1][1]
+                try:
+                    instance = self.instance_element(base, constant(self.expr(owner[2], env)), env)
+                except NameError as error:
+                    if str(error) != 'undeclared ' + base:
+                        raise
+                else:
+                    owner = ('name', instance)
             # Local instruction calls return a named signal in the same scope.
-            if n[1][0] == 'call' and n[1][1][0] == 'name':
+            if owner[0] == 'call' and owner[1][0] == 'name':
                 if member not in env: raise NameError('undeclared call result ' + member)
                 member = env[member]
-            return ('dot', self.expr(n[1], env), member)
+            return ('dot', self.expr(owner, env), member)
         return tuple(self.expr(x, env) if isinstance(x, tuple) else
                      [self.expr(y, env) for y in x] if isinstance(x, list) else x
                      for x in n)
@@ -167,11 +190,59 @@ class Scope:
         for value in range(start, end):
             yield dict(env, **{variable: ('num', str(value))})
 
+    def join(self, gen, body, env, line):
+        """Lower the documented SFL+ join reduction to one expression.
+
+        The author's SFL+ examples specify that ``x = item[i] || x`` expands
+        in ascending i order, while ``x = x || item[i]`` expands in reverse
+        order. The accumulator is a placeholder, not an additional input.
+        Restrict this lowering to one assignment with one binary self-reference
+        per iteration; rejecting other shapes is safer than guessing.
+        """
+        if len(body) != 1 or body[0][0] != 'assign':
+            raise NotImplementedError('join requires one assignment body')
+        expanded = [self.action(body[0], iteration)
+                    for iteration in self.generator_envs(gen, env)]
+        if not expanded:
+            raise ValueError('empty join generator')
+        target = expanded[0][2]
+        if target[0] != 'name':
+            raise NotImplementedError('join assignment target must be a signal')
+        operator = None
+        side = None
+        terms = []
+        for item in expanded:
+            if item[0] != 'assign' or item[1] not in ('=', ':=') or item[2] != target:
+                raise NotImplementedError('join iterations must assign the same signal')
+            rhs = item[3]
+            while rhs[0] == 'paren':
+                rhs = rhs[1]
+            if rhs[0] != 'chain' or len(rhs[2]) != 1:
+                raise NotImplementedError('join requires a binary expression')
+            operands = rhs[1]
+            op = rhs[2][0]
+            if op not in ('||', '+', '-', '|', '&', '@'):
+                raise NotImplementedError('join operator ' + op)
+            hits = [idx for idx, operand in enumerate(operands) if operand == target]
+            if len(hits) != 1:
+                raise NotImplementedError('join requires one direct self-reference')
+            if operator is None:
+                operator, side = op, hits[0]
+            elif operator != op or side != hits[0]:
+                raise NotImplementedError('join operator/reference position changes by iteration')
+            terms.append(operands[1 - hits[0]])
+        if side == 0:
+            terms.reverse()
+        rhs = ('chain', [terms[0], *terms[1:]], [operator] * (len(terms) - 1))
+        return ('assign', expanded[0][1], target, rhs, line)
+
     def action(self, a, env):
         k = a[0]
-        if k in ('par', 'join'):
-            if k == 'join':
-                raise NotImplementedError(k + ' generator')
+        if k == 'join':
+            if a[1] is None:
+                raise NotImplementedError('join requires constant bounds')
+            return self.join(a[1], a[2], env, a[-1])
+        if k == 'par':
             if a[1] is not None:
                 return ('par', None, [('par', None, self.block(a[2], iteration), a[-1])
                                      for iteration in self.generator_envs(a[1], env)], a[-1])
@@ -518,6 +589,8 @@ class Gen:
             for x in a[2]: self.action(x, guards, stage)
         elif k == 'generate':
             st = self.stages[a[1]]
+            if not st['body']:
+                raise ValueError('generate of stage without body: ' + a[1])
             task = st['tasks'].get(a[2])
             if task is None or len(a[3]) != len(task['args']):
                 raise ValueError('stage task/argument mismatch')
@@ -598,8 +671,6 @@ class Gen:
                 self.add_decl(state, 'reg', max(1, (len(states) - 1).bit_length()))
                 self.resets[state] = str(states.index(first[0])); st['state'] = state
             elif first: raise ValueError('first_state without state body')
-        for st in self.stages.values():
-            if not st['body']: raise ValueError('stage declaration without body')
         for item in body: self.action(item, [])
         return self.emit()
 

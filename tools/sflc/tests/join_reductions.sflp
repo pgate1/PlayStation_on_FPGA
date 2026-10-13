@@ -1,0 +1,20 @@
+circuit join_reductions {
+    input bits<4>;
+    output ascending<4>, descending<4>, accumulated<4>;
+    reg_wr accumulator<4>;
+
+    // These match the author's documented SFL+ join examples.
+    join(i=0;i<4;i++){
+        ascending = bits<i> || ascending;
+    }
+    join(i=0;i<4;i++){
+        descending = descending || bits<i>;
+    }
+
+    // The self-reference contributes the previous register value once;
+    // generated literals form a single sum in the next-state expression.
+    join(i=0;i<4;i++){
+        accumulator := accumulator + i;
+    }
+    accumulated = accumulator;
+}

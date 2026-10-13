@@ -218,6 +218,21 @@ class CompilerTests(unittest.TestCase):
                                ROOT/'tools/sflc/tests/tb_instance_arrays.sv')
         self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
         self.assertIn('PASS instance_arrays checks=4032', result.stdout)
+
+    def test_17_documented_join_reductions(self):
+        generated = sflc.translate(ROOT/'tools/sflc/tests/join_reductions.sflp', assertions=True)
+        result = self.simulate('tb_join_reductions', {'join_reductions': generated},
+                               ROOT/'tools/sflc/tests/tb_join_reductions.sv')
+        self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+        self.assertIn('PASS join_reductions checks=34', result.stdout)
+        unsupported = (
+            ('input a; output x; join(i=0;i<4;i++){ x = a; }', NotImplementedError),
+            ('input a; output x; join(i=0;i<0;i++){ x = a || x; }', ValueError),
+            ('input a; output x; join(i=0;i<4;i++){ x = a || x; a = a; }', NotImplementedError),
+        )
+        for body, error in unsupported:
+            with self.subTest(body=body), self.assertRaises(error):
+                self.compile_text('circuit bad {'+body+'}')
         header = 'declare leaf interface {input x<8>; output q<8>; instrin con(x);}\n'
         bad = [
             ('leaf s_0, s_2; par(i=0;i<2;i++){ s[i].con(d); }', NameError, 'undeclared instance s_1'),

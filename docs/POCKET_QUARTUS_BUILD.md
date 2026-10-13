@@ -19,7 +19,44 @@ still says compile `not-run`, timing review `pending`, and Pocket hardware
 The preparation utility prints the required compile entrypoint; this document
 does not add an APF wrapper or alter the prepared project.
 
-## Recommended host: x86-64 Linux self-hosted machine
+## Windows workstation
+
+An x86-64 Windows workstation is the most direct first host if it has at
+least 40 GB free disk. The official Quartus Lite 18.1 Windows page lists the
+combined 5.8 GB package with device support, separately lists the 1.1 GB
+Cyclone V package, and provides the 5.1 GB 18.1 Update 1 package. The package
+page's listed installed minimum is 14 GB; the 40 GB allowance includes download
+staging and project build output. Use Altera's [official Windows download page](https://www.altera.com/downloads/fpga-development-tools/quartus-prime-lite-edition-design-software-version-18-1-windows)
+and its installer instructions. The QSF target remains `5CEBA4F23C8`, and no
+Windows Quartus run has been measured or verified yet.
+
+Install Quartus Lite 18.1 with Cyclone V device support, then apply Update 1 to
+match the QSF's recorded 18.1.1 release. The combined package includes device
+support; avoid installing the separate Cyclone V files twice. The update page
+directs users to extract the archive and run its `.exe`; installer prompts and
+exact locations depend on the chosen install options. No silent-install flags
+are claimed here. The Lite edition does not require a license file, but the
+installer's terms and download consent still apply.
+
+On the Windows workstation, from a checkout, fetch the pinned reference cache,
+prepare and audit a fresh project, then compile from the QPF directory:
+
+```powershell
+py -3 tools/apf/fetch_diagnostic_reference.py --download
+py -3 tools/pocket/prepare_diagnostic.py --output Pocket/build/diagnostic-win
+py -3 tools/pocket/check_diagnostic_project.py Pocket/build/diagnostic-win
+Push-Location Pocket/build/diagnostic-win
+& 'C:\intelFPGA_lite\18.1\quartus\bin64\quartus_sh.exe' --version
+& 'C:\intelFPGA_lite\18.1\quartus\bin64\quartus_sh.exe' --flow compile ap_core
+Pop-Location
+```
+
+Adjust the executable path to the installer's chosen directory. The commands
+above are a documented invocation, not a build result. Retain the compile logs
+and reports described below; any fitter success still needs TimeQuest review and
+the separate physical Pocket test.
+
+## Linux alternative: x86-64 self-hosted machine
 
 The most practical first build is on a persistent x86-64 Linux workstation or
 VM with at least **40 GB free disk space before installation**. That is a
