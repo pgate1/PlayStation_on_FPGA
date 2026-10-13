@@ -2,10 +2,12 @@
 
 ## Codex continuation checkpoint (2026-10-13)
 
-Latest committed checkpoint: `1d438de` (`Support documented SFL join reductions`),
-after delegated boundary/packaging/lint commits through `f1c3612`. All are local
-and unpushed. The diagnostic Quartus project remains unbuilt and untested on
-Pocket hardware.
+Latest root checkpoint is being prepared after `1d438de` (`Support documented
+SFL join reductions`), following delegated boundary/packaging/lint commits
+through `f1c3612`. The compiler commits are local and unpushed. Quartus now
+builds the isolated diagnostic image on `ristisana`; the new `.rbf_r` package
+is ready for its first physical Pocket test. No Pocket hardware observations
+exist yet.
 
 The SFL+ author examples now establish bounded `join` ordering and accumulator
 placeholder semantics. `sflc.py` lowers the constrained one-assignment form,
@@ -18,21 +20,28 @@ modules. This is compiler/elaboration evidence, not native equivalence or FPGA
 timing evidence. `PYTHONDONTWRITEBYTECODE=1 python3 -I tools/sflc/tests/run_tests.py`
 passes all 17 tests.
 
-Quartus host research is in `POCKET_QUARTUS_BUILD.md`. The user has a beefy
-Windows machine; if it is x86-64 and has about 40 GB free, that is currently the
-most direct first build host. The official Lite 18.1 Windows installer plus
-Cyclone V support and Update 1 are documented there. We do not yet have a way
-to access that machine or its specs, so no install/build has started. Oracle3
-was checked read-only and is unsuitable: ARM64, 11 GiB RAM, 15 GiB free, and no
-Quartus installation.
+Quartus details and first-build evidence are recorded in
+`POCKET_DIAGNOSTIC_BUILD.md`. `ristisana` is 64-bit Windows with Ryzen 7 5800X,
+8 cores, and 256 GB free. Quartus Lite 25.1std.0 Build 1129 compiled the
+Cyclone V `5CEBA4F23C8` project in 3:12, with 0 errors and 184 warnings. The
+fit used 415/18,480 ALMs, 734 registers, 2 RAM blocks and one PLL. Constrained
+setup slack stayed positive (minimum +5.425 ns), but two internal audio clocks,
+four inputs and 22 outputs are unconstrained. This is not timing signoff.
 
-For another provider, the bounded easy task is to review the Windows command
-sequence in `POCKET_QUARTUS_BUILD.md` against the official Quartus 18.1.1
-installer instructions and report any incorrect flags or paths; do not download
-or install software and do not change the prepared QPF/QSF. The hard next task
-is running the documented compile on the user's Windows host, then archiving
-logs/reports and checking timing. No source or build input changes are needed
-before that host result.
+Local ignored artifacts: `Pocket/build/diagnostic-quartus-25.1/output_files/`
+contains the RBF, SOF and reports; `Pocket/build/diagnostic-package-25.1/`
+contains `pgate1.PocketDiag_0.1.0_20261013.zip`. `.rbf_r` byte reversal,
+byte-count preservation, seven JSON files, and ZIP entries were checked. The
+package is diagnostic only and has not been installed on a Pocket. The user
+should extract its `Cores/pgate1.PocketDiag/` path at the SD-card root and
+record screen/button/reset observations in `POCKET_DIAGNOSTIC_TEST.md`.
+
+Easy follow-up for another provider: independently review the seven diagnostic
+JSON definitions produced by `tools/pocket/prepare_diagnostic_package.py`
+against Analogue's published schema, without changing the live PlayStation
+package. Hard follow-up after hardware testing: investigate and resolve the
+unconstrained paths and inherited SDC clock-name warnings, then decide whether
+the QSF's Quartus 18.1.1 provenance warrants a second build under that release.
 
 Written 2026-10-13 ~00:55 local for the Codex agent returning after its usage
 limit reset (01:10). Read this, then `POCKET_CHECKPOINTS.md` and

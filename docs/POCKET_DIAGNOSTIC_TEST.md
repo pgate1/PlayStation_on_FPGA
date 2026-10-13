@@ -3,26 +3,28 @@
 This card applies to the isolated `diagnostic_core` described in
 [POCKET_DIAGNOSTIC_INPUTS.md](POCKET_DIAGNOSTIC_INPUTS.md). It checks only the
 diagnostic display and button response; it says nothing about PS1 gameplay or
-frame rate. No fitted diagnostic bitstream is available yet. **All hardware
-observations below are NOT RUN.**
+frame rate. A candidate diagnostic bitstream has been built and packaged;
+**all physical hardware observations below are still NOT RUN.**
 
 ## Build and device record
 
 | Field | Record |
 |---|---|
-| Bitstream SHA-256 | ______________________________ |
-| Build commit | ______________________________ |
-| Quartus version | ______________________________ |
-| Fit/timing report filename(s) | ______________________________ |
+| Bitstream SHA-256 (`.rbf_r`) | `5ed526b0411cf8e35874a2589ecbaf7e105b4629d3b621bdf896a57de26e0fc3` |
+| Build commit | `cd190b5` (source hashes are recorded in the ignored build manifest) |
+| Quartus version | Quartus Prime Lite 25.1std.0 Build 1129 |
+| Fit/timing report filename(s) | `Pocket/build/diagnostic-quartus-25.1/output_files/ap_core.fit.rpt`; `ap_core.sta.rpt` |
 | Pocket firmware version | ______________________________ |
 | Board / display setup | ______________________________ |
 | Operator / date | ______________________________ |
 
-Do not fill these from the cached APF reference project or its historical QSF
-version. Record values from the actual diagnostic build and test. Use the
+The fit completed with 0 errors, but TimeQuest reported unconstrained clocks
+and I/O paths; this image is for a diagnostic trial, not timing signoff. Do not
+fill the remaining fields from the cached APF reference project or its
+historical QSF version. Record values from the actual physical test. Use the
 project's documented development loading procedure; this card does not specify
-a menu path or packaging command. The wrapper must route face-A (`cont1_key[4]`)
-to the diagnostic button input before that response can be tested.
+a menu path. The wrapper routes face-A (`cont1_key[4]`) to the diagnostic
+button input.
 
 ## Expected screen
 

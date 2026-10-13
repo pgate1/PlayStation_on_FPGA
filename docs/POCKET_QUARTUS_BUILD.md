@@ -12,31 +12,37 @@ compatible in principle: Altera's archived Lite 18.1 Linux page lists the
 Cyclone V support package, while the project QSF names the exact target.
 [Altera download page for Quartus Lite 18.1 on Linux](https://www.altera.com/downloads/fpga-development-tools/quartus-prime-lite-edition-design-software-version-18-1-linux)
 
-This establishes tool/device availability, not build success. `quartus_sh` is
-not available in the current workspace, and the prepared project's manifest
-still says compile `not-run`, timing review `pending`, and Pocket hardware
-`not-run`. No bitstream, fit result, or timing result is established here.
-The preparation utility prints the required compile entrypoint; this document
-does not add an APF wrapper or alter the prepared project.
+The first Windows build is now recorded in
+[the diagnostic build report](POCKET_DIAGNOSTIC_BUILD.md). Quartus Prime Lite
+25.1std.0 Build 1129 compiled the isolated diagnostic project successfully,
+but inherited timing constraints leave some clocks and I/O paths unconstrained.
+The generated image is a diagnostic candidate; no PS1 logic or Pocket hardware
+behavior was tested.
 
-## Windows workstation
+## Windows workstation used for the first build
 
-An x86-64 Windows workstation is the most direct first host if it has at
-least 40 GB free disk. The official Quartus Lite 18.1 Windows page lists the
-combined 5.8 GB package with device support, separately lists the 1.1 GB
-Cyclone V package, and provides the 5.1 GB 18.1 Update 1 package. The package
-page's listed installed minimum is 14 GB; the 40 GB allowance includes download
-staging and project build output. Use Altera's [official Windows download page](https://www.altera.com/downloads/fpga-development-tools/quartus-prime-lite-edition-design-software-version-18-1-windows)
-and its installer instructions. The QSF target remains `5CEBA4F23C8`, and no
-Windows Quartus run has been measured or verified yet.
+The first build ran on `ristisana`, a 64-bit Windows host with a Ryzen 7 5800X
+(8 cores) and 256 GB free disk. Quartus Prime Lite 25.1std.0 Build 1129 with
+Cyclone V support was installed under `E:\altera\quartus`. The QSF targets
+`5CEBA4F23C8`; compile results and timing limitations are in
+`POCKET_DIAGNOSTIC_BUILD.md`.
 
-Install Quartus Lite 18.1 with Cyclone V device support, then apply Update 1 to
-match the QSF's recorded 18.1.1 release. The combined package includes device
-support; avoid installing the separate Cyclone V files twice. The update page
-directs users to extract the archive and run its `.exe`; installer prompts and
-exact locations depend on the chosen install options. No silent-install flags
-are claimed here. The Lite edition does not require a license file, but the
-installer's terms and download consent still apply.
+## Optional install matching the QSF's recorded version
+
+The project records Quartus Prime Lite 18.1.1 Build 646. Altera's archived
+Windows download page lists the combined 5.8 GB package with device support,
+the separate 1.1 GB Cyclone V package, and the 5.1 GB 18.1 Update 1 package.
+The package page lists a 14 GB installed minimum; reserve about 40 GB for
+download staging and project build output. See Altera's [official Windows
+download page](https://www.altera.com/downloads/fpga-development-tools/quartus-prime-lite-edition-design-software-version-18-1-windows).
+Lite does not require a license file; the applicable software terms and
+download consent still apply.
+
+To match the recorded release, install Lite 18.1 with Cyclone V device support,
+then apply Update 1. The combined package includes device support; avoid
+installing the separate Cyclone V files twice. Extract the update archive and
+run its `.exe`; installer prompts and exact locations depend on the chosen
+install options. No silent-install flags are claimed here.
 
 On the Windows workstation, from a checkout, fetch the pinned reference cache,
 prepare and audit a fresh project, then compile from the QPF directory:
@@ -46,21 +52,21 @@ py -3 tools/apf/fetch_diagnostic_reference.py --download
 py -3 tools/pocket/prepare_diagnostic.py --output Pocket/build/diagnostic-win
 py -3 tools/pocket/check_diagnostic_project.py Pocket/build/diagnostic-win
 Push-Location Pocket/build/diagnostic-win
-& 'C:\intelFPGA_lite\18.1\quartus\bin64\quartus_sh.exe' --version
-& 'C:\intelFPGA_lite\18.1\quartus\bin64\quartus_sh.exe' --flow compile ap_core
+& 'E:\altera\quartus\bin64\quartus_sh.exe' --version
+& 'E:\altera\quartus\bin64\quartus_sh.exe' --flow compile ap_core
 Pop-Location
 ```
 
-Adjust the executable path to the installer's chosen directory. The commands
-above are a documented invocation, not a build result. Retain the compile logs
-and reports described below; any fitter success still needs TimeQuest review and
-the separate physical Pocket test.
+For an 18.1.1 install, adjust the executable path to the installer's chosen
+directory. The commands reproduce the flow; the recorded 25.1 run is summarized
+in `POCKET_DIAGNOSTIC_BUILD.md`. A fitter success still needs TimeQuest review
+and the separate physical Pocket test.
 
 ## Linux alternative: x86-64 self-hosted machine
 
-The most practical first build is on a persistent x86-64 Linux workstation or
-VM with at least **40 GB free disk space before installation**. That is a
-planning allowance, not an Intel minimum: Altera lists 14 GB minimum for the
+A Linux alternative for independent reproduction is a persistent x86-64
+workstation or VM with at least **40 GB free disk space before installation**.
+That is a planning allowance, not an Intel minimum: Altera lists 14 GB minimum for the
 Lite installation, and its archived download page lists a 6.2 GB Quartus 18.1
 Linux package, a 1.1 GB Cyclone V package, and a 5.4 GB 18.1 Update 1 package.
 The base combined package is described as including device support; if using

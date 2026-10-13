@@ -1,9 +1,8 @@
 # Pocket diagnostic packaging contract
 
-This records the documented openFPGA packaging procedure for a future,
-newly-built diagnostic core. It is a packaging specification and checklist;
-it does **not** claim that this workspace has produced a current Quartus RBF,
-reversed bitstream, installable diagnostic package, or Pocket-tested result.
+This records the documented openFPGA packaging procedure and the first
+diagnostic package generated from a fresh Quartus build. A local candidate
+package exists; the physical Pocket test has **not** run.
 
 ## Exact RBF to RBF_R conversion
 
@@ -23,12 +22,12 @@ The pinned project is open-fpga/core-template revision
 Its `src/fpga/ap_core.qsf` sets `PROJECT_OUTPUT_DIRECTORY output_files`,
 `GENERATE_RBF_FILE ON`, device `5CEBA4F23C8`, and top-level project revision
 `ap_core`. Thus, after a successful Quartus run using this project, the input
-artifact expected for conversion is `output_files/ap_core.rbf`. This is an
-expected location from the pinned project settings, **not** an artifact
-observed from a new build here. The prepared diagnostic project inherits those
-settings. Analogue's guide also recommends enabling compressed bitstreams to
-reduce load times; verify that setting in the generated project/build report
-when Quartus is available.
+artifact expected for conversion is `output_files/ap_core.rbf`. The first
+build produced that file at the expected location. The prepared diagnostic
+project inherits those settings. Analogue's guide also recommends enabling
+compressed bitstreams to reduce load times. The prepared QSF requests RBF
+generation but does not explicitly set `COMPRESS_RBF_FILE`; compression was
+not confirmed for this build.
 
 Official documentation specifies the byte transform but does not prescribe a
 particular converter executable or CLI. Use a reviewed implementation of that
@@ -92,10 +91,10 @@ Cores/<AuthorName>.<CoreName>/
 If using a custom platform, also include `Platforms/<shortname>.json` and any
 chosen `Platforms/_images/<shortname>.bin`. Include `Assets/...` only if the
 core's data definitions require actual supplied assets. For this diagnostic,
-the existing PS1 `data.json` declares BIOS and ROM slots, but those are not
-appropriate diagnostic assets; prepare metadata with no required game/BIOS
-assets or intentionally use a standalone core definition. The exact diagnostic
-metadata has not yet been generated or audited.
+the package generator supplies an empty `data_slots` list and standalone
+metadata instead of reusing the PS1 core's BIOS/ROM declarations. The seven
+JSON files are parse-checked; formal validation against Analogue's schema and
+physical OS recognition remain part of the device test.
 
 Analogue's [packaging guide](https://www.analogue.co/developer/docs/openfpga/packaging-a-core)
 allows distributing these SD paths in one ZIP and gives the recommended
@@ -107,15 +106,16 @@ The archive name is a recommendation, not the bitstream filename contract.
 | Item | Current evidence | Status for diagnostic package |
 |---|---|---|
 | Pinned APF project and metadata | Verified cached template at revision `da3a021b1eaf742604d86d8dc9b33a6666263e6a`; QSF enables RBF generation | Available source project |
-| Prepared diagnostic project | `Pocket/build/diagnostic-reviewed/`, isolated from the PS1 source tree | Prepared inputs only; no Quartus run |
-| Current Quartus `.rbf` from diagnostic | None recorded | Missing |
-| Converted `.rbf_r` from diagnostic | None recorded | Missing |
-| Diagnostic `core.json` and six other required definition JSON files | No diagnostic package metadata assembled | Missing |
+| Prepared diagnostic project | `Pocket/build/diagnostic-reviewed/`, isolated from the PS1 source tree | Prepared inputs; independent of Quartus outputs |
+| Current Quartus `.rbf` from diagnostic | `Pocket/build/diagnostic-quartus-25.1/output_files/ap_core.rbf` | Quartus Lite 25.1std.0 Build 1129; 788,200 bytes; SHA-256 `73a554ddb1196c21b83720b3d40c646bed2d3251f2d7b890b90d98d3fe787a3b` |
+| Converted `.rbf_r` from diagnostic | `Pocket/build/diagnostic-package-25.1/Cores/pgate1.PocketDiag/bitstream.rbf_r` | 788,200 bytes; SHA-256 `5ed526b0411cf8e35874a2589ecbaf7e105b4629d3b621bdf896a57de26e0fc3`; byte-reversal conversion verified |
+| Diagnostic core definition files | `Pocket/build/diagnostic-package-25.1/Cores/pgate1.PocketDiag/` | Seven required JSON files generated and parse-checked; no BIOS/ROM slots |
+| Diagnostic ZIP | `Pocket/build/diagnostic-package-25.1/pgate1.PocketDiag_0.1.0_20261013.zip` | Eight expected SD files; SHA-256 `75f80effaa0e023e4d48aa2bf31bc00e430602b70140b08b6855fbaf13d5f94d`; not loaded on hardware |
 | Existing PlayStation package metadata and platform data | `Pocket/dist/Cores/pgate1.PlayStation/` and `Pocket/dist/Platforms/playstation.json` | Present, describes PlayStation; do not reuse as if it describes the diagnostic |
 | Existing PlayStation `.rbf_r` and template `.rbf_r` | Both present in source trees | Old/reference artifacts; neither is a new diagnostic build |
 | Platform image and dummy asset files | Existing PlayStation platform image and `.bin_dummy` files are present | Not evidence of a diagnostic build; dummy BIOS/ROM are not usable assets |
 
-## Operator checklist after Quartus is provisioned
+## Operator checklist for the physical test
 
 Keep these fields blank until the corresponding newly generated evidence exists.
 
