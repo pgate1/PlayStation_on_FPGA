@@ -175,6 +175,10 @@ Olli Sulopuisto.
 
 ## Tooling notes
 
+**Never run `docker` (including `docker info`) or `orb`/`orbctl` on this Mac:** the
+`docker` CLI is OrbStack's shim and starts the OrbStack VM (user objection,
+2026-10-13). Use local tools, the shared Windows host via `qrun`, or GitHub CI.
+
 Shell is zsh: no `xargs -a`; unmatched globs abort; use `rg -an` (the `grep`
 function misbehaves) and `LC_ALL=C` on CRLF/latin-1 sources. `rm -rf` is aliased
 to `trash` here. `cell` is a SystemVerilog keyword and breaks downstream
