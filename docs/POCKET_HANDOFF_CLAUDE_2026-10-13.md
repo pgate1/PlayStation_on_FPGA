@@ -36,8 +36,11 @@ from PlayStation. `.rbf_r` byte reversal, byte-count preservation, seven core
 JSON files, platform metadata and ZIP entries were checked. The revised package
 is now installed on the mounted Analogue SD card at
 `Cores/pgate1.PocketDiag/`, with `Platforms/pocketdiag.json`; the on-card RBF_R
-SHA-256 matches the package. Physical Pocket launch and screen/button/reset
-observations are still pending; record them in `POCKET_DIAGNOSTIC_TEST.md`.
+SHA-256 matches the package. The user has launched it on a Pocket and reports
+the bars in the expected order (white, yellow, cyan, green, magenta, red, blue,
+black); the top-left patch is green only while the right button is held and
+returns to red on release. Reset, reload and frame-boundary/tearing checks are
+still pending; details are in `POCKET_DIAGNOSTIC_TEST.md`.
 
 Easy follow-up for another provider: independently review the seven diagnostic
 JSON definitions produced by `tools/pocket/prepare_diagnostic_package.py`
