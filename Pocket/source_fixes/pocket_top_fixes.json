@@ -211,6 +211,33 @@
       "reason": "Measurement/bring-up variant: use one 320x240x15 display buffer instead of the double buffer (frees 143 of 308 RAM blocks so Quartus keeps inferring the core's RAMs on 5CEBA4); the display may tear. Interim until P06 moves display buffers to external memory.",
       "old": "\t\telse      ram1.read(radrs);\n",
       "new": "\t\telse      ram0.read(radrs); // single-view-buffer\n"
+    },
+    {
+      "option": "no-jtag-debug",
+      "id": "O-J1",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "reason": "Removes the author's virtual-JTAG debug UART (PC-side debug only) and with it the SLD hub; needed to close the last ~15 LABs on 5CEBA4. No effect on emulation.",
+      "old": "%i \"../vjtag_uart.h\"\n",
+      "new": "//%i \"../vjtag_uart.h\" // no-jtag-debug\n"
+    },
+    {
+      "option": "no-jtag-debug",
+      "id": "O-J2",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "reason": "Removes the author's virtual-JTAG debug UART (PC-side debug only) and with it the SLD hub; needed to close the last ~15 LABs on 5CEBA4. No effect on emulation.",
+      "old": "\tvjtag_uart vjtag;\n",
+      "new": "//\tvjtag_uart vjtag; // no-jtag-debug\n"
+    },
+    {
+      "option": "no-jtag-debug",
+      "id": "O-J3",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "reason": "Removes the author's virtual-JTAG debug UART (PC-side debug only) and with it the SLD hub; needed to close the last ~15 LABs on 5CEBA4. No effect on emulation.",
+      "old": "\treg_wr radrs<3>;\n\tsel vj_data<32>;\n\tif(radrs<2>==0b0) vj_data = 0x00 || fps || halt_code || psx.halt_code;\n\tif(radrs<2>==0b1) vj_data = psx.dbg;\n\tinstruct vjtag.send_init par{\n\t\tradrs := 0;\n\t}\n\treg_wr vjtag_send, send_data<8>;\n\tinstruct vjtag.send_ready par{\n\t\tswitch(radrs<1:0>){\n\t\t\tcase 0: send_data := vj_data<7:0>;\n\t\t\tcase 1: send_data := vj_data<15:8>;\n\t\t\tcase 2: send_data := vj_data<23:16>;\n\t\t\tcase 3: send_data := vj_data<31:24>;\n\t\t}\n\t\tradrs++;\n\t\tvjtag_send := 0b1;\n\t}\n\tif(vjtag_send){\n\t\tvjtag.send(send_data);\n\t\tvjtag_send := 0b0;\n\t}\n",
+      "new": "//\treg_wr radrs<3>;\n//\tsel vj_data<32>;\n//\tif(radrs<2>==0b0) vj_data = 0x00 || fps || halt_code || psx.halt_code;\n//\tif(radrs<2>==0b1) vj_data = psx.dbg;\n//\tinstruct vjtag.send_init par{\n//\t\tradrs := 0;\n//\t}\n//\treg_wr vjtag_send, send_data<8>;\n//\tinstruct vjtag.send_ready par{\n//\t\tswitch(radrs<1:0>){\n//\t\t\tcase 0: send_data := vj_data<7:0>;\n//\t\t\tcase 1: send_data := vj_data<15:8>;\n//\t\t\tcase 2: send_data := vj_data<23:16>;\n//\t\t\tcase 3: send_data := vj_data<31:24>;\n//\t\t}\n//\t\tradrs++;\n//\t\tvjtag_send := 0b1;\n//\t}\n//\tif(vjtag_send){\n//\t\tvjtag.send(send_data);\n//\t\tvjtag_send := 0b0;\n//\t}\n"
     }
   ],
   "generated_files": [
