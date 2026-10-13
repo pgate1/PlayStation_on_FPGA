@@ -71,6 +71,13 @@ vvp -n $SC/spu.vvp            # add -P tb_spu_shared.INTPL=1 for interpolation s
 2,520 registers, 5 DSP blocks, 64 RAM blocks** (524,288 bits: the reverb buffer).
 The upstream 24-voice DSP needed ~33,300 comb. ALUTs and 75 DSP blocks.
 
+Full `PlayStation_core` with the shared SPU, reverb in its private buffer, all pins
+virtual, SPU switches free (sound fully enabled): synthesis 0 errors; **fit fails at
+2,151 LABs (device 1,848), 21,285 ALMs (115%), 14,490 registers, 64/66 DSP**. The
+same core with the SPU tied off needed 2,022 LABs, so full sound now costs about
+130 LABs (~1,300 ALMs); the remaining overflow is the general sflc overhead
+(Q-L1-13), not sound.
+
 Quartus 25.1 frontend pitfalls hit on the way (now avoided): a RAM with two
 asynchronous read ports crashes VRFX (`ConnectReadArrayPort` /
 `SplitDualReadRams`); nested `N'(signed'(...))` casts in nonblocking assignments
@@ -79,7 +86,6 @@ crash `VeriTypeCast::Evaluate`.
 ## Open
 
 - The single 1,600-tick difference (above).
-- Full-core synthesis/fit with the shared SPU (queued on the shared host).
 - Reverb buffer (64 RAM blocks) should move to SPU RAM in SDRAM as on the real PS1;
   the RAM blocks are needed elsewhere in a full Pocket build.
 - Audio output to the Pocket (44.1 -> 48 kHz, I2S): Q-L2-12.
