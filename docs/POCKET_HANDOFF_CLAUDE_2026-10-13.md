@@ -29,12 +29,15 @@ setup slack stayed positive (minimum +5.425 ns), but two internal audio clocks,
 four inputs and 22 outputs are unconstrained. This is not timing signoff.
 
 Local ignored artifacts: `Pocket/build/diagnostic-quartus-25.1/output_files/`
-contains the RBF, SOF and reports; `Pocket/build/diagnostic-package-25.1/`
-contains `pgate1.PocketDiag_0.1.0_20261013.zip`. `.rbf_r` byte reversal,
-byte-count preservation, seven JSON files, and ZIP entries were checked. The
-package is diagnostic only and has not been installed on a Pocket. The user
-should extract its `Cores/pgate1.PocketDiag/` path at the SD-card root and
-record screen/button/reset observations in `POCKET_DIAGNOSTIC_TEST.md`.
+contains the RBF, SOF and reports; `Pocket/build/diagnostic-package-25.1-console/`
+contains the current `pgate1.PocketDiag_0.1.0_20261013.zip`. The package
+registers a `Pocket Diagnostic` platform in the `Console` category, separate
+from PlayStation. `.rbf_r` byte reversal, byte-count preservation, seven core
+JSON files, platform metadata and ZIP entries were checked. The revised package
+is now installed on the mounted Analogue SD card at
+`Cores/pgate1.PocketDiag/`, with `Platforms/pocketdiag.json`; the on-card RBF_R
+SHA-256 matches the package. Physical Pocket launch and screen/button/reset
+observations are still pending; record them in `POCKET_DIAGNOSTIC_TEST.md`.
 
 Easy follow-up for another provider: independently review the seven diagnostic
 JSON definitions produced by `tools/pocket/prepare_diagnostic_package.py`

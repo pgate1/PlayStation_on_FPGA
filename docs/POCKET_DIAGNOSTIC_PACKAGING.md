@@ -56,12 +56,12 @@ The pinned template supplies an example value for every field above. Use valid
 values for the diagnostic instead of copying the template's example identity.
 Each core entry's `filename` must match the RBF_R file exactly.
 
-For a standalone diagnostic package, Analogue documents an empty
-`metadata.platform_ids` array as valid. That avoids registering a diagnostic
-under PlayStation while its image only displays a test pattern. If the operator
-chooses to associate it with a platform instead, set that platform shortname
-in `platform_ids` and add `/Platforms/<platform_shortname>.json`; the optional
-platform image belongs at `/Platforms/_images/<platform_shortname>.bin`.
+The diagnostic is registered as its own `pocketdiag` platform, categorized as
+`Console`, with menu name `Pocket Diagnostic`. This keeps it out of the
+PlayStation platform while placing it in the requested Console category. Set
+`metadata.platform_ids` to `pocketdiag` and include
+`/Platforms/pocketdiag.json`; an optional platform image belongs at
+`/Platforms/_images/pocketdiag.bin`.
 Analogue's [platform metadata guide](https://www.analogue.co/developer/docs/openfpga/platform-metadata)
 defines the optional platform JSON's `platform` object fields as `category`,
 `name`, `manufacturer`, and integer `year` (the strings have documented
@@ -110,7 +110,7 @@ The archive name is a recommendation, not the bitstream filename contract.
 | Current Quartus `.rbf` from diagnostic | `Pocket/build/diagnostic-quartus-25.1/output_files/ap_core.rbf` | Quartus Lite 25.1std.0 Build 1129; 788,200 bytes; SHA-256 `73a554ddb1196c21b83720b3d40c646bed2d3251f2d7b890b90d98d3fe787a3b` |
 | Converted `.rbf_r` from diagnostic | `Pocket/build/diagnostic-package-25.1/Cores/pgate1.PocketDiag/bitstream.rbf_r` | 788,200 bytes; SHA-256 `5ed526b0411cf8e35874a2589ecbaf7e105b4629d3b621bdf896a57de26e0fc3`; byte-reversal conversion verified |
 | Diagnostic core definition files | `Pocket/build/diagnostic-package-25.1/Cores/pgate1.PocketDiag/` | Seven required JSON files generated and parse-checked; no BIOS/ROM slots |
-| Diagnostic ZIP | `Pocket/build/diagnostic-package-25.1/pgate1.PocketDiag_0.1.0_20261013.zip` | Eight expected SD files; SHA-256 `75f80effaa0e023e4d48aa2bf31bc00e430602b70140b08b6855fbaf13d5f94d`; not loaded on hardware |
+| Diagnostic ZIP | `Pocket/build/diagnostic-package-25.1-console/pgate1.PocketDiag_0.1.0_20261013.zip` | Nine SD files including Console platform metadata; physical load still pending |
 | Existing PlayStation package metadata and platform data | `Pocket/dist/Cores/pgate1.PlayStation/` and `Pocket/dist/Platforms/playstation.json` | Present, describes PlayStation; do not reuse as if it describes the diagnostic |
 | Existing PlayStation `.rbf_r` and template `.rbf_r` | Both present in source trees | Old/reference artifacts; neither is a new diagnostic build |
 | Platform image and dummy asset files | Existing PlayStation platform image and `.bin_dummy` files are present | Not evidence of a diagnostic build; dummy BIOS/ROM are not usable assets |

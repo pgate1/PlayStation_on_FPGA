@@ -40,7 +40,7 @@ def package(rbf: Path, output: Path, build_commit: str) -> Path:
         "core.json": {"core": {
             "magic": "APF_VER_1",
             "metadata": {
-                "platform_ids": [], "shortname": SHORTNAME,
+                "platform_ids": ["pocketdiag"], "shortname": SHORTNAME,
                 "description": "Pocket video diagnostic", "author": AUTHOR,
                 "url": "https://github.com/pgate1/PlayStation_on_FPGA",
                 "version": VERSION, "date_release": date.today().isoformat(),
@@ -66,6 +66,13 @@ def package(rbf: Path, output: Path, build_commit: str) -> Path:
     for name, value in documents.items():
         write_json(core_dir / name, value)
 
+    platform_dir = output / "Platforms"
+    platform_dir.mkdir(parents=True)
+    write_json(platform_dir / "pocketdiag.json", {"platform": {
+        "category": "Console", "name": "Pocket Diagnostic", "year": 2026,
+        "manufacturer": "pgate1",
+    }})
+
     for path in core_dir.glob("*.json"):
         json.loads(path.read_text(encoding="utf-8"))
     if len(list(core_dir.glob("*.json"))) != 7:
@@ -73,7 +80,7 @@ def package(rbf: Path, output: Path, build_commit: str) -> Path:
 
     archive = output / f"{AUTHOR}.{SHORTNAME}_{VERSION}_{date.today():%Y%m%d}.zip"
     with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_STORED) as bundle:
-        for path in sorted((output / "Cores").rglob("*")):
+        for path in sorted((output / "Cores").rglob("*")) + sorted(platform_dir.rglob("*")):
             if path.is_file():
                 bundle.write(path, path.relative_to(output).as_posix())
 
