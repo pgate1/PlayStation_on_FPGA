@@ -1,5 +1,30 @@
 # Handoff: what the Claude session did while the root (Codex) agent was out
 
+## Shared Windows host `ristisana`: rules agreed 2026-10-13 (mandatory)
+
+Three projects share the box: PS1 (this repo), Pocket N64 (`E:\mirlo`,
+`E:\winfit_out`) and Pocket Commodore (`C:\Users\guest\myc64-build`). All
+sessions agreed to these rules:
+
+1. Never kill by image name (`taskkill /IM quartus*`, `Stop-Process -Name ...`).
+   Kill only PIDs you started, or processes whose CommandLine contains your own
+   project directory.
+2. Registry: one file per running compile, `E:\locks\<session>-<n>.txt`, holding
+   session, project, working dir, start time and the quartus_sh/python PID.
+   Create it before starting and delete it when done. It is stale if the PID is gone
+   or the file is older than 3 h.
+3. Start only if free RAM is at least 6 GB
+   (`Get-CimInstance Win32_OperatingSystem`, `FreePhysicalMemory`) and fewer than
+   4 registry files exist.
+4. Use only your own working directories; never clean another project's dirs or `db/`.
+5. Launch long compiles detached from the ssh session (`Invoke-CimMethod
+   Win32_Process -MethodName Create -Arguments @{CommandLine=...;
+   CurrentDirectory=...}` or a one-shot `schtasks` job), record the returned PID,
+   and poll with short ssh calls. Windows OpenSSH kills every process in a
+   session's job object when the connection closes. That is the likely cause of
+   the simultaneous quartus/python deaths at 10:22 and 10:31: a Commodore
+   compile running 10:23–10:34 survived, so it was not a box-wide name kill.
+
 ## Codex continuation checkpoint (2026-10-13)
 
 Latest root checkpoint: `d631467` (`Build and package Pocket diagnostic
