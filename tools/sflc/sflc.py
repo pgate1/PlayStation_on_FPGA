@@ -313,6 +313,7 @@ class Gen:
         self.write_widths = {}   # address expression width of each write
         self._ports = {}         # bank -> shared dynamic write ports (memoised)
         self.temps = []
+        self.temp_index = {}
         self.interfaces = dict(interfaces or {})
         self.instances = {}   # instance name -> (Interface, port alias mapping)
         self.observed_controls = set()
@@ -357,8 +358,12 @@ class Gen:
             self.instances[instance] = (interface, aliases)
 
     def temp(self, expr, width):
+        # Identical pure expressions share one sized wire (common subexpression).
+        key = (expr, width)
+        if key in self.temp_index: return self.temp_index[key]
         name = '__sfl_expr_%d' % len(self.temps)
         self.temps.append((name, width, expr))
+        self.temp_index[key] = name
         return name
 
     def width_name(self, name):
@@ -740,6 +745,13 @@ class Gen:
         if len(merged) == 1 and len(terms) > len(data):
             return ("  always @(posedge m_clock) if (%s) %s <= %s; else if (%s) %s <= '0;" %
                     (merged[0][0], target, merged[0][1], enable, target))
+        if len(merged) == 2:
+            # Two nonzero writers (typically two bank ports): the same OR
+            # written as a priority pair measured ~6 % smaller (exp2, b2_orin).
+            (c0, v0), (c1, v1) = merged
+            return ("  always @(posedge m_clock) if (%s) %s <= (%s) | ((%s) ? (%s) : '0); else if (%s) %s <= %s;%s" %
+                    (c0, target, v0, c1, v1, c1, target, v1,
+                     " else if (%s) %s <= '0;" % (enable, target) if len(terms) > len(data) else ''))
         return '  always @(posedge m_clock) if (%s) %s <= %s;' % (enable, target, self.mux(data))
 
     def conflict_checks(self, terms, label):
