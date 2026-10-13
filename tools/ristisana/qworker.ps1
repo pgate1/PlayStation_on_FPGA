@@ -8,7 +8,7 @@ $code = 255
 try {
     Add-Content -LiteralPath $r.log -Encoding ASCII -Value ('[qrun] start {0:s} pid={1} reg={2} cmd={3}' -f (Get-Date), $PID, $Reg, $r.command)
     Set-Location -LiteralPath $r.workdir
-    cmd.exe /d /c "$($r.command) >> `"$($r.log)`" 2>&1"
+    cmd.exe /d /c "($($r.command)) >> `"$($r.log)`" 2>&1"
     $code = $LASTEXITCODE
 } finally {
     Add-Content -LiteralPath $r.log -Encoding ASCII -Value ('[qrun] end {0:s} exit={1}' -f (Get-Date), $code)
