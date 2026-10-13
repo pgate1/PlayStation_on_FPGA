@@ -745,13 +745,10 @@ class Gen:
         if len(merged) == 1 and len(terms) > len(data):
             return ("  always @(posedge m_clock) if (%s) %s <= %s; else if (%s) %s <= '0;" %
                     (merged[0][0], target, merged[0][1], enable, target))
-        if len(merged) == 2:
-            # Two nonzero writers (typically two bank ports): the same OR
-            # written as a priority pair measured ~6 % smaller (exp2, b2_orin).
-            (c0, v0), (c1, v1) = merged
-            return ("  always @(posedge m_clock) if (%s) %s <= (%s) | ((%s) ? (%s) : '0); else if (%s) %s <= %s;%s" %
-                    (c0, target, v0, c1, v1, c1, target, v1,
-                     " else if (%s) %s <= '0;" % (enable, target) if len(terms) > len(data) else ''))
+        # Two or more nonzero writers stay a plain guarded OR. A priority-pair
+        # spelling of the two-writer case saved ALUTs in isolation (exp2) but
+        # raised the core's 6-input-function count by ~900 and its ALM estimate
+        # by ~500 (core-new5 vs core-new6), so it was withdrawn.
         return '  always @(posedge m_clock) if (%s) %s <= %s;' % (enable, target, self.mux(data))
 
     def conflict_checks(self, terms, label):
@@ -905,7 +902,7 @@ class Gen:
             connections = [] if interface.external else ['.p_reset(p_reset)', '.m_clock(m_clock)']
             connections += ['.%s(%s)' % (member, alias) for member, alias in aliases.items()]
             L.append('  %s %s (%s);' % (interface.name, instance, ', '.join(connections)))
-        for name in banks:
+        for name in sorted(banks, key=list(self.memories).index):
             for port in self.bank_ports(name):
                 L.append('  wire %s_en = %s;' % (port['name'], port['enable']))
                 L.append('  wire %s%s_a = %s;' % (rng(port['width']), port['name'], port['address']))
