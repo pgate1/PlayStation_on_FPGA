@@ -51,6 +51,7 @@ needs judgement; re-check these first if behaviour differs.
 | F5 | GraphicProcessingUnit | B | make `texture_full` forwarding a no-op | `poly.texture_full` has never existed in any published drawPoly; core calls it every cycle |
 | F6 | DMA_SPU | B | restore `declare mul_u16`, `mul_u16 size_mul`, 32-bit `bcr`; add `mul_u16.v` | 3fa770f removed them but kept `size_mul.con(bcr<31:16>, bcr<15:0>)`; `mul_u16.v` byte-identical from 2526d25^ |
 | F7 | PlayStation_core | B | `else : read_io_wait.do();` becomes `generate read_io_wait.do();` | only bare stage-task call in all sources (since 2021); siblings use generate; without it the CPU read is never acked |
+| F8 | PAD_controller | B | in WriteData_stg st2 read `data_buf[1]` instead of `data_buf[parp]` (three reads) | st2 is entered only from st1, which sets `parp := 1` on the same edge; removes the only 256:1 read mux (~1,400 ALMs); co-simulated unpatched vs patched 60,000 cycles (Q-L1-13) |
 
 ## Compiler additions (sflc)
 

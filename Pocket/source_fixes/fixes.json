@@ -81,6 +81,36 @@
       "evidence": "See F6.",
       "old": "\treg bcr<16>;\n",
       "new": "\treg bcr<32>; // Q-L1-11 F6: 16 upstream, but bcr<31:16> is read\n\tmul_u16 size_mul; // Q-L1-11 F6\n"
+    },
+    {
+      "id": "F8",
+      "file": "PAD_controller.sflp",
+      "upstream_sha256": "30dc13f5a39111b003ba852f32cc087ea1e26f3debc3d43f5fd3aab28e120478",
+      "class": "B",
+      "reason": "WriteData_stg st2 is entered only from st1's padst==1 branch, which sets parp := 1 on the same edge, and st2 does not write parp; so data_buf[parp] == data_buf[1] there. This removes the only 256:1 dynamic read of data_buf; Quartus then drops write-only words 8..255 (~1,400 ALMs).",
+      "evidence": "PAD_controller.sflp:175-185 (st1: parp := 1; goto st2), :198-215 (st2). Q-L1-13 round 2: equiv_sim unpatched vs patched, 60,000 cycles, probes data_buf[256], parp, bufcount: PASS; module synthesis 1,770 -> 342 self ALUTs.",
+      "old": "\t\t\tif(data_buf[parp]<3:0>==0x0){\n",
+      "new": "\t\t\tif(data_buf[1]<3:0>==0x0){ // Q-L1-13 F8: parp==1 in st2\n"
+    },
+    {
+      "id": "F8b",
+      "file": "PAD_controller.sflp",
+      "upstream_sha256": "30dc13f5a39111b003ba852f32cc087ea1e26f3debc3d43f5fd3aab28e120478",
+      "class": "B",
+      "reason": "WriteData_stg st2 is entered only from st1's padst==1 branch, which sets parp := 1 on the same edge, and st2 does not write parp; so data_buf[parp] == data_buf[1] there. This removes the only 256:1 dynamic read of data_buf; Quartus then drops write-only words 8..255 (~1,400 ALMs).",
+      "evidence": "PAD_controller.sflp:175-185 (st1: parp := 1; goto st2), :198-215 (st2). Q-L1-13 round 2: equiv_sim unpatched vs patched, 60,000 cycles, probes data_buf[256], parp, bufcount: PASS; module synthesis 1,770 -> 342 self ALUTs.",
+      "old": "\t\t\t\tbufcount := 0x02 + (0b000||data_buf[parp]<3:0>||0b0);\n",
+      "new": "\t\t\t\tbufcount := 0x02 + (0b000||data_buf[1]<3:0>||0b0);\n"
+    },
+    {
+      "id": "F8c",
+      "file": "PAD_controller.sflp",
+      "upstream_sha256": "30dc13f5a39111b003ba852f32cc087ea1e26f3debc3d43f5fd3aab28e120478",
+      "class": "B",
+      "reason": "WriteData_stg st2 is entered only from st1's padst==1 branch, which sets parp := 1 on the same edge, and st2 does not write parp; so data_buf[parp] == data_buf[1] there. This removes the only 256:1 dynamic read of data_buf; Quartus then drops write-only words 8..255 (~1,400 ALMs).",
+      "evidence": "PAD_controller.sflp:175-185 (st1: parp := 1; goto st2), :198-215 (st2). Q-L1-13 round 2: equiv_sim unpatched vs patched, 60,000 cycles, probes data_buf[256], parp, bufcount: PASS; module synthesis 1,770 -> 342 self ALUTs.",
+      "old": "\t\t\tif(data_buf[parp]==0x41){\n",
+      "new": "\t\t\tif(data_buf[1]==0x41){\n"
     }
   ],
   "extra_files": [
