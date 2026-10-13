@@ -214,3 +214,22 @@ Full hashes are in `pocket_top_fixes.json` and each build's `ps1_build.json`.
 Booting, SDRAM behaviour on hardware, request ownership between the OR-combined
 masters in core_top.v (CPU/GPU/SPU/loader), CDC of the loader path, timing
 closure, audio on hardware, Quartus 18.1.1 compatibility.
+
+## Lead follow-up measurements (2026-10-13, 5CEBA4F23C8, real pins, Quartus 25.1std)
+
+All with sflc dca809a, source fixes incl. F8, shared SPU, option `single-view-buffer`
+(one 320x240x15 display buffer: 143 instead of 286 RAM blocks; may tear; interim until
+P06 moves display buffers to external memory). With one buffer Quartus infers the core's
+RAMs again (block memory 1.27–1.79 Mbit).
+
+| Run | QSF changes | Reverb | LABs needed / 1,848 | ALMs |
+|---|---|---|---|---|
+| r3-sv-buf | template (HIGH PERFORMANCE, physical synthesis on) | private buffer | 2,091 | 20,724 |
+| r3-sv-spuram | template | SPU RAM | 2,090 | 20,746 |
+| r4-area | AGGRESSIVE AREA, technique AREA, physical synthesis off | SPU RAM | 1,939 | 19,211 |
+| r4-area-norvb | as r4-area | off (`--option reverb-off`) | **1,863** | 18,459 |
+
+Fitter breakdown r3-sv-buf (failed-fit numbers overstate packing): PlayStation_core
+18,527 ALMs (CPU+GTE 10,220, SPU 2,859, GPU 2,703, CDROM 672), SDRAM adapter 637,
+audio out 233, APF bridge 219, pad/IO bridges ~200, JTAG hub 67, view_ram_ctrl 163.
+The template's speed settings cost ~7 %; area mode plus reverb off leaves 15 LABs over.
