@@ -233,3 +233,51 @@ Fitter breakdown r3-sv-buf (failed-fit numbers overstate packing): PlayStation_c
 18,527 ALMs (CPU+GTE 10,220, SPU 2,859, GPU 2,703, CDROM 672), SDRAM adapter 637,
 audio out 233, APF bridge 219, pad/IO bridges ~200, JTAG hub 67, view_ram_ctrl 163.
 The template's speed settings cost ~7 %; area mode plus reverb off leaves 15 LABs over.
+
+## Hardware bring-up (Q-L1-16, 2026-10-13/14, Analogue Pocket, SCPH-5500, BIOS shell)
+
+First boot to the BIOS CD-player shell with pad input: r13. Current best fit: r19b.
+
+```
+python3 -I tools/pocket/prepare_ps1_project.py --output Pocket/build/<new> \
+  --reverb-in-spu-ram --option reverb-off --option no-jtag-debug \
+  --option core-40mhz --option video-60hz --sdram-phase 270 --view-ram-2k5
+# QSF additions used for every fitting build since r6 (not yet in the preparer):
+#   OPTIMIZATION_MODE "AGGRESSIVE AREA", OPTIMIZATION_TECHNIQUE AREA,
+#   PHYSICAL_SYNTHESIS_* OFF, ALM_REGISTER_PACKING_EFFORT HIGH,
+#   MUX_RESTRUCTURE ON (about -1,800 ALMs), SEED 4
+```
+
+r19b: 17,093 / 18,480 ALMs, 253 / 308 M10K, setup slack +0.97 ns (40 MHz core);
+sound without reverb, two view buffers, 59.92 Hz video.
+
+What was wrong, in the order found on hardware (debug overlays `debug-overlay`,
+`debug-overlay-cpu` draw state bits at the top left of the picture):
+
+1. 50 MHz core: setup slack -4.6 ns (GTE `running` -> CPU stall -> EX -> `gpr`).
+   Symptoms changed per fit (CPU halt, I/O halt at PC 0xBF801004). `core-40mhz`
+   scales the PLL by 4/5, keeps the 33.8688 MHz enable exact (DDS 10584/12500),
+   and rescales the 1 s counter and SDRAM refresh.
+2. SDRAM pads: the FAST_INPUT/OUTPUT/OUTPUT_ENABLE_REGISTER assignments MIRLO64
+   uses for the same `sdr_phy` were missing; now always written. With sdr_phy's
+   fixed read latency the pin bench (`tb_sdram128_burstn_pins.sv`, clocks made
+   parametric) passes at 80 MHz only with the SDRAM clock at 270 degrees for
+   6-9 ns data delay; MIRLO's own 125 MHz/180-degree setting passes for >= 7 ns.
+3. Root cause of the garbage instructions: the APF loader strobe `ram1_word_wr`
+   is one clk_74a cycle (13.5 ns). Upstream synchronised it into a 100 MHz
+   clock; Q-L1-14 moved it to clk_50, where `synch_3` misses a third to a half
+   of the strobes, so BIOS words were never written. Fixes C9-C12: 512 x 56
+   dual-clock FIFO, drained when the adapter is `ready` and the core idle; the
+   core sees ack only with the FIFO empty.
+4. One view buffer: the display shows frames while they are drawn (the top
+   layer flickers). Two inferred buffers made Analysis & Synthesis run out of its
+   RAM estimate and leave 11 core RAMs as logic (40k ALMs). `--view-ram-2k5`
+   builds each buffer as an explicit altsyncram, maximum_depth 2048 (2K x 5
+   slices, 114 M10K instead of 144).
+5. 40 MHz video ran at 47.95 Hz; the PSX vblank follows the VGA scan, so games
+   ran 20% slow. `video-60hz` steps the scan every clock with 1274-clock lines:
+   59.92 Hz, video clock 40 MHz.
+
+Known open: reverb on does not route at 98% (r21); the SRAM loader path
+(`ram_word_wr_hold_r`) still samples `ram1_word_data` about 3 core clocks late;
+50 MHz timing.
