@@ -1,247 +1,274 @@
 {
- "schema": 1,
- "purpose": "Q-L1-14 Pocket PS1 top: hash-pinned edits of copies of Pocket/core.sflp (HEAD), Pocket/core_top.v and view_ram_ctrl.sflp; generated interfaces/shims; pinned untracked inputs. Applied by tools/pocket/prepare_ps1_project.py; upstream files are never edited.",
- "fixes": [
-  {
-   "id": "T1",
-   "file": "Pocket/core.sflp",
-   "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
-   "class": "A",
-   "why": "author build-dir include path; the private sram_ctrl.h is replaced by the generated sram_ctrl_sfl.h interface of the Pocket/rtl/sram_ctrl.sv shim",
-   "old": "%i \"../../../Pocket/sram_ctrl.h\"\n",
-   "new": "%i \"../sram_ctrl_sfl.h\"\n"
-  },
-  {
-   "id": "T2",
-   "file": "Pocket/core.sflp",
-   "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
-   "class": "A",
-   "why": "author build-dir include path; vjtag_uart.h is copied next to the prepared sources",
-   "old": "%i \"../../../hdl/USB-JTAG/DE0-CV/vjtag_uart.h\"\n",
-   "new": "%i \"../vjtag_uart.h\"\n"
-  },
-  {
-   "id": "T3",
-   "file": "Pocket/core.sflp",
-   "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
-   "class": "A",
-   "why": "instance type renamed to the shim around Pocket/rtl/sram_ctrl.sv (whose port names differ from the SFL terminals)",
-   "old": "\tsram_ctrl sram;\n",
-   "new": "\tsram_ctrl_sfl sram;\n"
-  },
-  {
-   "id": "T4",
-   "file": "Pocket/core.sflp",
-   "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
-   "class": "B",
-   "why": "milestone 1 must include sound; upstream Pocket ties the SPU off",
-   "old": "psx.sw_reverb_off();\npsx.sw_spu_off();\npsx.sw_spuenv_off();\n",
-   "new": "// Q-L1-14: sound enabled (upstream ties sw_reverb_off, sw_spu_off, sw_spuenv_off removed)\n"
-  },
-  {
-   "id": "T5",
-   "file": "Pocket/core.sflp",
-   "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
-   "class": "B",
-   "why": "export the SPU mix (PlayStation_core voice_L/R) so the SPU is observable and reaches I2S (docs/POCKET_AUDIO_OUT.md)",
-   "old": "\tinput key<16>;\n",
-   "new": "\tinput key<16>;\n// Q-L1-14: SPU mix and the 33.8688 MHz enable exported for Pocket/audio/pocket_audio_out.sv\n\toutput sound_L<21>, sound_R<21>;\n\tinstrout run33_o;\n"
-  },
-  {
-   "id": "T6",
-   "file": "Pocket/core.sflp",
-   "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
-   "class": "B",
-   "why": "SAMPLE_SRC=1 strobe for pocket_audio_out (same gating as psx.run33)",
-   "old": "\t\tinstruct dds.run psx.run33();\n",
-   "new": "\t\tinstruct dds.run par{ psx.run33(); run33_o(); }\n"
-  },
-  {
-   "id": "T7",
-   "file": "Pocket/core.sflp",
-   "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
-   "class": "B",
-   "why": "drive the exported mix",
-   "old": "\tsdram_ack := sdram_ack_100;\n",
-   "new": "\tsdram_ack := sdram_ack_100;\n\tsound_L = psx.voice_L;\n\tsound_R = psx.voice_R;\n"
-  },
-  {
-   "id": "T8",
-   "file": "Pocket/core.sflp",
-   "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
-   "class": "B",
-   "why": "restore the commented SPU memory requests on the current sdram_read/sdram_write terminals (sdram_read_L/sdram_write_L no longer exist); the old base 0b000100 overlaps VRAM in the 25-bit map, so 0b0000110 is used",
-   "old": "/*\n\t\tpsx.spu_mem_read_req : par{\nhalt(0x95);\n\t\t\tsdram_read_L(0b000100 || psx.spu_mem_A);\n\t\t\tspu_wait_ack := 0b1;\n\t\t}\n\n\t\tpsx.spu_mem_write_req : par{\nhalt(0x96);\n\t\t\tsdram_write_L(0b000100 || psx.spu_mem_A, 0x0000 || psx.spu_mem_Din, 0b0011);\n\t\t\tspu_wait_ack := 0b1;\n\t\t}\n*/\n",
-   "new": "\t\t// Q-L1-14: SPU RAM in SDRAM at halfword 0x180000 (byte 0x300000, after VRAM)\n\t\tpsx.spu_mem_read_req : par{\n\t\t\tsdram_read(0b0000110 || psx.spu_mem_A, 1);\n\t\t\tspu_wait_ack := 0b1;\n\t\t}\n\n\t\tpsx.spu_mem_write_req : par{\n\t\t\tsdram_write(0b0000110 || psx.spu_mem_A, 128#psx.spu_mem_Din, 0x0003, 1);\n\t\t\tspu_wait_ack := 0b1;\n\t\t}\n"
-  },
-  {
-   "id": "T9",
-   "file": "Pocket/core.sflp",
-   "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
-   "class": "B",
-   "why": "restore the commented SPU memory read data/ack path",
-   "old": "/*\n\tpsx.spu_mem_Dout = sdram_dout<15:0>;\n\n\tif(spu_wait_ack){\n\t\tif(sdram_ack){\n\t\t\tpsx.spu_mem_ack();\n\t\t\tspu_wait_ack := 0b0;\n\t\t}\n\t}\n*/\n",
-   "new": "\tpsx.spu_mem_Dout = sdram_dout<15:0>;\n\n\tif(spu_wait_ack){\n\t\tif(sdram_ack){\n\t\t\tpsx.spu_mem_ack();\n\t\t\tspu_wait_ack := 0b0;\n\t\t}\n\t}\n"
-  },
-  {
-   "id": "V1",
-   "file": "view_ram_ctrl.sflp",
-   "upstream_sha256": "56b1475f441322de5e6ef28e549e5d598c81f84ead0417d99c24219b6fda08fd",
-   "class": "A",
-   "why": "private RAM header replaced by the generated shim interface",
-   "old": "%i \"ram_320x240x15_dp.h\"\n",
-   "new": "%i \"ram_320x240x15_dp_sfl.h\"\n"
-  },
-  {
-   "id": "V2",
-   "file": "view_ram_ctrl.sflp",
-   "upstream_sha256": "56b1475f441322de5e6ef28e549e5d598c81f84ead0417d99c24219b6fda08fd",
-   "class": "A",
-   "why": "instance type renamed to the shim around Pocket/rtl/ram_320x240x15_dp.sv",
-   "old": "\tram_320x240x15_dp ram0, ram1;\n",
-   "new": "\tram_320x240x15_dp_sfl ram0, ram1;\n"
-  },
-  {
-   "id": "C1",
-   "file": "Pocket/core_top.v",
-   "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
-   "class": "B",
-   "why": "the replacement controller takes commands in the core clock domain",
-   "old": "synch_3 s3(ram1_word_wr, word_wr_s, dram_ctrl_clk, word_wr_r);\n",
-   "new": "synch_3 s3(ram1_word_wr, word_wr_s, clk_50, word_wr_r); // Q-L1-14: adapter command side runs on clk_50\n"
-  },
-  {
-   "id": "C2",
-   "file": "Pocket/core_top.v",
-   "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
-   "class": "A",
-   "why": "set_bram is commented out in core.sflp; connect the exported audio",
-   "old": "\t\t.set_sdram(set_sdram), .set_bram(set_bram), .set_sram(set_sram),\n",
-   "new": "\t\t.set_sdram(set_sdram), .set_sram(set_sram),\n\t\t.sound_L(sound_L), .sound_R(sound_R), .run33_o(run33_o),\n"
-  },
-  {
-   "id": "C3",
-   "file": "Pocket/core_top.v",
-   "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
-   "class": "A",
-   "why": "bram ports are commented out in core.sflp",
-   "old": "\t\t.bram_word_wr(ram_word_wr_hold_r), .bram_wdata(ram1_word_data),\n",
-   "new": ""
-  },
-  {
-   "id": "C4",
-   "file": "Pocket/core_top.v",
-   "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
-   "class": "A",
-   "why": "declarations for the new connections; set_bram has no driver once the bram port is gone",
-   "old": "\tcore CU (\n",
-   "new": "\t// Q-L1-14\n\tassign set_bram = 1'b0;\n\twire [20:0] sound_L, sound_R;\n\twire run33_o;\n\twire dram_clk_90;\n\n\tcore CU (\n"
-  },
-  {
-   "id": "C5",
-   "file": "Pocket/core_top.v",
-   "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
-   "class": "B",
-   "why": "pads owned by the MIRLO64 PHY",
-   "old": "\tassign dram_cke = 1'b1;\n\tassign dram_dq = dram_Din_En==1'b0 ? dram_Din : 16'hzzzz;\n",
-   "new": "\t// Q-L1-14: dram_cke, dram_dq and dram_clk are driven by sdr_phy inside the adapter\n"
-  },
-  {
-   "id": "C6",
-   "file": "Pocket/core_top.v",
-   "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
-   "class": "B",
-   "why": "missing author-private module",
-   "old": "\tsdram128_burstn_ctrl_100 sdram_ctrl_inst (\n\t\t.p_reset(~pll_core_locked),\n\t\t.m_clock(dram_ctrl_clk),\n\t\t.RASn(dram_ras_n),\n\t\t.CASn(dram_cas_n),\n\t\t.WEn(dram_we_n),\n\t\t.DQM(dram_dqm),\n\t\t.DEn(dram_Din_En),\n\t\t.BA(dram_ba),\n\t\t.A(dram_a),\n\t\t.Din(dram_Din),\n\t\t.Dout(dram_dq),\n\n\t\t.write(sdram_write),\n\t\t.adrs(sdram_adrs),\n\t\t.din(sdram_din),\n\t\t.enable(sdram_enable),\n\t\t.burst(sdram_burst),\n\t\t.read(sdram_read),\n\t\t.dout(sdram_dout),\n\t\t.manual_refresh(1'b0),\n\t\t.refresh_go(1'b0),\n\t\t.ack(sdram_ack_100)\n\t);\n",
-   "new": "\t// Q-L1-14: the author's private controller is replaced by Pocket/rtl/sdram128_burstn_adapter.sv\n\tsdram128_burstn_adapter sdram_ctrl_inst (\n\t\t.clk(clk_50), .clk2x(dram_ctrl_clk), .clk2x_90(dram_clk_90),\n\t\t.p_reset(~pll_core_locked),\n\t\t.write(sdram_write), .adrs(sdram_adrs), .din(sdram_din),\n\t\t.enable(sdram_enable), .burst(sdram_burst), .read(sdram_read),\n\t\t.dout(sdram_dout), .manual_refresh(1'b0), .refresh_go(1'b0),\n\t\t.ack(sdram_ack_100), .dropped(), .stray(),\n\t\t.sdram_a(dram_a), .sdram_ba(dram_ba), .sdram_ras_n(dram_ras_n),\n\t\t.sdram_cas_n(dram_cas_n), .sdram_we_n(dram_we_n), .sdram_cke(dram_cke),\n\t\t.sdram_dm(dram_dqm), .sdram_dq(dram_dq), .sdram_clock(dram_clk)\n\t);\n"
-  },
-  {
-   "id": "C7",
-   "file": "Pocket/core_top.v",
-   "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
-   "class": "B",
-   "why": "sdr_phy drives the SDRAM clock pin through ALTDDIO_OUT from this source",
-   "old": "\t\t.outclk_2(dram_clk),\n",
-   "new": "\t\t.outclk_2(dram_clk_90), // Q-L1-14: to sdr_phy DDIO clock output\n"
-  },
-  {
-   "id": "C8",
-   "file": "Pocket/core_top.v",
-   "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
-   "class": "B",
-   "why": "replace the template silence generator, per docs/POCKET_AUDIO_OUT.md integration notes",
-   "old": "//\n// audio i2s silence generator\n// see other examples for actual audio generation\n//\n\nassign audio_mclk = audgen_mclk;\nassign audio_dac = audgen_dac;\nassign audio_lrck = audgen_lrck;\n\n// generate MCLK = 12.288mhz with fractional accumulator\n    reg         [21:0]  audgen_accum;\n    reg                 audgen_mclk;\n    parameter   [20:0]  CYCLE_48KHZ = 21'd122880 * 2;\nalways @(posedge clk_74a) begin\n    audgen_accum <= audgen_accum + CYCLE_48KHZ;\n    if(audgen_accum >= 21'd742500) begin\n        audgen_mclk <= ~audgen_mclk;\n        audgen_accum <= audgen_accum - 21'd742500 + CYCLE_48KHZ;\n    end\nend\n\n// generate SCLK = 3.072mhz by dividing MCLK by 4\n    reg [1:0]   aud_mclk_divider;\n    wire        audgen_sclk = aud_mclk_divider[1] ;// synthesis keep;\n    reg         audgen_lrck_1;\nalways @(posedge audgen_mclk) begin\n    aud_mclk_divider <= aud_mclk_divider + 1'b1;\nend\n\n// shift out audio data as I2S \n// 32 total bits per channel, but only 16 active bits at the start and then 16 dummy bits\n//\n    reg     [4:0]   audgen_lrck_cnt;    \n    reg             audgen_lrck;\n    reg             audgen_dac;\nalways @(negedge audgen_sclk) begin\n    audgen_dac <= 1'b0;\n    // 48khz * 64\n    audgen_lrck_cnt <= audgen_lrck_cnt + 1'b1;\n    if(audgen_lrck_cnt == 31) begin\n        // switch channels\n        audgen_lrck <= ~audgen_lrck;\n        \n    end \nend\n\n\n",
-   "new": "//\n// Q-L1-14: SPU mix to I2S (Pocket/audio/pocket_audio_out.sv, SAMPLE_SRC=1: run33 / 768)\n//\n\twire core_rst_50;\nsynch_3 s_core_rst(~reset_n, core_rst_50, clk_50);\n\npocket_audio_out #(.SAMPLE_SRC(1)) u_audio (\n\t.clk_core(clk_50), .rst_core(core_rst_50),\n\t.in_l(sound_L), .in_r(sound_R), .sample_en(1'b0), .run33(run33_o),\n\t.clk_74a(clk_74a),\n\t.audio_mclk(audio_mclk), .audio_lrck(audio_lrck), .audio_dac(audio_dac),\n\t.dbg_in_count(), .dbg_out_count(), .dbg_ovf_count(),\n\t.dbg_udf_count(), .dbg_level_min(), .dbg_running());\n\n\n"
-  }
- ],
- "options": [
-  {
-   "option": "reverb-off",
-   "id": "O-RVB",
-   "file": "Pocket/core.sflp",
-   "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
-   "class": "info",
-   "why": "information-only variant: keep the upstream reverb tie",
-   "old": "// Q-L1-14: sound enabled (upstream ties sw_reverb_off, sw_spu_off, sw_spuenv_off removed)\n",
-   "new": "// Q-L1-14 variant reverb-off: sw_spu_off and sw_spuenv_off removed, reverb tied off\npsx.sw_reverb_off();\n"
-  }
- ],
- "generated_files": [
-  {
-   "file": "sfl/sram_ctrl_sfl.h",
-   "content": "// Q-L1-14: SFL interface of sram_ctrl_sfl (shim around Pocket/rtl/sram_ctrl.sv),\n// matching the uses of the private sram_ctrl.h in Pocket/core.sflp.\ndeclare sram_ctrl_sfl\n{\n\tinput adrs<17>, din<16>;\n\tinstrin read, write;\n\tinstr_arg read(adrs);\n\tinstr_arg write(adrs, din);\n\toutput dout<16>, ack;\n\toutput OEn, WEn, UBn, LBn, DEn, ADDR<17>, Din<16>;\n\tinput Dout<16>;\n}\n"
-  },
-  {
-   "file": "sfl/ram_320x240x15_dp_sfl.h",
-   "content": "// Q-L1-14: SFL interface of ram_320x240x15_dp_sfl (shim around Pocket/rtl/ram_320x240x15_dp.sv).\ndeclare ram_320x240x15_dp_sfl\n{\n\tinput wadrs<17>, wdata<15>, radrs<17>;\n\toutput dout<15>;\n\tinstrin write, read;\n\tinstr_arg write(wadrs, wdata);\n\tinstr_arg read(radrs);\n}\n"
-  },
-  {
-   "file": "rtl/pocket_top_shims.v",
-   "content": "// Q-L1-14: port-name shims between sflc-generated instances and the replacement modules.\n// sram_ctrl_sfl.ack is a level \"idle\" (core.sflp issues a command only while sram.ack\n// is 1 and treats ack as completion); Pocket/rtl/sram_ctrl.sv exposes busy and a pulse.\nmodule sram_ctrl_sfl (p_reset, m_clock, adrs, din, read, write, dout, ack,\n                      OEn, WEn, UBn, LBn, DEn, ADDR, Din, Dout);\n  input p_reset, m_clock;\n  input [16:0] adrs; input [15:0] din; input read, write;\n  output [15:0] dout; output ack;\n  output OEn, WEn, UBn, LBn, DEn; output [16:0] ADDR; output [15:0] Din;\n  input [15:0] Dout;\n  wire busy;\n  sram_ctrl u (.clk(m_clock), .rst(p_reset), .rd_req(read), .wr_req(write), .adrs(adrs),\n               .wdata(din), .ack(), .dout(dout), .busy(busy), .OEn(OEn), .WEn(WEn),\n               .UBn(UBn), .LBn(LBn), .DEn(DEn), .ADDR(ADDR), .Din(Din), .Dout(Dout));\n  assign ack = ~busy;\nendmodule\n\nmodule ram_320x240x15_dp_sfl (p_reset, m_clock, wadrs, wdata, radrs, dout, write, read);\n  input p_reset, m_clock;\n  input [16:0] wadrs, radrs; input [14:0] wdata; input write, read;\n  output [14:0] dout;\n  ram_320x240x15_dp u (.clk(m_clock), .wr_en(write), .wr_adrs(wadrs), .wr_data(wdata),\n                       .rd_en(read), .rd_adrs(radrs), .dout(dout));\nendmodule\n"
-  }
- ],
- "copied_inputs": [
-  {
-   "source": "Pocket/rtl/sram_ctrl.sv",
-   "dest": "rtl/sram_ctrl.sv",
-   "sha256": "c3604cc6fc9b2281214f60a56c0a2073b1fa5e233687a8064c04b7a46d79fbdb",
-   "owner": "P02 replacement provider (untracked)"
-  },
-  {
-   "source": "Pocket/rtl/ram_320x240x15_dp.sv",
-   "dest": "rtl/ram_320x240x15_dp.sv",
-   "sha256": "b0e0eec964f677c89d9142311da5b42eab7986a0e2b353d5f97d7809b8031069",
-   "owner": "P02 replacement provider (untracked)"
-  },
-  {
-   "source": "hdl/SDRAM/MIRLO64/sdr_ctrl.sv",
-   "dest": "rtl/sdr_ctrl.sv",
-   "sha256": "cc1d5b18639d52fd6e35cd18380ebd6e2341b2ebbb89d1a861a36d45b51de46b",
-   "owner": "MIRLO64 import (untracked, Apache-2.0)"
-  },
-  {
-   "source": "hdl/SDRAM/MIRLO64/sdr_phy.sv",
-   "dest": "rtl/sdr_phy.sv",
-   "sha256": "84a2a16106dd570cd74b0b2b8d051f98f236d6157df81cab6971327408457ee9",
-   "owner": "MIRLO64 import (untracked, BSD-2-Clause LiteX port)"
-  },
-  {
-   "source": "hdl/USB-JTAG/DE0-CV/vjtag_uart.v",
-   "dest": "rtl/vjtag_uart.v",
-   "sha256": "aca8cb0644d79123d993bb8460fe997bca0b3784c44e285935ecc66e1c4d6ae5",
-   "owner": "USB-JTAG import (untracked)"
-  },
-  {
-   "source": "hdl/USB-JTAG/DE0-CV/VirtualJTAG.v",
-   "dest": "rtl/VirtualJTAG.v",
-   "sha256": "e26ecf548267882ac02cb6c62d92123c95f7292f98a0ac864bd1604711e70de8",
-   "owner": "USB-JTAG import (untracked)"
-  },
-  {
-   "source": "hdl/USB-JTAG/DE0-CV/vjtag_uart.h",
-   "dest": "sfl/vjtag_uart.h",
-   "sha256": "e2ccf5e6d27e7d61f5098ee55c2dc4ae12ac8ee5ced0b87c290e1b5df6901a71",
-   "owner": "USB-JTAG import (untracked)"
-  }
- ]
+  "schema": 1,
+  "purpose": "Q-L1-14 Pocket PS1 top: hash-pinned edits of copies of Pocket/core.sflp (HEAD), Pocket/core_top.v and view_ram_ctrl.sflp; generated interfaces/shims; pinned untracked inputs. Applied by tools/pocket/prepare_ps1_project.py; upstream files are never edited.",
+  "fixes": [
+    {
+      "id": "T1",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "A",
+      "why": "author build-dir include path; the private sram_ctrl.h is replaced by the generated sram_ctrl_sfl.h interface of the Pocket/rtl/sram_ctrl.sv shim",
+      "old": "%i \"../../../Pocket/sram_ctrl.h\"\n",
+      "new": "%i \"../sram_ctrl_sfl.h\"\n"
+    },
+    {
+      "id": "T2",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "A",
+      "why": "author build-dir include path; vjtag_uart.h is copied next to the prepared sources",
+      "old": "%i \"../../../hdl/USB-JTAG/DE0-CV/vjtag_uart.h\"\n",
+      "new": "%i \"../vjtag_uart.h\"\n"
+    },
+    {
+      "id": "T3",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "A",
+      "why": "instance type renamed to the shim around Pocket/rtl/sram_ctrl.sv (whose port names differ from the SFL terminals)",
+      "old": "\tsram_ctrl sram;\n",
+      "new": "\tsram_ctrl_sfl sram;\n"
+    },
+    {
+      "id": "T4",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "B",
+      "why": "milestone 1 must include sound; upstream Pocket ties the SPU off",
+      "old": "psx.sw_reverb_off();\npsx.sw_spu_off();\npsx.sw_spuenv_off();\n",
+      "new": "// Q-L1-14: sound enabled (upstream ties sw_reverb_off, sw_spu_off, sw_spuenv_off removed)\n"
+    },
+    {
+      "id": "T5",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "B",
+      "why": "export the SPU mix (PlayStation_core voice_L/R) so the SPU is observable and reaches I2S (docs/POCKET_AUDIO_OUT.md)",
+      "old": "\tinput key<16>;\n",
+      "new": "\tinput key<16>;\n// Q-L1-14: SPU mix and the 33.8688 MHz enable exported for Pocket/audio/pocket_audio_out.sv\n\toutput sound_L<21>, sound_R<21>;\n\tinstrout run33_o;\n"
+    },
+    {
+      "id": "T6",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "B",
+      "why": "SAMPLE_SRC=1 strobe for pocket_audio_out (same gating as psx.run33)",
+      "old": "\t\tinstruct dds.run psx.run33();\n",
+      "new": "\t\tinstruct dds.run par{ psx.run33(); run33_o(); }\n"
+    },
+    {
+      "id": "T7",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "B",
+      "why": "drive the exported mix",
+      "old": "\tsdram_ack := sdram_ack_100;\n",
+      "new": "\tsdram_ack := sdram_ack_100;\n\tsound_L = psx.voice_L;\n\tsound_R = psx.voice_R;\n"
+    },
+    {
+      "id": "T8",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "B",
+      "why": "restore the commented SPU memory requests on the current sdram_read/sdram_write terminals (sdram_read_L/sdram_write_L no longer exist); the old base 0b000100 overlaps VRAM in the 25-bit map, so 0b0000110 is used",
+      "old": "/*\n\t\tpsx.spu_mem_read_req : par{\nhalt(0x95);\n\t\t\tsdram_read_L(0b000100 || psx.spu_mem_A);\n\t\t\tspu_wait_ack := 0b1;\n\t\t}\n\n\t\tpsx.spu_mem_write_req : par{\nhalt(0x96);\n\t\t\tsdram_write_L(0b000100 || psx.spu_mem_A, 0x0000 || psx.spu_mem_Din, 0b0011);\n\t\t\tspu_wait_ack := 0b1;\n\t\t}\n*/\n",
+      "new": "\t\t// Q-L1-14: SPU RAM in SDRAM at halfword 0x180000 (byte 0x300000, after VRAM)\n\t\tpsx.spu_mem_read_req : par{\n\t\t\tsdram_read(0b0000110 || psx.spu_mem_A, 1);\n\t\t\tspu_wait_ack := 0b1;\n\t\t}\n\n\t\tpsx.spu_mem_write_req : par{\n\t\t\tsdram_write(0b0000110 || psx.spu_mem_A, 128#psx.spu_mem_Din, 0x0003, 1);\n\t\t\tspu_wait_ack := 0b1;\n\t\t}\n"
+    },
+    {
+      "id": "T9",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "B",
+      "why": "restore the commented SPU memory read data/ack path",
+      "old": "/*\n\tpsx.spu_mem_Dout = sdram_dout<15:0>;\n\n\tif(spu_wait_ack){\n\t\tif(sdram_ack){\n\t\t\tpsx.spu_mem_ack();\n\t\t\tspu_wait_ack := 0b0;\n\t\t}\n\t}\n*/\n",
+      "new": "\tpsx.spu_mem_Dout = sdram_dout<15:0>;\n\n\tif(spu_wait_ack){\n\t\tif(sdram_ack){\n\t\t\tpsx.spu_mem_ack();\n\t\t\tspu_wait_ack := 0b0;\n\t\t}\n\t}\n"
+    },
+    {
+      "id": "V1",
+      "file": "view_ram_ctrl.sflp",
+      "upstream_sha256": "56b1475f441322de5e6ef28e549e5d598c81f84ead0417d99c24219b6fda08fd",
+      "class": "A",
+      "why": "private RAM header replaced by the generated shim interface",
+      "old": "%i \"ram_320x240x15_dp.h\"\n",
+      "new": "%i \"ram_320x240x15_dp_sfl.h\"\n"
+    },
+    {
+      "id": "V2",
+      "file": "view_ram_ctrl.sflp",
+      "upstream_sha256": "56b1475f441322de5e6ef28e549e5d598c81f84ead0417d99c24219b6fda08fd",
+      "class": "A",
+      "why": "instance type renamed to the shim around Pocket/rtl/ram_320x240x15_dp.sv",
+      "old": "\tram_320x240x15_dp ram0, ram1;\n",
+      "new": "\tram_320x240x15_dp_sfl ram0, ram1;\n"
+    },
+    {
+      "id": "C1",
+      "file": "Pocket/core_top.v",
+      "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
+      "class": "B",
+      "why": "the replacement controller takes commands in the core clock domain",
+      "old": "synch_3 s3(ram1_word_wr, word_wr_s, dram_ctrl_clk, word_wr_r);\n",
+      "new": "synch_3 s3(ram1_word_wr, word_wr_s, clk_50, word_wr_r); // Q-L1-14: adapter command side runs on clk_50\n"
+    },
+    {
+      "id": "C2",
+      "file": "Pocket/core_top.v",
+      "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
+      "class": "A",
+      "why": "set_bram is commented out in core.sflp; connect the exported audio",
+      "old": "\t\t.set_sdram(set_sdram), .set_bram(set_bram), .set_sram(set_sram),\n",
+      "new": "\t\t.set_sdram(set_sdram), .set_sram(set_sram),\n\t\t.sound_L(sound_L), .sound_R(sound_R), .run33_o(run33_o),\n"
+    },
+    {
+      "id": "C3",
+      "file": "Pocket/core_top.v",
+      "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
+      "class": "A",
+      "why": "bram ports are commented out in core.sflp",
+      "old": "\t\t.bram_word_wr(ram_word_wr_hold_r), .bram_wdata(ram1_word_data),\n",
+      "new": ""
+    },
+    {
+      "id": "C4",
+      "file": "Pocket/core_top.v",
+      "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
+      "class": "A",
+      "why": "declarations for the new connections; set_bram has no driver once the bram port is gone",
+      "old": "\tcore CU (\n",
+      "new": "\t// Q-L1-14\n\tassign set_bram = 1'b0;\n\twire [20:0] sound_L, sound_R;\n\twire run33_o;\n\twire dram_clk_90;\n\n\tcore CU (\n"
+    },
+    {
+      "id": "C5",
+      "file": "Pocket/core_top.v",
+      "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
+      "class": "B",
+      "why": "pads owned by the MIRLO64 PHY",
+      "old": "\tassign dram_cke = 1'b1;\n\tassign dram_dq = dram_Din_En==1'b0 ? dram_Din : 16'hzzzz;\n",
+      "new": "\t// Q-L1-14: dram_cke, dram_dq and dram_clk are driven by sdr_phy inside the adapter\n"
+    },
+    {
+      "id": "C6",
+      "file": "Pocket/core_top.v",
+      "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
+      "class": "B",
+      "why": "missing author-private module",
+      "old": "\tsdram128_burstn_ctrl_100 sdram_ctrl_inst (\n\t\t.p_reset(~pll_core_locked),\n\t\t.m_clock(dram_ctrl_clk),\n\t\t.RASn(dram_ras_n),\n\t\t.CASn(dram_cas_n),\n\t\t.WEn(dram_we_n),\n\t\t.DQM(dram_dqm),\n\t\t.DEn(dram_Din_En),\n\t\t.BA(dram_ba),\n\t\t.A(dram_a),\n\t\t.Din(dram_Din),\n\t\t.Dout(dram_dq),\n\n\t\t.write(sdram_write),\n\t\t.adrs(sdram_adrs),\n\t\t.din(sdram_din),\n\t\t.enable(sdram_enable),\n\t\t.burst(sdram_burst),\n\t\t.read(sdram_read),\n\t\t.dout(sdram_dout),\n\t\t.manual_refresh(1'b0),\n\t\t.refresh_go(1'b0),\n\t\t.ack(sdram_ack_100)\n\t);\n",
+      "new": "\t// Q-L1-14: the author's private controller is replaced by Pocket/rtl/sdram128_burstn_adapter.sv\n\tsdram128_burstn_adapter sdram_ctrl_inst (\n\t\t.clk(clk_50), .clk2x(dram_ctrl_clk), .clk2x_90(dram_clk_90),\n\t\t.p_reset(~pll_core_locked),\n\t\t.write(sdram_write), .adrs(sdram_adrs), .din(sdram_din),\n\t\t.enable(sdram_enable), .burst(sdram_burst), .read(sdram_read),\n\t\t.dout(sdram_dout), .manual_refresh(1'b0), .refresh_go(1'b0),\n\t\t.ack(sdram_ack_100), .dropped(), .stray(),\n\t\t.sdram_a(dram_a), .sdram_ba(dram_ba), .sdram_ras_n(dram_ras_n),\n\t\t.sdram_cas_n(dram_cas_n), .sdram_we_n(dram_we_n), .sdram_cke(dram_cke),\n\t\t.sdram_dm(dram_dqm), .sdram_dq(dram_dq), .sdram_clock(dram_clk)\n\t);\n"
+    },
+    {
+      "id": "C7",
+      "file": "Pocket/core_top.v",
+      "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
+      "class": "B",
+      "why": "sdr_phy drives the SDRAM clock pin through ALTDDIO_OUT from this source",
+      "old": "\t\t.outclk_2(dram_clk),\n",
+      "new": "\t\t.outclk_2(dram_clk_90), // Q-L1-14: to sdr_phy DDIO clock output\n"
+    },
+    {
+      "id": "C8",
+      "file": "Pocket/core_top.v",
+      "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
+      "class": "B",
+      "why": "replace the template silence generator, per docs/POCKET_AUDIO_OUT.md integration notes",
+      "old": "//\n// audio i2s silence generator\n// see other examples for actual audio generation\n//\n\nassign audio_mclk = audgen_mclk;\nassign audio_dac = audgen_dac;\nassign audio_lrck = audgen_lrck;\n\n// generate MCLK = 12.288mhz with fractional accumulator\n    reg         [21:0]  audgen_accum;\n    reg                 audgen_mclk;\n    parameter   [20:0]  CYCLE_48KHZ = 21'd122880 * 2;\nalways @(posedge clk_74a) begin\n    audgen_accum <= audgen_accum + CYCLE_48KHZ;\n    if(audgen_accum >= 21'd742500) begin\n        audgen_mclk <= ~audgen_mclk;\n        audgen_accum <= audgen_accum - 21'd742500 + CYCLE_48KHZ;\n    end\nend\n\n// generate SCLK = 3.072mhz by dividing MCLK by 4\n    reg [1:0]   aud_mclk_divider;\n    wire        audgen_sclk = aud_mclk_divider[1] ;// synthesis keep;\n    reg         audgen_lrck_1;\nalways @(posedge audgen_mclk) begin\n    aud_mclk_divider <= aud_mclk_divider + 1'b1;\nend\n\n// shift out audio data as I2S \n// 32 total bits per channel, but only 16 active bits at the start and then 16 dummy bits\n//\n    reg     [4:0]   audgen_lrck_cnt;    \n    reg             audgen_lrck;\n    reg             audgen_dac;\nalways @(negedge audgen_sclk) begin\n    audgen_dac <= 1'b0;\n    // 48khz * 64\n    audgen_lrck_cnt <= audgen_lrck_cnt + 1'b1;\n    if(audgen_lrck_cnt == 31) begin\n        // switch channels\n        audgen_lrck <= ~audgen_lrck;\n        \n    end \nend\n\n\n",
+      "new": "//\n// Q-L1-14: SPU mix to I2S (Pocket/audio/pocket_audio_out.sv, SAMPLE_SRC=1: run33 / 768)\n//\n\twire core_rst_50;\nsynch_3 s_core_rst(~reset_n, core_rst_50, clk_50);\n\npocket_audio_out #(.SAMPLE_SRC(1)) u_audio (\n\t.clk_core(clk_50), .rst_core(core_rst_50),\n\t.in_l(sound_L), .in_r(sound_R), .sample_en(1'b0), .run33(run33_o),\n\t.clk_74a(clk_74a),\n\t.audio_mclk(audio_mclk), .audio_lrck(audio_lrck), .audio_dac(audio_dac),\n\t.dbg_in_count(), .dbg_out_count(), .dbg_ovf_count(),\n\t.dbg_udf_count(), .dbg_level_min(), .dbg_running());\n\n\n"
+    }
+  ],
+  "options": [
+    {
+      "option": "reverb-off",
+      "id": "O-RVB",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "info",
+      "why": "information-only variant: keep the upstream reverb tie",
+      "old": "// Q-L1-14: sound enabled (upstream ties sw_reverb_off, sw_spu_off, sw_spuenv_off removed)\n",
+      "new": "// Q-L1-14 variant reverb-off: sw_spu_off and sw_spuenv_off removed, reverb tied off\npsx.sw_reverb_off();\n"
+    },
+    {
+      "option": "single-view-buffer",
+      "id": "O-S1",
+      "file": "view_ram_ctrl.sflp",
+      "upstream_sha256": "56b1475f441322de5e6ef28e549e5d598c81f84ead0417d99c24219b6fda08fd",
+      "reason": "Measurement/bring-up variant: use one 320x240x15 display buffer instead of the double buffer (frees 143 of 308 RAM blocks so Quartus keeps inferring the core's RAMs on 5CEBA4); the display may tear. Interim until P06 moves display buffers to external memory.",
+      "old": "\t\tif(^bank) col = ram0.dout;\n\t\telse      col = ram1.dout;\n",
+      "new": "\t\tcol = ram0.dout; // single-view-buffer: one buffer, may tear\n"
+    },
+    {
+      "option": "single-view-buffer",
+      "id": "O-S2",
+      "file": "view_ram_ctrl.sflp",
+      "upstream_sha256": "56b1475f441322de5e6ef28e549e5d598c81f84ead0417d99c24219b6fda08fd",
+      "reason": "Measurement/bring-up variant: use one 320x240x15 display buffer instead of the double buffer (frees 143 of 308 RAM blocks so Quartus keeps inferring the core's RAMs on 5CEBA4); the display may tear. Interim until P06 moves display buffers to external memory.",
+      "old": "\t\t\tram1.write(write_adrs, write_data);\n",
+      "new": "\t\t\tram0.write(write_adrs, write_data); // single-view-buffer\n"
+    },
+    {
+      "option": "single-view-buffer",
+      "id": "O-S3",
+      "file": "view_ram_ctrl.sflp",
+      "upstream_sha256": "56b1475f441322de5e6ef28e549e5d598c81f84ead0417d99c24219b6fda08fd",
+      "reason": "Measurement/bring-up variant: use one 320x240x15 display buffer instead of the double buffer (frees 143 of 308 RAM blocks so Quartus keeps inferring the core's RAMs on 5CEBA4); the display may tear. Interim until P06 moves display buffers to external memory.",
+      "old": "\t\telse      ram1.read(radrs);\n",
+      "new": "\t\telse      ram0.read(radrs); // single-view-buffer\n"
+    }
+  ],
+  "generated_files": [
+    {
+      "file": "sfl/sram_ctrl_sfl.h",
+      "content": "// Q-L1-14: SFL interface of sram_ctrl_sfl (shim around Pocket/rtl/sram_ctrl.sv),\n// matching the uses of the private sram_ctrl.h in Pocket/core.sflp.\ndeclare sram_ctrl_sfl\n{\n\tinput adrs<17>, din<16>;\n\tinstrin read, write;\n\tinstr_arg read(adrs);\n\tinstr_arg write(adrs, din);\n\toutput dout<16>, ack;\n\toutput OEn, WEn, UBn, LBn, DEn, ADDR<17>, Din<16>;\n\tinput Dout<16>;\n}\n"
+    },
+    {
+      "file": "sfl/ram_320x240x15_dp_sfl.h",
+      "content": "// Q-L1-14: SFL interface of ram_320x240x15_dp_sfl (shim around Pocket/rtl/ram_320x240x15_dp.sv).\ndeclare ram_320x240x15_dp_sfl\n{\n\tinput wadrs<17>, wdata<15>, radrs<17>;\n\toutput dout<15>;\n\tinstrin write, read;\n\tinstr_arg write(wadrs, wdata);\n\tinstr_arg read(radrs);\n}\n"
+    },
+    {
+      "file": "rtl/pocket_top_shims.v",
+      "content": "// Q-L1-14: port-name shims between sflc-generated instances and the replacement modules.\n// sram_ctrl_sfl.ack is a level \"idle\" (core.sflp issues a command only while sram.ack\n// is 1 and treats ack as completion); Pocket/rtl/sram_ctrl.sv exposes busy and a pulse.\nmodule sram_ctrl_sfl (p_reset, m_clock, adrs, din, read, write, dout, ack,\n                      OEn, WEn, UBn, LBn, DEn, ADDR, Din, Dout);\n  input p_reset, m_clock;\n  input [16:0] adrs; input [15:0] din; input read, write;\n  output [15:0] dout; output ack;\n  output OEn, WEn, UBn, LBn, DEn; output [16:0] ADDR; output [15:0] Din;\n  input [15:0] Dout;\n  wire busy;\n  sram_ctrl u (.clk(m_clock), .rst(p_reset), .rd_req(read), .wr_req(write), .adrs(adrs),\n               .wdata(din), .ack(), .dout(dout), .busy(busy), .OEn(OEn), .WEn(WEn),\n               .UBn(UBn), .LBn(LBn), .DEn(DEn), .ADDR(ADDR), .Din(Din), .Dout(Dout));\n  assign ack = ~busy;\nendmodule\n\nmodule ram_320x240x15_dp_sfl (p_reset, m_clock, wadrs, wdata, radrs, dout, write, read);\n  input p_reset, m_clock;\n  input [16:0] wadrs, radrs; input [14:0] wdata; input write, read;\n  output [14:0] dout;\n  ram_320x240x15_dp u (.clk(m_clock), .wr_en(write), .wr_adrs(wadrs), .wr_data(wdata),\n                       .rd_en(read), .rd_adrs(radrs), .dout(dout));\nendmodule\n"
+    }
+  ],
+  "copied_inputs": [
+    {
+      "source": "Pocket/rtl/sram_ctrl.sv",
+      "dest": "rtl/sram_ctrl.sv",
+      "sha256": "c3604cc6fc9b2281214f60a56c0a2073b1fa5e233687a8064c04b7a46d79fbdb",
+      "owner": "P02 replacement provider (untracked)"
+    },
+    {
+      "source": "Pocket/rtl/ram_320x240x15_dp.sv",
+      "dest": "rtl/ram_320x240x15_dp.sv",
+      "sha256": "b0e0eec964f677c89d9142311da5b42eab7986a0e2b353d5f97d7809b8031069",
+      "owner": "P02 replacement provider (untracked)"
+    },
+    {
+      "source": "hdl/SDRAM/MIRLO64/sdr_ctrl.sv",
+      "dest": "rtl/sdr_ctrl.sv",
+      "sha256": "cc1d5b18639d52fd6e35cd18380ebd6e2341b2ebbb89d1a861a36d45b51de46b",
+      "owner": "MIRLO64 import (untracked, Apache-2.0)"
+    },
+    {
+      "source": "hdl/SDRAM/MIRLO64/sdr_phy.sv",
+      "dest": "rtl/sdr_phy.sv",
+      "sha256": "84a2a16106dd570cd74b0b2b8d051f98f236d6157df81cab6971327408457ee9",
+      "owner": "MIRLO64 import (untracked, BSD-2-Clause LiteX port)"
+    },
+    {
+      "source": "hdl/USB-JTAG/DE0-CV/vjtag_uart.v",
+      "dest": "rtl/vjtag_uart.v",
+      "sha256": "aca8cb0644d79123d993bb8460fe997bca0b3784c44e285935ecc66e1c4d6ae5",
+      "owner": "USB-JTAG import (untracked)"
+    },
+    {
+      "source": "hdl/USB-JTAG/DE0-CV/VirtualJTAG.v",
+      "dest": "rtl/VirtualJTAG.v",
+      "sha256": "e26ecf548267882ac02cb6c62d92123c95f7292f98a0ac864bd1604711e70de8",
+      "owner": "USB-JTAG import (untracked)"
+    },
+    {
+      "source": "hdl/USB-JTAG/DE0-CV/vjtag_uart.h",
+      "dest": "sfl/vjtag_uart.h",
+      "sha256": "e2ccf5e6d27e7d61f5098ee55c2dc4ae12ac8ee5ced0b87c290e1b5df6901a71",
+      "owner": "USB-JTAG import (untracked)"
+    }
+  ]
 }
