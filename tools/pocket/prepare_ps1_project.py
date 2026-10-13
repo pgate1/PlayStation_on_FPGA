@@ -22,8 +22,11 @@ cache and untracked replacement modules are never modified. Quartus is not run.
 only; interface stubs for Intel primitives are used for that check alone).
 
 Information-only variants (recorded in the manifest; not the Pocket build):
-  --device 5CEBA9F23C8   same F23 package and pins, larger die: measures the
-                         full requirement when the real device overflows;
+  --device 5CEBA9F23C8   same F23 package, larger die: measures the full
+                         requirement when the real device overflows. Quartus
+                         25.1 rejects 16 template cram1 locations on this die
+                         (A9_ILLEGAL_PINS); only those location assignments are
+                         dropped (cram1 is unused and tied in this build);
   --qsf-profile neutral  Quartus default synthesis settings instead of the
                          template's speed-oriented ones (see NEUTRAL_QSF).
 """
@@ -68,6 +71,10 @@ set_clock_groups -asynchronous \\
           ic|mpll|altera_pll_i|general[3].gpll~PLL_OUTPUT_COUNTER|divclk \\
           ic|mpll|altera_pll_i|general[4].gpll~PLL_OUTPUT_COUNTER|divclk }
 '''
+# cram1 pin locations Quartus 25.1 reports as illegal (171016) on 5CEBA9F23C8
+A9_ILLEGAL_PINS = ['cram1_a[16]', 'cram1_a[17]', 'cram1_a[18]', 'cram1_a[19]', 'cram1_a[20]',
+                   'cram1_a[21]', 'cram1_clk', 'cram1_ce0_n', 'cram1_we_n', 'cram1_ub_n', 'cram1_lb_n',
+                   'cram1_dq[0]', 'cram1_dq[1]', 'cram1_dq[2]', 'cram1_dq[8]', 'cram1_dq[9]']
 # --qsf-profile neutral: template value -> Quartus default (information only)
 NEUTRAL_QSF = {'OPTIMIZATION_TECHNIQUE SPEED': 'OPTIMIZATION_TECHNIQUE BALANCED',
                'MUX_RESTRUCTURE OFF': 'MUX_RESTRUCTURE AUTO',
@@ -152,6 +159,11 @@ def edit_qsf(text: str, device: str, profile: str) -> str:
     text = swap(text, 'ENABLE_SIGNALTAP ON', 'ENABLE_SIGNALTAP OFF')
     if device != '5CEBA4F23C8':
         text = swap(text, 'DEVICE 5CEBA4F23C8', 'DEVICE ' + device)
+        for pin in A9_ILLEGAL_PINS:
+            pattern = r'set_location_assignment PIN_\w+ -to %s\n' % re.escape(pin)
+            text, count = re.subn(pattern, '', text)
+            if count != 1:
+                raise ValueError('expected one location assignment for ' + pin)
     if profile == 'neutral':
         for old, new in NEUTRAL_QSF.items():
             text = swap(text, old, new)
