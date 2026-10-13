@@ -55,6 +55,10 @@ SPU_SV = ['spu_dsp_shared.sv', 'DigitalSignalProcessor_shared.sv']
 # (sdr_phy clk2x_90), clk_25 (video), clk_25_90deg (video DDR clock).
 PLL = [('50.000000 MHz', '0 ps'), ('100.000000 MHz', '0 ps'), ('100.000000 MHz', '2500 ps'),
        ('25.000000 MHz', '0 ps'), ('25.000000 MHz', '10000 ps')]
+# option core-40mhz (diagnostic): the same five outputs scaled by 4/5; the picture is
+# generated from the core clock (clk/2), so video becomes 20 MHz (about 47.6 Hz frames)
+PLL_40 = [('40.000000 MHz', '0 ps'), ('80.000000 MHz', '0 ps'), ('80.000000 MHz', '3125 ps'),
+          ('20.000000 MHz', '0 ps'), ('20.000000 MHz', '12500 ps')]
 SDC = '''#
 # Q-L1-14 Pocket PS1 top: clock groups for main_pll_0002 (core_top.v instance ic|mpll).
 # All PLL outputs are related (one VCO); APF clocks are asynchronous to them.
@@ -135,11 +139,11 @@ def run(cmd, cwd, timeout, stdout=None):
     return result
 
 
-def pll_source(template: str) -> str:
+def pll_source(template: str, pll: list) -> str:
     text = template.replace('module  mf_pllbase_0002(', 'module  main_pll_0002(')
     if 'module  main_pll_0002(' not in text:
         raise ValueError('template PLL module header changed')
-    for i, (freq, phase) in enumerate(PLL):
+    for i, (freq, phase) in enumerate(pll):
         text, n1 = re.subn(r'\.output_clock_frequency%d\("[^"]*"\)' % i,
                            '.output_clock_frequency%d("%s")' % (i, freq), text)
         text, n2 = re.subn(r'\.phase_shift%d\("[^"]*"\)' % i, '.phase_shift%d("%s")' % (i, phase), text)
@@ -190,6 +194,7 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
     if set(options) - known:
         raise ValueError('unknown option(s): ' + ', '.join(sorted(set(options) - known)))
     chosen = [*spec['fixes'], *[o for o in spec.get('options', []) if o['option'] in options]]
+    pll = PLL_40 if 'core-40mhz' in options else PLL
 
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.ps1-stage-', dir=destination.parent) as tmp:
@@ -209,10 +214,14 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
         (sfl / 'Pocket').mkdir()
         targets = {'Pocket/core.sflp': (git_head('Pocket/core.sflp'), sfl / 'Pocket/core.sflp'),
                    'Pocket/core_top.v': (git_head('Pocket/core_top.v'), stage / 'core/core_top.v'),
-                   'view_ram_ctrl.sflp': ((sfl / 'view_ram_ctrl.sflp').read_bytes(), sfl / 'view_ram_ctrl.sflp')}
+                   'view_ram_ctrl.sflp': ((sfl / 'view_ram_ctrl.sflp').read_bytes(), sfl / 'view_ram_ctrl.sflp'),
+                   'DDS_50to33868800.sflp': ((sfl / 'DDS_50to33868800.sflp').read_bytes(),
+                                             sfl / 'DDS_50to33868800.sflp')}
         applied, inputs = [], {}
         for name, (raw, out) in targets.items():
             fixes = [f for f in chosen if f['file'] == name]
+            if not fixes:
+                continue
             data, ids = patch(raw, fixes, name)
             out.write_bytes(data)
             applied += ids
@@ -251,7 +260,7 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
 
         # 5. PLL, SDC, QSF
         (stage / 'core/main_pll_0002.v').write_text(
-            pll_source((stage / 'core/mf_pllbase/mf_pllbase_0002.v').read_text()))
+            pll_source((stage / 'core/mf_pllbase/mf_pllbase_0002.v').read_text(), pll))
         (stage / 'core/core_constraints.sdc').write_text(SDC)
         qsf = stage / 'ap_core.qsf'
         lines = edit_qsf(qsf.read_text(), device, profile).splitlines(keepends=True)
@@ -294,7 +303,7 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
                             ('tools/sflc/sflc.py', 'tools/sflc/sflp_parse.py',
                              'tools/pocket/prepare_core_sources.py', 'tools/pocket/prepare_ps1_project.py')},
             'input_sha256': inputs, 'project_sha256': hashes,
-            'pll_outputs': PLL,
+            'pll_outputs': pll,
             'validation': {'icarus_elaboration': 'pass' if check else 'not-run', 'quartus_compile': 'not-run',
                            'timing_review': 'pending', 'pocket_hardware': 'not-run'},
         }
