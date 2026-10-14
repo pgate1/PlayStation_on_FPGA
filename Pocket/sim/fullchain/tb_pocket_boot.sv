@@ -265,6 +265,46 @@ module tb_pocket_boot;
         return "core-stage";    // wram_clear
     endfunction
 
+    // history of the adapter commands and of sdr_ctrl's request/response tags
+    localparam int HN = 16, TN = 48;
+    string  h_master [0:HN-1]; longint h_cyc [0:HN-1]; logic h_wr [0:HN-1]; logic [24:0] h_adrs [0:HN-1];
+    integer h_len [0:HN-1]; logic [127:0] h_data [0:HN-1]; logic h_acc [0:HN-1]; integer h_n = 0;
+    longint t_cyc [0:TN-1]; logic [7:0] t_kind [0:TN-1]; logic [23:0] t_addr [0:TN-1]; logic [2:0] t_tag [0:TN-1];
+    logic [31:0] t_data [0:TN-1]; integer t_n = 0;
+    logic stray_seen = 0;
+    task automatic print_history(input string why);
+        $display("  --- last adapter commands (%s), newest last:", why);
+        for (int i = (h_n > HN ? h_n - HN : 0); i < h_n; i++)
+            $display("    cycle=%0d %-10s %s adrs=%h burst=%0d %s data[31:0]=%h", h_cyc[i % HN], h_master[i % HN],
+                     h_wr[i % HN] ? "write" : "read ", h_adrs[i % HN], h_len[i % HN],
+                     h_acc[i % HN] ? "accepted" : "DROPPED ", h_data[i % HN][31:0]);
+        $display("  --- sdr_ctrl request (REQ we addr tag) / response (RSP tag data) trace, newest last:");
+        for (int i = (t_n > TN ? t_n - TN : 0); i < t_n; i++)
+            if (t_kind[i % TN][7]) $display("    cycle=%0d RSP tag=%0d data=%h", t_cyc[i % TN], t_tag[i % TN], t_data[i % TN]);
+            else $display("    cycle=%0d REQ we=%b addr=%h tag=%0d", t_cyc[i % TN], t_kind[i % TN][0], t_addr[i % TN], t_tag[i % TN]);
+    endtask
+    always @(posedge clk_core) if (dut.reset_n) begin
+        if (dut.sdram_ctrl_inst.req_valid && dut.sdram_ctrl_inst.req_ready) begin
+            t_cyc[t_n % TN] = cyc; t_kind[t_n % TN] = {7'd0, dut.sdram_ctrl_inst.req_we}; t_addr[t_n % TN] = dut.sdram_ctrl_inst.req_addr;
+            t_tag[t_n % TN] = dut.sdram_ctrl_inst.req_tag; t_n++;
+        end
+        if (dut.sdram_ctrl_inst.rd_valid) begin
+            t_cyc[t_n % TN] = cyc; t_kind[t_n % TN] = 8'h80; t_tag[t_n % TN] = dut.sdram_ctrl_inst.rd_tag;
+            t_data[t_n % TN] = dut.sdram_ctrl_inst.rd_data; t_n++;
+        end
+        if (dut.sdram_read | dut.sdram_write) begin
+            h_cyc[h_n % HN] = cyc; h_master[h_n % HN] = master_name(); h_wr[h_n % HN] = dut.sdram_write;
+            h_adrs[h_n % HN] = dut.sdram_adrs; h_data[h_n % HN] = dut.sdram_din; h_acc[h_n % HN] = dut.sdram_mem_ready;
+            h_len[h_n % HN] = (dut.sdram_burst == 0 || dut.sdram_burst > 8) ? 8 : dut.sdram_burst; h_n++;
+        end
+        if (dut.sdram_stray && !stray_seen) begin
+            stray_seen = 1;
+            $display("STRAY: adapter stray read data at cycle=%0d pc=%h (wordside st=%0d we=%b) -- assertion: no stray expected in RTL",
+                     cyc, dut.CU.psx.pc_out, dut.sdram_ctrl_inst.u_word.st, dut.sdram_ctrl_inst.u_word.we);
+            print_history("at the first stray");
+        end
+    end
+
     always @(posedge clk_core) if (dut.reset_n) begin
         automatic int len = (dut.sdram_burst == 0 || dut.sdram_burst > 8) ? 8 : dut.sdram_burst;
         if (collision_cond) begin
@@ -288,6 +328,7 @@ module tb_pocket_boot;
                 if (dut.sdram_read && cpu_strobe) begin
                     drop_watch = 1; drop_adrs = dut.sdram_adrs; drop_len = len; drop_cyc = cyc;
                 end
+                if (dropped_seen == 1) print_history("before the first drop");
             end
         end
         // the CPU takes the next ack as its own: show what it receives against what it asked for
@@ -391,14 +432,15 @@ module tb_pocket_boot;
         return (p < 29'h200000) || (p >= 29'h1FC00000 && p < 29'h1FC80000) || (p >= 29'h1F800000 && p < 29'h1F800400);
     endfunction
     logic [31:0] pc_hist [0:31]; longint pc_hist_cyc [0:31]; integer pc_hist_n = 0;
-    logic [31:0] pc_last = 0;
+    logic [31:0] pc_last = 0; logic pc_moved = 0;
     longint runaway_cycle = -1, first_bad_cycle = -1;
     integer last_dumped = -1, kernel_seen = 0, bios_seen = 0, run_seen = 0, exe_seen = 0, reset_seen = 0;
 
     always @(posedge clk_core) begin
         if (dut.reset_n) cyc++;
         if (dut.reset_n && !reset_seen) begin reset_seen = 1; $display("CORE reset released at t=%0t", $time); end
-        if (dut.CU.psx.pc_out != pc_last) begin
+        pc_moved = dut.CU.psx.pc_out != pc_last;
+        if (pc_moved) begin
             pc_last = dut.CU.psx.pc_out;
             pc_hist[pc_hist_n % 32] = pc_last; pc_hist_cyc[pc_hist_n % 32] = cyc; pc_hist_n++;
         end
@@ -412,9 +454,10 @@ module tb_pocket_boot;
                      dut.CU.psx.pc_out, cyc, $time, dut.CU.psx.opcode_out, collisions, sb_mismatch, dut.sdram_dropped);
             for (int i = (pc_hist_n > 32 ? pc_hist_n - 32 : 0); i < pc_hist_n; i++)
                 $display("  pc history: cycle=%0d pc=%h", pc_hist_cyc[i % 32], pc_hist[i % 32]);
+            print_history("before the runaway");
         end
         // a PC that does not move: something waits forever; show who
-        if (run_seen && dut.CU.psx.pc_out == pc_last && stuck_cycles > 0) begin
+        if (run_seen && !pc_moved && stuck_cycles > 0) begin
             stuck_count++;
             if (stuck_count == stuck_cycles) begin
                 $display("STUCK PC %h for %0d cycles at cycle=%0d: opcode=%h psx waits: wram=%b bios=%b io=%b gpu=%b cdr=%b wwram=%b ircache=%b cpu_rd=%b cpu_wr=%b; gpu_drawing=%b vraming=%b dma_running=%b sio_waiting=%b mdec_waiting=%b peripheral_running=%b; core: sdram_ack=%b gpu_wait=%b%b spu_wait=%b wram_ack=%b; adapter ready=%b ack=%b; sdr_ctrl ready=%b req_valid=%b req_ready=%b; psx.dbg=%h",
