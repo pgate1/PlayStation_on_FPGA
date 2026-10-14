@@ -373,6 +373,46 @@
       "why": "with core-40mhz the picture (and the PSX vblank, which follows the VGA scan) ran at 47.95 Hz, so games ran 20% slow. The scan now advances every 40 MHz clock with 1274-clock lines: 1274 x 524 / 40 MHz = 59.92 Hz (upstream: 796 x 524 at 25 MHz = 59.94 Hz). 640 active pixels, each 320-wide source pixel shown for 2 clocks as before; the video clock becomes 40 MHz (PLL outputs 3/4). Requires core-40mhz. Line length 1274 clocks.",
       "old": "\t\tif(h_tim==(796-1)) h_tim := 0;\n",
       "new": "\t\tif(h_tim==(1274-1)) h_tim := 0; // Q-L1-16 video-60hz\n"
+    },
+    {
+      "option": "sram-loader-fifo",
+      "id": "O-L1",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "B",
+      "why": "SRAM loader (data-slot pages for check_file, the EXE header and the disc reader): the strobe was stretched to 3 clk_74a cycles and synch_3d into the core clock, so ram1_word_data was sampled several core clocks late (the next bridge word may already be there) and strobes closer than 3 clk_74a cycles merged. Word-consumed strobe.",
+      "old": "\tinstrout run33_o;\n",
+      "new": "\tinstrout run33_o;\n\tinstrout sram_word_done; // Q-L1-16 sram-loader-fifo: one SRAM loader word written\n"
+    },
+    {
+      "option": "sram-loader-fifo",
+      "id": "O-L2",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "B",
+      "why": "SRAM loader (data-slot pages for check_file, the EXE header and the disc reader): the strobe was stretched to 3 clk_74a cycles and synch_3d into the core clock, so ram1_word_data was sampled several core clocks late (the next bridge word may already be there) and strobes closer than 3 clk_74a cycles merged. Pop after the second halfword.",
+      "old": "\t\t\tsram_wadrs++;\n",
+      "new": "\t\t\tsram_wadrs++;\n\t\t\tsram_word_done(); // Q-L1-16 sram-loader-fifo\n"
+    },
+    {
+      "option": "sram-loader-fifo",
+      "id": "O-L3",
+      "file": "Pocket/core_top.v",
+      "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
+      "class": "B",
+      "why": "SRAM loader (data-slot pages for check_file, the EXE header and the disc reader): the strobe was stretched to 3 clk_74a cycles and synch_3d into the core clock, so ram1_word_data was sampled several core clocks late (the next bridge word may already be there) and strobes closer than 3 clk_74a cycles merged. FIFO, pop guard and reloading tail.",
+      "old": "\twire ram_word_wr_hold_s, ram_word_wr_hold_r;\nsynch_3 swrhold(|ram_word_wr_hold, ram_word_wr_hold_s, clk_50, ram_word_wr_hold_r);\n",
+      "new": "\twire ram_word_wr_hold_s, ram_word_wr_hold_r;\nsynch_3 swrhold(|ram_word_wr_hold, ram_word_wr_hold_s, clk_50, ram_word_wr_hold_r);\n    // Q-L1-16 sram-loader-fifo: SRAM loader words cross clk_74a -> clk_50 through a dual-clock\n    // FIFO (one 4 KB page fits); the core pops one word per completed two-halfword SRAM write.\n    // The core sees ram_reloading until the FIFO has been empty for 32 clocks, so the last\n    // words are written before apf2sram pads the page.\n    wire sram_word_done;\n    reg [1:0] sfifo_cool = 2'd0;   // rdata is the new head two cycles after a pop\n    wire [10:0] sfifo_lvl;\n    wire [31:0] sfifo_q;\n    pocket_audio_afifo #(.W(32), .AW(10)) u_sfifo (\n        .wclk(clk_74a), .wrst(~reset_n), .we(sram_word_wr), .wdata(ram1_word_data),\n        .wfull(), .wlevel(),\n        .rclk(clk_50), .rrst(ldf_rst_50[1]), .re(sram_word_done), .rdata(sfifo_q), .rlevel(sfifo_lvl));\n    always @(posedge clk_50)\n        if (ldf_rst_50[1]) sfifo_cool <= 2'd0;\n        else if (sram_word_done) sfifo_cool <= 2'd2;\n        else if (sfifo_cool != 2'd0) sfifo_cool <= sfifo_cool - 2'd1;\n    wire sfifo_word = (sfifo_lvl != 11'd0) & (sfifo_cool == 2'd0);\n    reg [4:0] reload_tail = 5'd0;\n    always @(posedge clk_50)\n        if (ram_reloading_s | (sfifo_lvl != 11'd0)) reload_tail <= 5'd31;\n        else if (reload_tail != 5'd0) reload_tail <= reload_tail - 5'd1;\n    wire ram_reloading_core = ram_reloading_s | (sfifo_lvl != 11'd0) | (reload_tail != 5'd0);\n"
+    },
+    {
+      "option": "sram-loader-fifo",
+      "id": "O-L4",
+      "file": "Pocket/core_top.v",
+      "upstream_sha256": "737dfd1c4630b7cfa0e464eb5b6420f404f0f403ff71b31a53674b0931fc87f2",
+      "class": "B",
+      "why": "SRAM loader (data-slot pages for check_file, the EXE header and the disc reader): the strobe was stretched to 3 clk_74a cycles and synch_3d into the core clock, so ram1_word_data was sampled several core clocks late (the next bridge word may already be there) and strobes closer than 3 clk_74a cycles merged. Core connections.",
+      "old": "\t\t.sram_word_wr(ram_word_wr_hold_r), .sram_wdata(ram1_word_data),\n\t\t.target_dataslot_read(target_dataslot_read_s), .ram_reloading(ram_reloading_s),\n",
+      "new": "\t\t.sram_word_wr(sfifo_word), .sram_wdata(sfifo_q), .sram_word_done(sram_word_done), // Q-L1-16\n\t\t.target_dataslot_read(target_dataslot_read_s), .ram_reloading(ram_reloading_core),\n"
     }
   ],
   "generated_files": [
