@@ -533,4 +533,28 @@ module tb_pocket_boot;
         for (int y = 0; y < 240; y++) for (int x = 0; x < 320; x++) fb[y][x] = 0;
         $display("memories initialised, t=%0t", $time);
     end
+
+    // ---------------- audio capture (+audio=1): SPU mix at each 44.1 kHz sample strobe
+    // (21-bit, as int32 L,R) and the 16-bit 48 kHz frames handed to the I2S serializer.
+    // Files go to outdir (gitignored build tree): audio_in.raw, audio_out.raw.
+    integer afd_in = 0, afd_out = 0;
+    initial begin
+        string od; int en;
+        if ($value$plusargs("audio=%d", en) && en != 0) begin
+            if (!$value$plusargs("outdir=%s", od)) od = ".";
+            afd_in  = $fopen({od, "/audio_in.raw"}, "wb");
+            afd_out = $fopen({od, "/audio_out.raw"}, "wb");
+        end
+    end
+    always @(posedge dut.clk_50) if (afd_in != 0 && dut.u_audio.smp_stb) begin
+        logic [31:0] l, r;
+        l = {{11{dut.u_audio.in_l[20]}}, dut.u_audio.in_l};
+        r = {{11{dut.u_audio.in_r[20]}}, dut.u_audio.in_r};
+        $fwrite(afd_in, "%c%c%c%c%c%c%c%c", l[7:0], l[15:8], l[23:16], l[31:24], r[7:0], r[15:8], r[23:16], r[31:24]);
+    end
+    always @(posedge dut.clk_74a) if (afd_out != 0 && dut.u_audio.fetch) begin
+        $fwrite(afd_out, "%c%c%c%c", dut.u_audio.frame_l[7:0], dut.u_audio.frame_l[15:8],
+                dut.u_audio.frame_r[7:0], dut.u_audio.frame_r[15:8]);
+    end
+
 endmodule
