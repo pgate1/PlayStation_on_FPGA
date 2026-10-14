@@ -22,6 +22,7 @@
 //   +frames_every=<n> +wr_interval=<clk_74a cycles per loader word> +tout_ps=<n>
 //   +status_every=<core cycles> +sdram_init=<0|1: zero or pattern>
 //   +stop_on_runaway=<cycles to run after the first runaway PC, 0 = keep going>
+//   +fast_1sec=<1: skip most of the core's one-second start delay after the loader stages>
 `timescale 1ns/1ps
 module tb_pocket_boot;
     // ---------------- clocks ----------------
@@ -64,7 +65,7 @@ module tb_pocket_boot;
     string slot20_file, slot40_file, outdir;
     longint max_cycles = 200000000;
     integer frames_every = 30, wr_interval = 12, tout_ps = 7000, status_every = 4000000;
-    integer sdram_init = 1, stop_on_runaway = 2000000;
+    integer sdram_init = 1, stop_on_runaway = 2000000, fast_1sec = 1;
 
     // ---------------- SDRAM model (32M x 16, CL 3, BL 2) ----------------
     // halfword index = {row[12:0], bank[1:0], col[9:0]}: what sdr_ctrl maps a 25-bit
@@ -243,7 +244,8 @@ module tb_pocket_boot;
     logic [15:0] ref_mem [0:33554431];
     longint sb_reads = 0, sb_writes = 0, sb_mismatch = 0, sb_ops_loader = 0, sb_ops_cpu = 0, sb_ops_alt = 0;
     logic        sb_pending = 0;
-    logic [24:0] sb_adrs; integer sb_len; string sb_master;
+    logic [24:0] sb_adrs; integer sb_len; string sb_master; logic sb_write = 0;
+    logic drop_watch = 0; logic [24:0] drop_adrs; integer drop_len; longint drop_cyc;
     longint      sb_cycle;
     wire cpu_strobe = dut.CU.__sfl_port_2_WRAM_READ | dut.CU.__sfl_port_2_WRAM_WRITE | dut.CU.__sfl_port_2_BIOS_READ;
     wire alt_req = dut.CU.__sfl_port_2_vram_read_req | dut.CU.__sfl_port_2_vram_write_req |
@@ -276,9 +278,22 @@ module tb_pocket_boot;
         if (rw_both) rw_boths++;
         if ((dut.sdram_read | dut.sdram_write) && !dut.sdram_mem_ready) begin
             dropped_seen++;
-            if (dropped_seen <= 5)
-                $display("DROPPED #%0d cycle=%0d pc=%h master=%s rd=%b wr=%b adrs=%h burst=%0d (adapter busy)",
-                         dropped_seen, cyc, dut.CU.psx.pc_out, master_name(), dut.sdram_read, dut.sdram_write, dut.sdram_adrs, dut.sdram_burst);
+            if (dropped_seen <= 8) begin
+                $display("DROPPED #%0d cycle=%0d pc=%h master=%s rd=%b wr=%b adrs=%h burst=%0d: adapter busy with %s %s adrs=%h burst=%0d issued cycle=%0d (gpu_wait=%b%b spu_wait=%b sdram_ack=%b)",
+                         dropped_seen, cyc, dut.CU.psx.pc_out, master_name(), dut.sdram_read, dut.sdram_write, dut.sdram_adrs, dut.sdram_burst,
+                         sb_master, sb_write ? "write" : "read", sb_adrs, sb_len, sb_cycle,
+                         dut.CU.gpu_read_wait_ack, dut.CU.gpu_write_wait_ack, dut.CU.spu_wait_ack, dut.CU.sdram_ack);
+                if (dut.sdram_read && cpu_strobe) begin
+                    drop_watch = 1; drop_adrs = dut.sdram_adrs; drop_len = len; drop_cyc = cyc;
+                end
+            end
+        end
+        // the CPU takes the next ack as its own: show what it receives against what it asked for
+        if (drop_watch && dut.CU.sdram_ack && dut.CU.__sfl_port_2_wram_ack) begin
+            drop_watch = 0;
+            $display("CPU READ GOT OTHER DATA: dropped read adrs=%h (cycle %0d) acked at cycle=%0d with sdram_dout[31:0]=%h (of the %s op), correct data would be %h%h",
+                     drop_adrs, drop_cyc, cyc, dut.sdram_dout[31:0], sb_master,
+                     ref_mem[(drop_adrs + 1) & 25'h1FFFFFF], ref_mem[drop_adrs & 25'h1FFFFFF]);
         end
         // completion of a pending read: ready is back and dout holds the burst
         if (sb_pending && dut.sdram_mem_ready) begin
@@ -296,6 +311,7 @@ module tb_pocket_boot;
         end
         if ((dut.sdram_read | dut.sdram_write) && dut.sdram_mem_ready) begin
             if (dut.ldf_go) sb_ops_loader++; else if (cpu_strobe) sb_ops_cpu++; else sb_ops_alt++;
+            sb_master = master_name(); sb_cycle = cyc; sb_adrs = dut.sdram_adrs; sb_len = len; sb_write = dut.sdram_write;
             if (dut.sdram_write) begin
                 sb_writes++;
                 for (int h = 0; h < len; h++) begin
@@ -304,7 +320,7 @@ module tb_pocket_boot;
                     if (dut.sdram_enable[2 * h + 1]) ref_mem[a][15:8] = dut.sdram_din[h * 16 + 8 +: 8];
                 end
             end else begin
-                sb_reads++; sb_pending = 1; sb_adrs = dut.sdram_adrs; sb_len = len; sb_master = master_name(); sb_cycle = cyc;
+                sb_reads++; sb_pending = 1;
             end
         end
     end
@@ -353,6 +369,19 @@ module tb_pocket_boot;
             $fclose(fd);
         end
     endtask
+
+    // +fast_1sec=1: the core waits one second (count_1sec, core.sflp) before psx_run_ok;
+    // skip most of it once the loader stages are done (exe_read_ok)
+    initial begin
+        wait (fast_1sec && dut.CU.exe_read_ok);
+        repeat (1000) @(posedge clk_core);
+        if (dut.CU.count_1sec < 26'd39000000) begin
+            force dut.CU.count_1sec = 26'd39000000;
+            @(posedge clk_core);
+            release dut.CU.count_1sec;
+            $display("FAST_1SEC: count_1sec advanced at cycle=%0d", cyc);
+        end
+    end
 
     // ---------------- run control / monitors ----------------
     function automatic bit pc_ok(input logic [31:0] pc);
@@ -423,6 +452,7 @@ module tb_pocket_boot;
         void'($value$plusargs("status_every=%d", status_every));
         void'($value$plusargs("sdram_init=%d", sdram_init));
         void'($value$plusargs("stop_on_runaway=%d", stop_on_runaway));
+        void'($value$plusargs("fast_1sec=%d", fast_1sec));
         if (wr_interval < 3) wr_interval = 3;
         t_out = tout_ps / 1000.0; t_rel = 2.5 + (tout_ps - 5000) / 1000.0;
         fd = $fopen(slot20_file, "rb");
