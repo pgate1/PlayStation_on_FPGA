@@ -18,19 +18,21 @@ module ram_320x240x15_dp_banked (
 );
     localparam integer BANKS = 38;           // 38 x 2048 = 77824 >= 320 * 240
 
-    logic [14:0] q [BANKS];
+    wire  [14:0] q [0:BANKS-1];
     logic [5:0]  rd_bank;
 
     genvar b;
     generate
         for (b = 0; b < BANKS; b = b + 1) begin : g_bank
             logic [14:0] mem [0:2047];
+            logic [14:0] qb;
             always_ff @(posedge clk) begin
                 if (wr_en && wr_adrs[16:11] == b)
                     mem[wr_adrs[10:0]] <= wr_data;
                 if (rd_en)
-                    q[b] <= mem[rd_adrs[10:0]];
+                    qb <= mem[rd_adrs[10:0]];
             end
+            assign q[b] = qb;
         end
     endgenerate
 
