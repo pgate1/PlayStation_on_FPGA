@@ -50,7 +50,7 @@ import fetch_diagnostic_reference as reference  # noqa: E402
 FIXES = ROOT / 'Pocket/source_fixes/pocket_top_fixes.json'
 SFLC = ROOT / 'tools/sflc/sflc.py'
 OWNED_RTL = ['Pocket/rtl/sdram128_burstn_adapter.sv', 'Pocket/audio/pocket_audio_out.sv',
-             'Pocket/rtl/ram_320x240x15_dp_2k5.sv']
+             'Pocket/rtl/ram_320x240x15_dp_2k5.sv', 'Pocket/rtl/ram_320x240x15_dp_banked.sv']
 SPU_SV = ['spu_dsp_shared.sv', 'DigitalSignalProcessor_shared.sv']
 # PLL outputs as core_top.v uses them: clk_50, dram_ctrl_clk, dram_clk source
 # (sdr_phy clk2x_90), clk_25 (video), clk_25_90deg (video DDR clock).
@@ -190,7 +190,7 @@ def edit_qsf(text: str, device: str, profile: str) -> str:
 
 def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bool, timeout: int,
             device: str = '5CEBA4F23C8', profile: str = 'template', sdram_phase: int = 90,
-            view_ram_2k5: bool = False, seed: int = 0) -> None:
+            view_ram_2k5=False, seed: int = 0) -> None:
     build_root = (ROOT / 'Pocket/build').resolve()
     destination = destination.absolute()
     if destination.is_symlink() or destination.exists():
@@ -257,10 +257,12 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
         for gen in spec['generated_files']:
             content = gen['content']
             if view_ram_2k5 and gen['file'] == 'rtl/pocket_top_shims.v':
-                # Q-L1-16: both view buffers as 2K x 5 M10K slices (Pocket/rtl/ram_320x240x15_dp_2k5.sv)
+                # Q-L1-16: both view buffers in 2K-deep M10K slices: 'altsyncram'
+                # (ram_320x240x15_dp_2k5.sv) or 'banked' (ram_320x240x15_dp_banked.sv)
                 if content.count('  ram_320x240x15_dp u (') != 1:
                     raise ValueError('view RAM shim instance not found exactly once')
-                content = content.replace('  ram_320x240x15_dp u (', '  ram_320x240x15_dp_2k5 u (')
+                module = 'ram_320x240x15_dp_banked' if view_ram_2k5 == 'banked' else 'ram_320x240x15_dp_2k5'
+                content = content.replace('  ram_320x240x15_dp u (', '  %s u (' % module)
             (stage / 'ps1' / gen['file']).write_text(content)
         for item in spec['copied_inputs']:
             data = (ROOT / item['source']).read_bytes()
@@ -365,8 +367,9 @@ def main() -> int:
     parser.add_argument('--seed', type=int, default=0, help='fitter SEED (0: template default)')
     parser.add_argument('--sdram-phase', type=int, default=90, choices=[0, 90, 180, 270],
                         help='SDRAM clock phase in degrees of the SDRAM controller clock (clk2x)')
-    parser.add_argument('--view-ram-2k5', action='store_true',
-                        help='view buffers packed as 2K x 5 M10K slices (two buffers fit)')
+    parser.add_argument('--view-ram-2k5', nargs='?', const='altsyncram', default=False,
+                        choices=['altsyncram', 'banked'],
+                        help='view buffers in 2K-deep M10K slices (two buffers fit)')
     parser.add_argument('--check', action='store_true')
     parser.add_argument('--timeout', type=int, default=1800)
     args = parser.parse_args()
