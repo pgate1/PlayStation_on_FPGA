@@ -226,6 +226,60 @@
       "why": "The GPU/SPU SDRAM requests (alt) were issued whenever the registered ack was high, independently of the CPU requests (WRAM_READ/WRAM_WRITE/BIOS_READ instructs), so both could strobe in the same cycle and their sdram_read/sdram_write arguments were ORed. Upstream shipped with the SPU off (its SPU path halted with 0x95/0x96); with the Q-L1-14 SPU-in-SDRAM path every sound-on build ran away during the BIOS (hardware r16, r19b, r26-r29: PC ~0x80A81C2x), sound-off r13 booted. The boot bench gave the CPU priority, so it never showed this. The GPU/SPU request now waits while a CPU strobe is present.",
       "old": "\t\tgpu_read_wait_ack | gpu_write_wait_ack | \n\t\tspu_wait_ack | ^sdram_ack : ;\n",
       "new": "\t\tgpu_read_wait_ack | gpu_write_wait_ack | \n\t\tspu_wait_ack | ^sdram_ack |\n\t\tpsx.WRAM_READ | psx.WRAM_WRITE | psx.BIOS_READ : ; // Q-L1-16: a CPU strobe owns the cycle\n"
+    },
+    {
+      "id": "T12a",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "B",
+      "why": "Q-L1-16 T12 (found by the full-chain simulation Pocket/sim/fullchain, commit 5928005): the CPU SDRAM commands (psx.WRAM_READ/WRAM_WRITE/BIOS_READ) were strobed regardless of sdram_ack. One arriving while an SPU/GPU command was in flight was dropped by the adapter, and `if(sdram_ack) psx.wram_ack()/bios_ack()` then handed the other command's completion and stale dout to the CPU; with the SPU on (first SPU-RAM write of the BIOS SPU init) this ran the PC away to 0x80A81C20, as on hardware r16-r30. The CPU command is now held in cpu_pend_* while a GPU/SPU command is in flight and issued when it completes; the ack level reaches the CPU only while no GPU/SPU command is in flight and no CPU command is held. Simulated 14 s: BIOS logo and shell, 0 dropped, 0 scoreboard mismatches.",
+      "old": "\n\tinstruct psx.WRAM_READ par{\n\t\tany{\n\t\t\t(psx.Word==1) | (psx.Word==2) : par{\n\t\t\t\tsdram_read(0b00000 || psx.A<20:1>, 1);\n\t\t\t}\n\t\t\telse : par{// byte 16,12,8,4 -> burst 8,6,4,2\n\t\t\t\tsdram_read(0b00000 || psx.A<20:2> || 0b0, psx.Word<4:1>);\n\t\t\t}\n",
+      "new": "\n\t// Q-L1-16 T12: the CPU's SDRAM commands (psx.WRAM_READ/WRAM_WRITE/BIOS_READ) are issued\n\t// without looking at sdram_ack. One that arrives while a GPU/SPU command is in flight\n\t// (gpu_*_wait_ack/spu_wait_ack) is held in cpu_pend_* and issued when that command\n\t// completes; the ack level reaches the CPU only while no GPU/SPU command is in flight\n\t// and no CPU command is held (the level semantics of the original ack are kept).\n\tinstrself cpu_read(cpu_adrs, cpu_burst);\n\tinstrself cpu_write(cpu_adrs, cpu_din, cpu_enable, cpu_burst);\n\tsel cpu_adrs<25>, cpu_din<128>, cpu_enable<16>, cpu_burst<4>;\n\treg_wr cpu_pend, cpu_pend_write;\n\treg cpu_pend_adrs<25>, cpu_pend_din<128>, cpu_pend_enable<16>, cpu_pend_burst<4>;\n\tsel alt_busy;\n\talt_busy = gpu_read_wait_ack | gpu_write_wait_ack | spu_wait_ack;\n\n\tinstruct psx.WRAM_READ par{\n\t\tany{\n\t\t\t(psx.Word==1) | (psx.Word==2) : par{\n\t\t\t\tcpu_read(0b00000 || psx.A<20:1>, 1);\n\t\t\t}\n\t\t\telse : par{// byte 16,12,8,4 -> burst 8,6,4,2\n\t\t\t\tcpu_read(0b00000 || psx.A<20:2> || 0b0, psx.Word<4:1>);\n\t\t\t}\n"
+    },
+    {
+      "id": "T12b",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "B",
+      "why": "part of T12 (see T12a)",
+      "old": "\t}\n\tif(sdram_ack) psx.wram_ack();\n\n",
+      "new": "\t}\n\tinstruct cpu_read par{\n\t\tif(alt_busy){\n\t\t\tcpu_pend := 0b1;\n\t\t\tcpu_pend_write := 0b0;\n\t\t\tcpu_pend_adrs := cpu_adrs;\n\t\t\tcpu_pend_burst := cpu_burst;\n\t\t}\n\t\telse sdram_read(cpu_adrs, cpu_burst);\n\t}\n\tinstruct cpu_write par{\n\t\tif(alt_busy){\n\t\t\tcpu_pend := 0b1;\n\t\t\tcpu_pend_write := 0b1;\n\t\t\tcpu_pend_adrs := cpu_adrs;\n\t\t\tcpu_pend_din := cpu_din;\n\t\t\tcpu_pend_enable := cpu_enable;\n\t\t\tcpu_pend_burst := cpu_burst;\n\t\t}\n\t\telse sdram_write(cpu_adrs, cpu_din, cpu_enable, cpu_burst);\n\t}\n\tif(cpu_pend & sdram_ack){ // the GPU/SPU command has completed: issue the held one\n\t\tif(cpu_pend_write) sdram_write(cpu_pend_adrs, cpu_pend_din, cpu_pend_enable, cpu_pend_burst);\n\t\telse sdram_read(cpu_pend_adrs, cpu_pend_burst);\n\t\tcpu_pend := 0b0;\n\t}\n\tif(sdram_ack & ^alt_busy & ^cpu_pend){\n\t\tpsx.wram_ack();\n\t\tpsx.bios_ack();\n\t}\n\n"
+    },
+    {
+      "id": "T12c",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "B",
+      "why": "part of T12 (see T12a)",
+      "old": "\t\t\tpsx.Word==1 : any{ // psx.Dout<7:0>\n\t\t\t\tpsx.A<0>==0b0 : sdram_write(0b00000 || psx.A<20:1>,  128#psx.Dout      , 0x0001, 1);\n\t\t\t\tpsx.A<0>==0b1 : sdram_write(0b00000 || psx.A<20:1>, (128#psx.Dout) << 8, 0x0002, 1);\n\t\t\t}\n\t\t\tpsx.Word==2 : par{ // psx.Dout<15:0>\n\t\t\t\tsdram_write(0b00000 || psx.A<20:1>, 128#psx.Dout, 0x0003, 1);\n\t\t\t}\n\t\t\telse/*psx.Word==4*/ : sdram_write(0b00000 || psx.A<20:2> || 0b0, 128#psx.Dout, 0x000F, 2);\n\t\t}\n",
+      "new": "\t\t\tpsx.Word==1 : any{ // psx.Dout<7:0>\n\t\t\t\tpsx.A<0>==0b0 : cpu_write(0b00000 || psx.A<20:1>,  128#psx.Dout      , 0x0001, 1);\n\t\t\t\tpsx.A<0>==0b1 : cpu_write(0b00000 || psx.A<20:1>, (128#psx.Dout) << 8, 0x0002, 1);\n\t\t\t}\n\t\t\tpsx.Word==2 : par{ // psx.Dout<15:0>\n\t\t\t\tcpu_write(0b00000 || psx.A<20:1>, 128#psx.Dout, 0x0003, 1);\n\t\t\t}\n\t\t\telse/*psx.Word==4*/ : cpu_write(0b00000 || psx.A<20:2> || 0b0, 128#psx.Dout, 0x000F, 2);\n\t\t}\n"
+    },
+    {
+      "id": "T12d",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "B",
+      "why": "part of T12 (see T12a)",
+      "old": "\t\t\t(psx.Word==1) | (psx.Word==2) : par{\n\t\t\t\tsdram_read(0b0100000 || psx.A<18:1>, 1);\n\t\t\t}\n\t\t\telse : par{// byte 4 -> burst 2\n\t\t\t\tsdram_read(0b0100000 || psx.A<18:2> || 0b0, 2);//psx.Word<4:1>);\n\t\t\t}\n",
+      "new": "\t\t\t(psx.Word==1) | (psx.Word==2) : par{\n\t\t\t\tcpu_read(0b0100000 || psx.A<18:1>, 1);\n\t\t\t}\n\t\t\telse : par{// byte 4 -> burst 2\n\t\t\t\tcpu_read(0b0100000 || psx.A<18:2> || 0b0, 2);//psx.Word<4:1>);\n\t\t\t}\n"
+    },
+    {
+      "id": "T12e",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "B",
+      "why": "part of T12 (see T12a)",
+      "old": "\t}\n\tif(sdram_ack) psx.bios_ack();\n\n",
+      "new": "\t}\n\n"
+    },
+    {
+      "id": "T12f",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "B",
+      "why": "part of T12 (see T12a)",
+      "old": "\t\tspu_wait_ack | ^sdram_ack |\n\t\tpsx.WRAM_READ | psx.WRAM_WRITE | psx.BIOS_READ : ; // Q-L1-16: a CPU strobe owns the cycle\n\n",
+      "new": "\t\tspu_wait_ack | ^sdram_ack |\n\t\tpsx.WRAM_READ | psx.WRAM_WRITE | psx.BIOS_READ | cpu_pend : ; // Q-L1-16: a CPU strobe owns the cycle (T12: or a held one)\n\n"
     }
   ],
   "options": [
