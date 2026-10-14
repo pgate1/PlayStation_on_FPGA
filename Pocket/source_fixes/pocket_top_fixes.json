@@ -217,6 +217,15 @@
       "why": "Q-L1-16 top-level debug bits input (core_top sdram_dbg), read only by debug overlays",
       "old": "\tinput target_dataslot_read, ram_reloading;\n",
       "new": "\tinput target_dataslot_read, ram_reloading;\n\tinput dbg_ext<8>; // Q-L1-16: top-level debug bits (core_top sdram_dbg), overlays only\n"
+    },
+    {
+      "id": "T11",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "B",
+      "why": "The GPU/SPU SDRAM requests (alt) were issued whenever the registered ack was high, independently of the CPU requests (WRAM_READ/WRAM_WRITE/BIOS_READ instructs), so both could strobe in the same cycle and their sdram_read/sdram_write arguments were ORed. Upstream shipped with the SPU off (its SPU path halted with 0x95/0x96); with the Q-L1-14 SPU-in-SDRAM path every sound-on build ran away during the BIOS (hardware r16, r19b, r26-r29: PC ~0x80A81C2x), sound-off r13 booted. The boot bench gave the CPU priority, so it never showed this. The GPU/SPU request now waits while a CPU strobe is present.",
+      "old": "\t\tgpu_read_wait_ack | gpu_write_wait_ack | \n\t\tspu_wait_ack | ^sdram_ack : ;\n",
+      "new": "\t\tgpu_read_wait_ack | gpu_write_wait_ack | \n\t\tspu_wait_ack | ^sdram_ack |\n\t\tpsx.WRAM_READ | psx.WRAM_WRITE | psx.BIOS_READ : ; // Q-L1-16: a CPU strobe owns the cycle\n"
     }
   ],
   "options": [
