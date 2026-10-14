@@ -557,4 +557,36 @@ module tb_pocket_boot;
                 dut.u_audio.frame_r[7:0], dut.u_audio.frame_r[15:8]);
     end
 
+
+    // ---------------- disc read log (+discreads=1): every CD-controller byte fetch that the core
+    // acknowledges is compared with the slot-0x40 image (what the host would serve); new
+    // sector starts and mismatches are printed. Used to separate the SRAM page path from the
+    // CD controller on hardware game boots.
+    integer dr_en = 0, dr_ack = 0, dr_bad = 0, dr_bad_shown = 0, dr_jumps = 0;
+    reg [31:0] dr_last = 32'hFFFFFFFF;
+    initial begin
+        if ($value$plusargs("discreads=%d", dr_en)) ;
+    end
+    always @(posedge clk_core) if (dr_en != 0 && dut.reset_n && dut.CU.__sfl_port_2_file_ack) begin
+        logic [31:0] a;
+        a = dut.CU.__sfl_port_2_file_adrs;
+        dr_ack = dr_ack + 1;
+        if (a != dr_last + 1) begin
+            dr_jumps = dr_jumps + 1;
+            if (dr_jumps <= 200)
+                $display("DISC read adrs=%0d (sector %0d +%0d) cyc=%0d after %0d acks, error=%b",
+                         a, a / 2352, a % 2352, cyc, dr_ack, dut.CU.__sfl_port_2_file_error);
+        end
+        dr_last = a;
+        if (dut.CU.__sfl_port_2_file_data !== slot40[a % 33554432]) begin
+            dr_bad = dr_bad + 1;
+            if (dr_bad_shown < 10) begin
+                dr_bad_shown = dr_bad_shown + 1;
+                $display("DISC MISMATCH adrs=%0d got %02x expected %02x cyc=%0d", a,
+                         dut.CU.__sfl_port_2_file_data, slot40[a % 33554432], cyc);
+            end
+        end
+    end
+    final if (dr_en != 0) $display("DISC SUMMARY acks=%0d jumps=%0d mismatches=%0d", dr_ack, dr_jumps, dr_bad);
+
 endmodule
