@@ -281,3 +281,25 @@ What was wrong, in the order found on hardware (debug overlays `debug-overlay`,
 Known open: reverb on does not route at 98% (r21); the SRAM loader path
 (`ram_word_wr_hold_r`) still samples `ram1_word_data` about 3 core clocks late;
 50 MHz timing.
+
+### Sound-on runaway (2026-10-14): fixes T11, T12
+
+Every sound-on build ran away during the BIOS on hardware (no halt, PC
+0x80A81C2x, black picture); sound-off r13 booted. The full-chain simulation
+(`Pocket/sim/fullchain/`, `Pocket/sim/run_pocket_sim.py`: the prepared core_top
+with the loader FIFOs, the SDRAM adapter chain, an SDRAM scoreboard and an APF
+host model) reproduced the PC exactly. Cause: core.sflp strobed CPU SDRAM
+commands without looking at `sdram_ack`; one that arrived while an SPU/GPU
+command was in flight was dropped by the adapter, and the next ack handed the
+other command's completion and stale data to the CPU. T12a-T12f hold the CPU
+command while a GPU/SPU command is in flight and gate the CPU's ack the same
+way; simulated 14 s: SCE logo and BIOS shell, 0 dropped, 0 mismatches. T11
+(a CPU strobe owns the cycle) stays; it was not the cause. The old boot bench
+(`Pocket/sim/tb_psx_boot.sv`) served SPU RAM separately and gave the CPU
+priority, so it could not show either.
+
+```
+python3 -I Pocket/sim/run_pocket_sim.py build Pocket/build/<prepared dir>
+python3 -I Pocket/sim/run_pocket_sim.py run Pocket/build/<prepared dir> <scph5500.bin> \
+  Pocket/build/<prepared dir>/out --cycles 560000000     # ~45 min, PPM frames in out/
+```
