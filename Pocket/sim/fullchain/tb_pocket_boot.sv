@@ -23,6 +23,7 @@
 //   +status_every=<core cycles> +sdram_init=<0|1: zero or pattern>
 //   +stop_on_runaway=<cycles to run after the first runaway PC, 0 = keep going>
 //   +fast_1sec=<1: skip most of the core's one-second start delay after the loader stages>
+//   +stuck_cycles=<n: report the waiting state once the PC has not moved for n cycles, 0 = off>
 `timescale 1ns/1ps
 module tb_pocket_boot;
     // ---------------- clocks ----------------
@@ -65,7 +66,8 @@ module tb_pocket_boot;
     string slot20_file, slot40_file, outdir;
     longint max_cycles = 200000000;
     integer frames_every = 30, wr_interval = 12, tout_ps = 7000, status_every = 4000000;
-    integer sdram_init = 1, stop_on_runaway = 2000000, fast_1sec = 1;
+    integer sdram_init = 1, stop_on_runaway = 2000000, fast_1sec = 1, stuck_cycles = 1000000;
+    longint stuck_count = 0;
 
     // ---------------- SDRAM model (32M x 16, CL 3, BL 2) ----------------
     // halfword index = {row[12:0], bank[1:0], col[9:0]}: what sdr_ctrl maps a 25-bit
@@ -411,6 +413,25 @@ module tb_pocket_boot;
             for (int i = (pc_hist_n > 32 ? pc_hist_n - 32 : 0); i < pc_hist_n; i++)
                 $display("  pc history: cycle=%0d pc=%h", pc_hist_cyc[i % 32], pc_hist[i % 32]);
         end
+        // a PC that does not move: something waits forever; show who
+        if (run_seen && dut.CU.psx.pc_out == pc_last && stuck_cycles > 0) begin
+            stuck_count++;
+            if (stuck_count == stuck_cycles) begin
+                $display("STUCK PC %h for %0d cycles at cycle=%0d: opcode=%h psx waits: wram=%b bios=%b io=%b gpu=%b cdr=%b wwram=%b ircache=%b cpu_rd=%b cpu_wr=%b; gpu_drawing=%b vraming=%b dma_running=%b sio_waiting=%b mdec_waiting=%b peripheral_running=%b; core: sdram_ack=%b gpu_wait=%b%b spu_wait=%b wram_ack=%b; adapter ready=%b ack=%b; sdr_ctrl ready=%b req_valid=%b req_ready=%b; psx.dbg=%h",
+                         dut.CU.psx.pc_out, stuck_cycles, cyc, dut.CU.psx.opcode_out,
+                         dut.CU.psx.__sfl_active_read_wram_wait, dut.CU.psx.__sfl_active_read_bios_wait, dut.CU.psx.__sfl_active_read_io_wait,
+                         dut.CU.psx.__sfl_active_read_gpu_wait, dut.CU.psx.__sfl_active_read_cdr_wait, dut.CU.psx.__sfl_active_write_wram_wait,
+                         dut.CU.psx.__sfl_active_ir_cache_read, dut.CU.psx.__sfl_active_cpu_read, dut.CU.psx.__sfl_active_cpu_write,
+                         dut.CU.psx.gpu_drawing, dut.CU.psx.vraming, dut.CU.psx.dma_running, dut.CU.psx.sio_waiting, dut.CU.psx.mdec_waiting,
+                         dut.CU.psx.peripheral_running,
+                         dut.CU.sdram_ack, dut.CU.gpu_read_wait_ack, dut.CU.gpu_write_wait_ack, dut.CU.spu_wait_ack, dut.CU.__sfl_port_2_wram_ack,
+                         dut.sdram_mem_ready, dut.sdram_mem_ack, dut.sdram_ctrl_inst.ctrl_ready, dut.sdram_ctrl_inst.req_valid, dut.sdram_ctrl_inst.req_ready,
+                         dut.CU.psx.dbg);
+`ifdef SIM_T12
+                $display("  T12: cpu_pend=%b cpu_pend_write=%b cpu_pend_adrs=%h alt_busy=%b", dut.CU.cpu_pend, dut.CU.cpu_pend_write, dut.CU.cpu_pend_adrs, dut.CU.alt_busy);
+`endif
+            end
+        end else stuck_count = 0;
         if (frames != last_dumped && frames % frames_every == 0 && run_seen) begin
             last_dumped = frames;
             dump_frame(frames);
@@ -453,6 +474,7 @@ module tb_pocket_boot;
         void'($value$plusargs("sdram_init=%d", sdram_init));
         void'($value$plusargs("stop_on_runaway=%d", stop_on_runaway));
         void'($value$plusargs("fast_1sec=%d", fast_1sec));
+        void'($value$plusargs("stuck_cycles=%d", stuck_cycles));
         if (wr_interval < 3) wr_interval = 3;
         t_out = tout_ps / 1000.0; t_rel = 2.5 + (tout_ps - 5000) / 1000.0;
         fd = $fopen(slot20_file, "rb");

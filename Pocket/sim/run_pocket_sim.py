@@ -45,10 +45,12 @@ def build(bdir, jobs):
              BENCH / 'sim_ip_stubs.sv', BENCH / 'tb_pocket_boot.sv']
     sim = bdir / 'sim'
     sim.mkdir(exist_ok=True)
+    # a core.sflp with the CPU-command hold (candidate T12) exposes cpu_pend; the bench reports it
+    defines = ['-DSIM_T12'] if b'cpu_pend' in (rtl / 'core.sv').read_bytes() else []
     r = sh(['verilator', '--binary', '--timing', '-O3', '--x-assign', 'fast', '--x-initial', '0',
             '-Wno-fatal', '-Wno-lint', '-Wno-style', '-Wno-WIDTH', '-Wno-MULTIDRIVEN', '-Wno-UNOPTFLAT',
             '-Wno-PINMISSING', '-Wno-TIMESCALEMOD', '-Wno-CASEINCOMPLETE', '-Wno-LATCH',
-            '-DSIM_CORE_PERIOD_NS=%.4f' % (1000.0 / core_mhz), '-DSIM_SDRAM_PHASE=%d' % phase_deg,
+            '-DSIM_CORE_PERIOD_NS=%.4f' % (1000.0 / core_mhz), '-DSIM_SDRAM_PHASE=%d' % phase_deg, *defines,
             '--top-module', 'tb_pocket_boot', '-j', str(jobs), '--Mdir', sim, *files],
            stdout=open(sim / 'verilator.log', 'w'), stderr=subprocess.STDOUT)
     if r.returncode:
@@ -65,7 +67,7 @@ def run(a):
     args = ['+slot20=%s' % a.bios, '+outdir=%s' % a.out, '+cycles=%d' % a.cycles,
             '+frames_every=%d' % a.frames_every, '+wr_interval=%d' % a.wr_interval, '+tout_ps=%d' % a.tout_ps,
             '+status_every=%d' % a.status_every, '+stop_on_runaway=%d' % a.stop_on_runaway,
-            '+sdram_init=%d' % a.sdram_init]
+            '+sdram_init=%d' % a.sdram_init, '+stuck_cycles=%d' % a.stuck_cycles, '+fast_1sec=%d' % a.fast_1sec]
     if a.slot40:
         args.append('+slot40=%s' % a.slot40.resolve())
     r = sh([a.bdir / 'sim' / 'Vtb_pocket_boot', *args])
@@ -85,6 +87,8 @@ def main():
     r.add_argument('--status-every', type=int, default=4_000_000)
     r.add_argument('--stop-on-runaway', type=int, default=2_000_000, help='cycles to run after a runaway PC (0: never stop)')
     r.add_argument('--sdram-init', type=int, default=1, help='0: zero, 1: address pattern')
+    r.add_argument('--stuck-cycles', type=int, default=1_000_000, help='report the wait state when the PC stands still this long (0: off)')
+    r.add_argument('--fast-1sec', type=int, default=1, help='1: skip most of the core\'s one-second start delay')
     a = p.parse_args()
     a.bdir = a.bdir.resolve()
     if not (a.bdir / 'ps1_build.json').exists():
