@@ -21,15 +21,18 @@ module ram_320x240x15_dp_banked (
     logic [14:0] q [BANKS];
     logic [5:0]  rd_bank;
 
-    for (genvar b = 0; b < BANKS; b++) begin : g_bank
-        logic [14:0] mem [0:2047];
-        always_ff @(posedge clk) begin
-            if (wr_en && wr_adrs[16:11] == b)
-                mem[wr_adrs[10:0]] <= wr_data;
-            if (rd_en)
-                q[b] <= mem[rd_adrs[10:0]];
+    genvar b;
+    generate
+        for (b = 0; b < BANKS; b = b + 1) begin : g_bank
+            logic [14:0] mem [0:2047];
+            always_ff @(posedge clk) begin
+                if (wr_en && wr_adrs[16:11] == b)
+                    mem[wr_adrs[10:0]] <= wr_data;
+                if (rd_en)
+                    q[b] <= mem[rd_adrs[10:0]];
+            end
         end
-    end
+    endgenerate
 
     always_ff @(posedge clk)
         if (rd_en) rd_bank <= rd_adrs[16:11];
