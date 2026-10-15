@@ -280,6 +280,15 @@
       "why": "part of T12 (see T12a)",
       "old": "\t\tspu_wait_ack | ^sdram_ack |\n\t\tpsx.WRAM_READ | psx.WRAM_WRITE | psx.BIOS_READ : ; // Q-L1-16: a CPU strobe owns the cycle\n\n",
       "new": "\t\tspu_wait_ack | ^sdram_ack |\n\t\tpsx.WRAM_READ | psx.WRAM_WRITE | psx.BIOS_READ | cpu_pend : ; // Q-L1-16: a CPU strobe owns the cycle (T12: or a held one)\n\n"
+    },
+    {
+      "id": "T13",
+      "file": "DMA_SPU.sflp",
+      "upstream_sha256": "f97e675317f0c6a61e557cce45c8523c74aae6f261919b3e3813bc6bf76a8c8a",
+      "class": "B",
+      "why": "SPU DMA never ends for transfers over 128 KB: dma_count is 16 bits (it counts two per 32-bit word) but is compared with the 32-bit dma_size (blocks x block size x 2), so it wraps before it can match when size >= 65536. Hardware r36: the Umihara menu freezes after Start with dma_SPU.running set (the CPU waits for the DMA) while the SPU keeps issuing SDRAM requests; the game uploads its sound bank by SPU DMA. The author never used this path in kernel runs (his comment). 32 bits cannot wrap.",
+      "old": "\t\treg madr<21>, dma_count<16>;\n",
+      "new": "\t\treg madr<21>, dma_count<32>; // Q-L1-16 T13: was <16>, wrapped before reaching dma_size\n"
     }
   ],
   "options": [
