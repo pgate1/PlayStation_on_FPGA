@@ -303,3 +303,24 @@ python3 -I Pocket/sim/run_pocket_sim.py build Pocket/build/<prepared dir>
 python3 -I Pocket/sim/run_pocket_sim.py run Pocket/build/<prepared dir> <scph5500.bin> \
   Pocket/build/<prepared dir>/out --cycles 560000000     # ~45 min, PPM frames in out/
 ```
+
+### Game boot on hardware (2026-10-15/16): Umihara Kawase Shun (Japan) plays
+
+First playable game on the Pocket build: BIOS, disc, title, Practice mode with
+pad control (r38 = `--option debug-overlay-stuck`, seed 6, 40 MHz). The test image
+must be a Japanese disc with license data (the card BIOS is SCPH-5500; a
+fan-patched image with all-zero sectors 4-11 is rejected by the BIOS, loop in
+A(0xA1) at BFC0D95C). The path to the title screen took four more fixes, each
+found from the debug overlay (rows: PC, opcode, wait terms, halt code/part):
+
+| fix | symptom on hardware | cause |
+|---|---|---|
+| SPU halt pulse (`Pocket/spu/spu_dsp_shared.sv`) | freeze after Start, yellow border, halt part = SPU | upstream DSP stops the whole core on an unmapped SPU register access (0x23 write / 0x24 read) |
+| T13 `DMA_SPU.sflp` | freeze after Start, `dma_SPU.running`, CPU waits | 16-bit `dma_count` compared with the 32-bit size: SPU DMA of 128 KB or more never ends |
+| T14 `GraphicProcessingUnit.sflp` | yellow border, GPU halt 0xA5 | unimplemented GP0 command halted the core (now ignored; last command byte is on `dbg_gpu<7:0>`) |
+
+All three are the author's debug stops or an untested path (the author ran the
+Pocket build with the SPU off). Still open: REPLAY freezes, sound distortion on
+hardware, 50 MHz timing, removing the overlay for a release build, reverb build
+(98% ALMs, seed dependent). Full-chain simulation with pad presses:
+`run_pocket_sim.py run ... +start_first=700000000 +start_every=80000000 +probe=40000000`.
