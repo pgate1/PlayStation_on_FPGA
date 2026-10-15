@@ -1,0 +1,62 @@
+/*
+	CLUT cache (Pocket option clut-cache)
+
+	256 entries x 16 bit, indexed by the texel's palette index. A word is
+	{generation, data}; it is valid when its generation equals the current one.
+	new_cmd (one per draw command) invalidates everything by incrementing the
+	generation, so a CLUT rewritten between two commands is never seen stale.
+	When the 8-bit generation wraps, the RAM is swept to zero (256 clocks, hit is
+	blocked meanwhile; fills during the sweep are dropped). Generation 0 never matches.
+*/
+
+circuit Cache_CLUT
+{
+	input idx<8>, din<16>;
+	instrin lookup(idx);
+	instrin fill(idx, din);
+	instrin new_cmd;
+	output hit, dout<16>;
+
+	reg_ws reset;
+	reg_wr gen<8>;
+
+	mem ram[256]<24>;
+	reg ram_dout<24>;
+	instrself ram_read(ram_adrs);
+	instrself ram_write(ram_adrs, ram_din);
+	sel ram_adrs<8>, ram_din<24>;
+
+	stage_name clear_stg { task do(); }
+
+	instruct ram_read ram_dout := ram[ram_adrs];
+	instruct ram_write ram[ram_adrs] := ram_din;
+
+	if(reset){
+		generate clear_stg.do();
+		reset := 0b0;
+	}
+
+	instruct lookup ram_read(idx);
+
+	instruct fill if(^clear_stg.do) ram_write(idx, gen || din);
+
+	instruct new_cmd par{
+		if(gen==0xFF){
+			gen := 0x01;
+			generate clear_stg.do();
+		}
+		else gen := gen + 1;
+	}
+
+	hit = (ram_dout<23:16>==gen) & (gen!=0x00) & ^clear_stg.do;
+	dout = ram_dout<15:0>;
+
+	stage clear_stg {
+		par{
+			reg_wr ca<8>;
+			ram_write(ca, 24#0b0);
+			ca++;
+			if(/&ca) finish;
+		}
+	}
+}

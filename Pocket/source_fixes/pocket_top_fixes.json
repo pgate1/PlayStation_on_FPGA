@@ -534,6 +534,66 @@
       "why": "exposes the 20 terms of peripheral_running on the unused dbg2 output for the debug-overlay-stuck overlay (row 3)",
       "old": "dbg = dbg_reg;\n",
       "new": "dbg = dbg_reg;\n// Q-L1-16 debug-overlay-stuck: the 20 terms of peripheral_running (CPU wait) in dbg2<31:12>\ndbg2 = dma_GPU.running || gpu.drawing || gpu.vram_busy || dma_CDR.running || dma_SPU.running ||\n\tdma_OTC.running || cdr.running || pad.running || mdec.running || ir_cache.doing ||\n\tir_cache_read.do || ir_cache_clear.do || cpu_read.do || cpu_write.do || read_wram_wait.do ||\n\tread_bios_wait.do || read_io_wait.do || read_gpu_wait.do || read_cdr_wait.do || write_wram_wait.do ||\n\t12#0b0;\n"
+    },
+    {
+      "option": "clut-cache",
+      "file": "drawRect.sflp",
+      "upstream_sha256": "c0ed4bdc42d3c6a4a1d1d4db44ee16a0f71cb1c324bd7e732afb6b92c5b44805",
+      "class": "D",
+      "id": "O-CLUT-Ra",
+      "why": "CLUT cache: header for the Cache_CLUT module",
+      "old": "declare compare_s11 interface\n{",
+      "new": "%i \"Cache_CLUT.h\"\n\ndeclare compare_s11 interface\n{"
+    },
+    {
+      "option": "clut-cache",
+      "file": "drawRect.sflp",
+      "upstream_sha256": "c0ed4bdc42d3c6a4a1d1d4db44ee16a0f71cb1c324bd7e732afb6b92c5b44805",
+      "class": "D",
+      "id": "O-CLUT-Rb",
+      "why": "CLUT cache instance, circuit-level CLUT registers and generation bump per draw command (also clears the stale one-entry CLUT register between commands)",
+      "old": "\tinstruct draw generate draw_stg.do();\n",
+      "new": "\tCache_CLUT clutc;\n\treg clut_adrs_reg<19> = -1, clut_data<16>;\n\treg_wr tex_st<2>;\n\tinstruct draw par{\n\t\tgenerate draw_stg.do();\n\t\tclutc.new_cmd(); // Q-L1-16 clut-cache: new command, new CLUT generation\n\t\tclut_adrs_reg := 19#0b1;\n\t}\n"
+    },
+    {
+      "option": "clut-cache",
+      "file": "drawRect.sflp",
+      "upstream_sha256": "c0ed4bdc42d3c6a4a1d1d4db44ee16a0f71cb1c324bd7e732afb6b92c5b44805",
+      "class": "D",
+      "id": "O-CLUT-Rc",
+      "why": "hardware r38/r39: every textured 4/8-bit pixel whose palette index differs from the previous pixel reads its CLUT entry from SDRAM (about 10 clocks plus the handshake); a 256-entry CLUT cache makes it one probe per distinct index per command",
+      "old": "\tstage texdraw {\n\t\treg clut_adrs_reg<19> = -1, clut_data<16>;\n\t\tinstrself clut_data_valid;\n\t\tif(tcache_ack){\n\t\t\treg_wr tex_st;\n\t\t\tif(tex_st==0b0){\n\t\t\t\tsel clut_adrs<19>;\n\t\t\t\tany{\n\t\t\t\t\ttpage_col==0 : par{\n\t\t\t\t\t\tsel tci<4>;\n\t\t\t\t\t\ttci = (tcache_dout >> (u<1:0> || 0b00))<3:0>;\n\t\t\t\t\t\tclut_adrs = clut_p + (15#0b0 || tci);\n\t\t\t\t\t}\n\t\t\t\t\ttpage_col==1 : par{\n\t\t\t\t\t\tsel tci<8>;\n\t\t\t\t\t\ttci = (tcache_dout >> (u<0> || 0b000))<7:0>;\n\t\t\t\t\t\tclut_adrs = clut_p + (11#0b0 || tci);\n\t\t\t\t\t}\n\t\t\t\t\ttpage_col<1>==0b0 : par{\n\t\t\t\t\t\tif(clut_adrs!=clut_adrs_reg){\n\t\t\t\t\t\t\tvram_read(clut_adrs);\n\t\t\t\t\t\t\tclut_adrs_reg := clut_adrs;\n\t\t\t\t\t\t\ttex_st := 0b1;\n\t\t\t\t\t\t}\n\t\t\t\t\t\telse clut_data_valid();\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\n\t\t\tif(tpage_col<1> | (tex_st & vram_ack) | clut_data_valid){\n\t\t\t\tsel tex_data<16>;\n\t\t\t\tif(tpage_col<1>) tex_data = tcache_dout;\n\t\t\t\telse{\n\t\t\t\t\tif(clut_data_valid) tex_data = clut_data;\n\t\t\t\t\telse{\n\t\t\t\t\t\ttex_data = vram_read_data;\n\t\t\t\t\t\tclut_data := vram_read_data;\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif((tex_data<14:0>!=0) | (tex_data==0x8000)){\n\t\t\t\t\tview_on(x<9:0>, y<8:0>);\n\t\t\t\t\ttr = tex_data< 4: 0> || 0b000;\n\t\t\t\t\ttg = tex_data< 9: 5> || 0b000;\n\t\t\t\t\ttb = tex_data<14:10> || 0b000;\n\t\t\t\t}\n\n\t\t\t\tx_add();\n\n\t\t\t\ttex_st := 0b0;\n\t\t\t\tfinish;\n\t\t\t}\n\t\t}\n\t}\n",
+      "new": "\tstage texdraw {\n\t\tinstrself clut_data_valid;\n\t\treg clut_adrs_cur<19>, clut_idx_cur<8>;\n\t\tif(tcache_ack){\n\t\t\tif(tex_st==0b00){\n\t\t\t\tsel clut_adrs<19>, clut_idx<8>;\n\t\t\t\tany{\n\t\t\t\t\ttpage_col==0 : par{\n\t\t\t\t\t\tsel tci<4>;\n\t\t\t\t\t\ttci = (tcache_dout >> (u<1:0> || 0b00))<3:0>;\n\t\t\t\t\t\tclut_adrs = clut_p + (15#0b0 || tci);\n\t\t\t\t\t\tclut_idx = 4#0b0 || tci;\n\t\t\t\t\t}\n\t\t\t\t\ttpage_col==1 : par{\n\t\t\t\t\t\tsel tci<8>;\n\t\t\t\t\t\ttci = (tcache_dout >> (u<0> || 0b000))<7:0>;\n\t\t\t\t\t\tclut_adrs = clut_p + (11#0b0 || tci);\n\t\t\t\t\t\tclut_idx = tci;\n\t\t\t\t\t}\n\t\t\t\t\ttpage_col<1>==0b0 : par{\n\t\t\t\t\t\tif(clut_adrs==clut_adrs_reg) clut_data_valid();\n\t\t\t\t\t\telse{\n\t\t\t\t\t\t\t// Q-L1-16 clut-cache: probe the CLUT cache; only a miss reads SDRAM\n\t\t\t\t\t\t\tclutc.lookup(clut_idx);\n\t\t\t\t\t\t\tclut_adrs_cur := clut_adrs;\n\t\t\t\t\t\t\tclut_idx_cur := clut_idx;\n\t\t\t\t\t\t\ttex_st := 0b10;\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t\tif((tex_st==0b10) & ^clutc.hit){\n\t\t\t\tvram_read(clut_adrs_cur);\n\t\t\t\tclut_adrs_reg := clut_adrs_cur;\n\t\t\t\ttex_st := 0b01;\n\t\t\t}\n\t\t\tif((tex_st==0b01) & vram_ack) clutc.fill(clut_idx_cur, vram_read_data);\n\n\t\t\tif(tpage_col<1> | ((tex_st==0b01) & vram_ack) | clut_data_valid | ((tex_st==0b10) & clutc.hit)){\n\t\t\t\tsel tex_data<16>;\n\t\t\t\talt{\n\t\t\t\t\ttpage_col<1> : tex_data = tcache_dout;\n\t\t\t\t\tclut_data_valid : tex_data = clut_data;\n\t\t\t\t\t(tex_st==0b10) : par{\n\t\t\t\t\t\ttex_data = clutc.dout;\n\t\t\t\t\t\tclut_data := clutc.dout;\n\t\t\t\t\t\tclut_adrs_reg := clut_adrs_cur;\n\t\t\t\t\t}\n\t\t\t\t\telse : par{\n\t\t\t\t\t\ttex_data = vram_read_data;\n\t\t\t\t\t\tclut_data := vram_read_data;\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif((tex_data<14:0>!=0) | (tex_data==0x8000)){\n\t\t\t\t\tview_on(x<9:0>, y<8:0>);\n\t\t\t\t\ttr = tex_data< 4: 0> || 0b000;\n\t\t\t\t\ttg = tex_data< 9: 5> || 0b000;\n\t\t\t\t\ttb = tex_data<14:10> || 0b000;\n\t\t\t\t}\n\n\t\t\t\tx_add();\n\n\t\t\t\ttex_st := 0b00;\n\t\t\t\tfinish;\n\t\t\t}\n\t\t}\n\t}\n"
+    },
+    {
+      "option": "clut-cache",
+      "file": "drawPoly.sflp",
+      "upstream_sha256": "82bbcee8d5bc6e853e709b7698e30296ef27871b1486bbdcccd92fe8ccef0f75",
+      "class": "D",
+      "id": "O-CLUT-Pa",
+      "why": "CLUT cache: header for the Cache_CLUT module",
+      "old": "#define CMULS 9\n",
+      "new": "#define CMULS 9\n%i \"Cache_CLUT.h\"\n"
+    },
+    {
+      "option": "clut-cache",
+      "file": "drawPoly.sflp",
+      "upstream_sha256": "82bbcee8d5bc6e853e709b7698e30296ef27871b1486bbdcccd92fe8ccef0f75",
+      "class": "D",
+      "id": "O-CLUT-Pb",
+      "why": "CLUT cache instance, circuit-level CLUT registers and generation bump per draw command (also clears the stale one-entry CLUT register between commands)",
+      "old": "\tinstruct draw generate draw_stg.do();\n",
+      "new": "\tCache_CLUT clutc;\n\treg clut_adrs_reg<19> = -1, clut_data<16>;\n\treg_wr tex_st<2>;\n\tinstruct draw par{\n\t\tgenerate draw_stg.do();\n\t\tclutc.new_cmd(); // Q-L1-16 clut-cache: new command, new CLUT generation\n\t\tclut_adrs_reg := 19#0b1;\n\t}\n"
+    },
+    {
+      "option": "clut-cache",
+      "file": "drawPoly.sflp",
+      "upstream_sha256": "82bbcee8d5bc6e853e709b7698e30296ef27871b1486bbdcccd92fe8ccef0f75",
+      "class": "D",
+      "id": "O-CLUT-Pc",
+      "why": "hardware r38/r39: every textured 4/8-bit pixel whose palette index differs from the previous pixel reads its CLUT entry from SDRAM (about 10 clocks plus the handshake); a 256-entry CLUT cache makes it one probe per distinct index per command",
+      "old": "\tstage texdraw {\n\t\treg clut_adrs_reg<19> = -1, clut_data<16>;\n\t\tinstrself clut_data_valid;\n\t\tif(tcache_ack){\n\t\t\treg_wr tex_st;\n\t\t\tif(tex_st==0b0){\n\t\t\t\tsel clut_adrs<19>;\n\t\t\t\tany{\n\t\t\t\t\ttpage_col==0 : par{\n\t\t\t\t\t\tsel tci<4>;\n\t\t\t\t\t\ttci = (tcache_dout >> (u<1:0> || 0b00))<3:0>;\n\t\t\t\t\t\tclut_adrs = clut_p + (15#0b0 || tci);\n\t\t\t\t\t}\n\t\t\t\t\ttpage_col==1 : par{\n\t\t\t\t\t\tsel tci<8>;\n\t\t\t\t\t\ttci = (tcache_dout >> (u<0> || 0b000))<7:0>;\n\t\t\t\t\t\tclut_adrs = clut_p + (11#0b0 || tci);\n\t\t\t\t\t}\n\t\t\t\t\ttpage_col<1>==0b0 : par{\n\t\t\t\t\t\tif(clut_adrs!=clut_adrs_reg){\n\t\t\t\t\t\t\tvram_read(clut_adrs);\n\t\t\t\t\t\t\tclut_adrs_reg := clut_adrs;\n\t\t\t\t\t\t\ttex_st := 0b1;\n\t\t\t\t\t\t}\n\t\t\t\t\t\telse clut_data_valid();\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\n\t\t\tif(tpage_col<1> | (tex_st & vram_ack) | clut_data_valid){\n\t\t\t\tsel tex_data<16>;\n\t\t\t\tif(tpage_col<1>) tex_data = tcache_dout;\n\t\t\t\telse{\n\t\t\t\t\tif(clut_data_valid) tex_data = clut_data;\n\t\t\t\t\telse{\n\t\t\t\t\t\ttex_data = vram_read_data;\n\t\t\t\t\t\tclut_data := vram_read_data;\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif((tex_data<14:0>!=0) | (tex_data==0x8000)){\n\t\t\t\t\tview_on(x<9:0>, y<8:0>);\n\t\t\t\t\ttr = tex_data< 4: 0> || 0b000;\n\t\t\t\t\ttg = tex_data< 9: 5> || 0b000;\n\t\t\t\t\ttb = tex_data<14:10> || 0b000;\n\t\t\t\t}\n\n\t\t\t\tdelta_add();\n\n\t\t\t\ttex_st := 0b0;\n\t\t\t\tfinish;\n\t\t\t}\n\t\t}\n\t}\n",
+      "new": "\tstage texdraw {\n\t\tinstrself clut_data_valid;\n\t\treg clut_adrs_cur<19>, clut_idx_cur<8>;\n\t\tif(tcache_ack){\n\t\t\tif(tex_st==0b00){\n\t\t\t\tsel clut_adrs<19>, clut_idx<8>;\n\t\t\t\tany{\n\t\t\t\t\ttpage_col==0 : par{\n\t\t\t\t\t\tsel tci<4>;\n\t\t\t\t\t\ttci = (tcache_dout >> (u<1:0> || 0b00))<3:0>;\n\t\t\t\t\t\tclut_adrs = clut_p + (15#0b0 || tci);\n\t\t\t\t\t\tclut_idx = 4#0b0 || tci;\n\t\t\t\t\t}\n\t\t\t\t\ttpage_col==1 : par{\n\t\t\t\t\t\tsel tci<8>;\n\t\t\t\t\t\ttci = (tcache_dout >> (u<0> || 0b000))<7:0>;\n\t\t\t\t\t\tclut_adrs = clut_p + (11#0b0 || tci);\n\t\t\t\t\t\tclut_idx = tci;\n\t\t\t\t\t}\n\t\t\t\t\ttpage_col<1>==0b0 : par{\n\t\t\t\t\t\tif(clut_adrs==clut_adrs_reg) clut_data_valid();\n\t\t\t\t\t\telse{\n\t\t\t\t\t\t\t// Q-L1-16 clut-cache: probe the CLUT cache; only a miss reads SDRAM\n\t\t\t\t\t\t\tclutc.lookup(clut_idx);\n\t\t\t\t\t\t\tclut_adrs_cur := clut_adrs;\n\t\t\t\t\t\t\tclut_idx_cur := clut_idx;\n\t\t\t\t\t\t\ttex_st := 0b10;\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t\tif((tex_st==0b10) & ^clutc.hit){\n\t\t\t\tvram_read(clut_adrs_cur);\n\t\t\t\tclut_adrs_reg := clut_adrs_cur;\n\t\t\t\ttex_st := 0b01;\n\t\t\t}\n\t\t\tif((tex_st==0b01) & vram_ack) clutc.fill(clut_idx_cur, vram_read_data);\n\n\t\t\tif(tpage_col<1> | ((tex_st==0b01) & vram_ack) | clut_data_valid | ((tex_st==0b10) & clutc.hit)){\n\t\t\t\tsel tex_data<16>;\n\t\t\t\talt{\n\t\t\t\t\ttpage_col<1> : tex_data = tcache_dout;\n\t\t\t\t\tclut_data_valid : tex_data = clut_data;\n\t\t\t\t\t(tex_st==0b10) : par{\n\t\t\t\t\t\ttex_data = clutc.dout;\n\t\t\t\t\t\tclut_data := clutc.dout;\n\t\t\t\t\t\tclut_adrs_reg := clut_adrs_cur;\n\t\t\t\t\t}\n\t\t\t\t\telse : par{\n\t\t\t\t\t\ttex_data = vram_read_data;\n\t\t\t\t\t\tclut_data := vram_read_data;\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif((tex_data<14:0>!=0) | (tex_data==0x8000)){\n\t\t\t\t\tview_on(x<9:0>, y<8:0>);\n\t\t\t\t\ttr = tex_data< 4: 0> || 0b000;\n\t\t\t\t\ttg = tex_data< 9: 5> || 0b000;\n\t\t\t\t\ttb = tex_data<14:10> || 0b000;\n\t\t\t\t}\n\n\t\t\t\tdelta_add();\n\n\t\t\t\ttex_st := 0b00;\n\t\t\t\tfinish;\n\t\t\t}\n\t\t}\n\t}\n"
     }
   ],
   "generated_files": [

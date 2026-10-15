@@ -245,7 +245,9 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
                                              sfl / 'PlayStation_core.sflp'),
                    'DMA_SPU.sflp': ((sfl / 'DMA_SPU.sflp').read_bytes(), sfl / 'DMA_SPU.sflp'),
                    'GraphicProcessingUnit.sflp': ((sfl / 'GraphicProcessingUnit.sflp').read_bytes(),
-                                                  sfl / 'GraphicProcessingUnit.sflp')}
+                                                  sfl / 'GraphicProcessingUnit.sflp'),
+                   'drawRect.sflp': ((sfl / 'drawRect.sflp').read_bytes(), sfl / 'drawRect.sflp'),
+                   'drawPoly.sflp': ((sfl / 'drawPoly.sflp').read_bytes(), sfl / 'drawPoly.sflp')}
         applied, inputs = [], {}
         for name, (raw, out) in targets.items():
             fixes = [f for f in chosen if f['file'] == name]
