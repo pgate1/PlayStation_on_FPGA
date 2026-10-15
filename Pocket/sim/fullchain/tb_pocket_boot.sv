@@ -43,6 +43,7 @@ module tb_pocket_boot;
     wire [23:0] video_rgb; wire video_rgb_clock, video_rgb_clock_90, video_de, video_skip, video_vs, video_hs;
     wire audio_mclk, audio_dac, audio_lrck;
 
+    logic [31:0] cont1_key_r = 32'd0;   // pad: see +start_first below
     core_top dut (
         .clk_74a(clk_74a), .clk_74b(clk_74a),
         .cram0_wait(1'b0), .cram1_wait(1'b0), .vblank(1'b0), .dbg_rx(1'b1), .user2(1'b0),
@@ -56,7 +57,7 @@ module tb_pocket_boot;
         .audio_mclk(audio_mclk), .audio_dac(audio_dac), .audio_lrck(audio_lrck),
         .bridge_endian_little(bridge_endian_little), .bridge_addr(bridge_addr), .bridge_rd(bridge_rd),
         .bridge_rd_data(bridge_rd_data), .bridge_wr(bridge_wr), .bridge_wr_data(bridge_wr_data),
-        .cont1_key(32'd0), .cont2_key(32'd0), .cont3_key(32'd0), .cont4_key(32'd0),
+        .cont1_key(cont1_key_r), .cont2_key(32'd0), .cont3_key(32'd0), .cont4_key(32'd0),
         .cont1_joy(32'd0), .cont2_joy(32'd0), .cont3_joy(32'd0), .cont4_joy(32'd0),
         .cont1_trig(16'd0), .cont2_trig(16'd0), .cont3_trig(16'd0), .cont4_trig(16'd0));
 
@@ -72,7 +73,7 @@ module tb_pocket_boot;
     // ---------------- SDRAM model (32M x 16, CL 3, BL 2) ----------------
     // halfword index = {row[12:0], bank[1:0], col[9:0]}: what sdr_ctrl maps a 25-bit
     // halfword address to (word a[23:11] row, a[10:9] bank, a[8:0] column pair).
-    logic [15:0] smem [0:33554431];
+    logic [15:0] smem [0:134217727];
     function automatic logic [15:0] init_half(input int k);
         return sdram_init ? (16'(k * 16'h9E37) ^ 16'hA5C3) : 16'h0000;
     endfunction
@@ -150,7 +151,7 @@ module tb_pocket_boot;
 
     // ---------------- slot images ----------------
     logic [7:0] slot20 [0:524287];
-    logic [7:0] slot40 [0:33554431];
+    logic [7:0] slot40 [0:134217727];
     integer slot20_len = 0, slot40_len = 0;
 
     // ---------------- APF host model ----------------
@@ -210,7 +211,7 @@ module tb_pocket_boot;
             if (id[15:0] == 16'h0020)
                 word = {slot20[(b + 3) % 524288], slot20[(b + 2) % 524288], slot20[(b + 1) % 524288], slot20[b % 524288]};
             else
-                word = {slot40[(b + 3) % 33554432], slot40[(b + 2) % 33554432], slot40[(b + 1) % 33554432], slot40[b % 33554432]};
+                word = {slot40[(b + 3) % 134217728], slot40[(b + 2) % 134217728], slot40[(b + 1) % 134217728], slot40[b % 134217728]};
             repeat (wr_interval - 2) @(posedge clk_74a);
             bridge_write(baddr + 4 * w, word);
             load_words++;
@@ -243,7 +244,7 @@ module tb_pocket_boot;
     end
 
     // ---------------- SDRAM scoreboard (adapter command side, core clock) ----------------
-    logic [15:0] ref_mem [0:33554431];
+    logic [15:0] ref_mem [0:134217727];
     longint sb_reads = 0, sb_writes = 0, sb_mismatch = 0, sb_ops_loader = 0, sb_ops_cpu = 0, sb_ops_alt = 0;
     logic        sb_pending = 0;
     logic [24:0] sb_adrs; integer sb_len; string sb_master; logic sb_write = 0;
@@ -528,11 +529,33 @@ module tb_pocket_boot;
         slot40_len = $fread(slot40, fd); $fclose(fd);
         $display("SLOT 0x20 %s (%0d bytes, first word %02x%02x%02x%02x); slot 0x40 %s (%0d bytes); wr_interval=%0d tout_ps=%0d",
                  slot20_file, slot20_len, slot20[3], slot20[2], slot20[1], slot20[0], slot40_file, slot40_len, wr_interval, tout_ps);
-        for (int i = 0; i < 33554432; i++) begin smem[i] = init_half(i); ref_mem[i] = init_half(i); end
+        for (int i = 0; i < 134217728; i++) begin smem[i] = init_half(i); ref_mem[i] = init_half(i); end
         for (int i = 0; i < 131072; i++) sram_mem[i] = 16'hFFFF;
         for (int y = 0; y < 240; y++) for (int x = 0; x < 320; x++) fb[y][x] = 0;
         $display("memories initialised, t=%0t", $time);
     end
+
+
+    // ---------------- pad (+start_first=<core cycle> +start_every=<cycles> +start_len=<cycles>):
+    // presses Start (PS "St" = cont1_key[15]) periodically, to reach states behind a menu.
+    integer st_first = 0, st_every = 0, st_len = 2000000, st_n = 0;
+    initial begin
+        void'($value$plusargs("start_first=%d", st_first));
+        void'($value$plusargs("start_every=%d", st_every));
+        void'($value$plusargs("start_len=%d", st_len));
+    end
+    always @(posedge clk_core) if (st_every != 0 && cyc >= st_first) begin
+        cont1_key_r[15] <= ((cyc - st_first) % st_every) < st_len;
+        if (((cyc - st_first) % st_every) == 0) begin st_n = st_n + 1; $display("PAD Start press %0d at cyc=%0d pc=%h", st_n, cyc, dut.CU.psx.pc_out); end
+    end
+    // state probe (+probe=<cycles between lines>): DMA/SPU wait flags and the stall candidates
+    integer probe_every = 0;
+    initial void'($value$plusargs("probe=%d", probe_every));
+    always @(posedge clk_core) if (probe_every != 0 && cyc > 0 && (cyc % probe_every) == 0)
+        $display("PROBE cyc=%0d pc=%h dmaSPU=%b dmaGPU=%b dmaCDR=%b spu_wait=%b gpu_rw=%b%b cpu_pend=%b ack=%b halt=%h",
+                 cyc, dut.CU.psx.pc_out, dut.CU.psx.dma_SPU.running, dut.CU.psx.dma_GPU.running, dut.CU.psx.dma_CDR.running,
+                 dut.CU.spu_wait_ack, dut.CU.gpu_read_wait_ack, dut.CU.gpu_write_wait_ack, dut.CU.cpu_pend, dut.CU.sdram_ack,
+                 dut.CU.psx.halt_code);
 
     // ---------------- audio capture (+audio=1): SPU mix at each 44.1 kHz sample strobe
     // (21-bit, as int32 L,R) and the 16-bit 48 kHz frames handed to the I2S serializer.
@@ -578,15 +601,35 @@ module tb_pocket_boot;
                          a, a / 2352, a % 2352, cyc, dr_ack, dut.CU.__sfl_port_2_file_error);
         end
         dr_last = a;
-        if (dut.CU.__sfl_port_2_file_data !== slot40[a % 33554432]) begin
+        if (dut.CU.__sfl_port_2_file_data !== slot40[a % 134217728]) begin
             dr_bad = dr_bad + 1;
             if (dr_bad_shown < 10) begin
                 dr_bad_shown = dr_bad_shown + 1;
                 $display("DISC MISMATCH adrs=%0d got %02x expected %02x cyc=%0d", a,
-                         dut.CU.__sfl_port_2_file_data, slot40[a % 33554432], cyc);
+                         dut.CU.__sfl_port_2_file_data, slot40[a % 134217728], cyc);
             end
         end
     end
     final if (dr_en != 0) $display("DISC SUMMARY acks=%0d jumps=%0d mismatches=%0d", dr_ack, dr_jumps, dr_bad);
+
+
+    // ---------------- CD-ROM register trace (+cdtrace=1): host-side register writes and the
+    // reads of index 1..3 (response FIFO, data, interrupt registers) of the CD controller, with
+    // the core cycle. Index-register writes, status polls and idle interrupt-flag reads (0xE0) are skipped. First 3000 lines.
+    integer cd_en = 0, cd_lines = 0;
+    initial begin
+        if ($value$plusargs("cdtrace=%d", cd_en)) ;
+    end
+    always @(posedge clk_core) if (cd_en != 0 && dut.reset_n && cd_lines < 3000) begin
+        if (dut.CU.psx.cdr.Write && dut.CU.psx.cdr.io_adrs != 2'd0) begin
+            cd_lines = cd_lines + 1;
+            $display("CD W adrs=%0d din=%02x cyc=%0d", dut.CU.psx.cdr.io_adrs, dut.CU.psx.cdr.io_din, cyc);
+        end
+        if (dut.CU.psx.cdr.Read && dut.CU.psx.cdr.io_adrs != 2'd0 &&
+            !(dut.CU.psx.cdr.io_adrs == 2'd3 && dut.CU.psx.cdr.io_dout == 8'he0)) begin
+            cd_lines = cd_lines + 1;
+            $display("CD R adrs=%0d dout=%02x cyc=%0d", dut.CU.psx.cdr.io_adrs, dut.CU.psx.cdr.io_dout, cyc);
+        end
+    end
 
 endmodule
