@@ -514,6 +514,26 @@
       "why": "SRAM loader (data-slot pages for check_file, the EXE header and the disc reader): the strobe was stretched to 3 clk_74a cycles and synch_3d into the core clock, so ram1_word_data was sampled several core clocks late (the next bridge word may already be there) and strobes closer than 3 clk_74a cycles merged. Core connections.",
       "old": "\t\t.sram_word_wr(ram_word_wr_hold_r), .sram_wdata(ram1_word_data),\n\t\t.target_dataslot_read(target_dataslot_read_s), .ram_reloading(ram_reloading_s),\n",
       "new": "\t\t.sram_word_wr(sfifo_word), .sram_wdata(sfifo_q), .sram_word_done(sram_word_done), // Q-L1-16\n\t\t.target_dataslot_read(target_dataslot_read_s), .ram_reloading(ram_reloading_core),\n"
+    },
+    {
+      "option": "debug-overlay-perf",
+      "id": "O-D4",
+      "file": "Pocket/core.sflp",
+      "upstream_sha256": "eae06396af663b6f20c56c7171a3d4a2ba4487f1cd2db7607ea9862181d69ef6",
+      "class": "D",
+      "why": "hardware r38: the game runs at about 5-10 fps and the sound crackles; row 3 = fps || GPU-drawing duty || SDRAM-busy duty || CPU-wait duty (2^26-clock windows, 255 = 100 %), rows 1,2,4 as debug-overlay-stuck. Exclusive with the other overlays",
+      "old": "\tif(((vga.h_count==10) | (vga.h_count==630) |\n\t    (vga.v_count==10) | (vga.v_count==470)) & /|psx.halt_code){\n\t\tif(psx.halt_part<7>){ // CPU halt\n\t\t\tvga.iR = 0xFF; vga.iG = 0x00; vga.iB = 0x00;\n\t\t}\n\t\telse{ // other halt\n\t\t\tvga.iR = 0xFF; vga.iG = 0xFF; vga.iB = 0x00;\n\t\t}\n\t}\n\telse{\n",
+      "new": "// Q-L1-16 variant debug-overlay-perf: fps and duty counters as bit rows at the top left (row 3).\n// Rows of 16 lines: pc_out, opcode_out, dbg_ext || 0 || flags[cpu_pend gpu_rd gpu_wr spu sdram_ack drawing sio mdec vram dma exe_ok run_ok apf2sram rom_read sram_ack set_sram], halt_code || halt_part || 0.\n// Cell = 16 pixels, MSB left; 1 = green/cyan, 0 = dark red/purple (colour\n// alternates per nibble).\n\tsel dbg_word<32>, dbg_sh<32>, dbg_hit, dbg_bit, dbg_bar;\n\t// Q-L1-16 perf counters: 8-bit duty (255 = 100 %) of gpu drawing, SDRAM busy and CPU waiting over 2^26 clocks\n\treg_wr pf_win<26>, pf_gpu<26>, pf_mem<26>, pf_cpu<26>;\n\treg_wr pf_gpu_o<8>, pf_mem_o<8>, pf_cpu_o<8>;\n\tpf_win++;\n\tif(/&pf_win){\n\t\tpf_gpu_o := pf_gpu<25:18>; pf_mem_o := pf_mem<25:18>; pf_cpu_o := pf_cpu<25:18>;\n\t\tpf_gpu := 0; pf_mem := 0; pf_cpu := 0;\n\t}\n\telse{\n\t\tif(psx.gpu_drawing) pf_gpu++;\n\t\tif(^sdram_ack) pf_mem++;\n\t\tif(/|psx.dbg2<31:12>) pf_cpu++;\n\t}\n\tdbg_bar = vga.v_count<9:6>==0b0000; // black strip behind the bits\n\tsel dbg_flags<16>;\n\tdbg_flags = cpu_pend || gpu_read_wait_ack || gpu_write_wait_ack || spu_wait_ack || sdram_ack ||\n\t\tpsx.gpu_drawing || psx.sio_waiting || psx.mdec_waiting || psx.vraming || psx.dma_running ||\n\t\texe_read_ok || psx_run_ok || apf2sram.do || rom_read.do || sram.ack || set_sram_reg;\n\tany{\n\t\tvga.v_count<5:4>==0b00 : dbg_word = psx.pc_out;\n\t\tvga.v_count<5:4>==0b01 : dbg_word = psx.opcode_out;\n\t\tvga.v_count<5:4>==0b10 : dbg_word = fps || pf_gpu_o || pf_mem_o || pf_cpu_o;\n\t\telse : dbg_word = psx.halt_code || psx.halt_part || psx.dbg_gpu<7:0> || dbg_flags<15:9>;\n\t}\n\tdbg_sh = dbg_word << vga.h_count<8:4>;\n\tdbg_bit = dbg_sh<31>;\n\tdbg_hit = (vga.v_count<9:6>==0b0000) & (vga.v_count<3:2>!=0b00) &\n\t\t(vga.h_count<9>==0b0) & (vga.h_count<3:2>!=0b00);\n\tif(dbg_hit){\n\t\tif(dbg_bit){ vga.iR = 0x00; vga.iG = 0xFF; vga.iB = 8#vga.h_count<6>; }\n\t\telse{ vga.iR = 0x80; vga.iG = 0x00; vga.iB = 8#vga.h_count<6>; }\n\t}\n\telse if(dbg_bar){ vga.iR = 0x00; vga.iG = 0x00; vga.iB = 0x00; }\n\telse if(((vga.h_count==10) | (vga.h_count==630) |\n\t    (vga.v_count==10) | (vga.v_count==470)) & /|psx.halt_code){\n\t\tif(psx.halt_part<7>){ // CPU halt\n\t\t\tvga.iR = 0xFF; vga.iG = 0x00; vga.iB = 0x00;\n\t\t}\n\t\telse{ // other halt\n\t\t\tvga.iR = 0xFF; vga.iG = 0xFF; vga.iB = 0x00;\n\t\t}\n\t}\n\telse{\n"
+    },
+    {
+      "option": "debug-overlay-perf",
+      "id": "O-D4a",
+      "file": "PlayStation_core.sflp",
+      "upstream_sha256": "10696eeaeb215c8e7e715e6b1ab78bb8db55cdb67ae0213acfe385330c19b8be",
+      "class": "D",
+      "why": "exposes the 20 terms of peripheral_running on the unused dbg2 output for the debug-overlay-stuck overlay (row 3)",
+      "old": "dbg = dbg_reg;\n",
+      "new": "dbg = dbg_reg;\n// Q-L1-16 debug-overlay-stuck: the 20 terms of peripheral_running (CPU wait) in dbg2<31:12>\ndbg2 = dma_GPU.running || gpu.drawing || gpu.vram_busy || dma_CDR.running || dma_SPU.running ||\n\tdma_OTC.running || cdr.running || pad.running || mdec.running || ir_cache.doing ||\n\tir_cache_read.do || ir_cache_clear.do || cpu_read.do || cpu_write.do || read_wram_wait.do ||\n\tread_bios_wait.do || read_io_wait.do || read_gpu_wait.do || read_cdr_wait.do || write_wram_wait.do ||\n\t12#0b0;\n"
     }
   ],
   "generated_files": [
