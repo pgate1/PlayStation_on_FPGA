@@ -83,6 +83,10 @@ module spu_dsp_shared (
             main_volume_L <= '0; main_volume_R <= '0; rvb_on <= '0;
             halt_code_reg <= '0; dbg_reg <= '0;
         end else begin
+            // Q-L1-16: the upstream DSP's halt on an unmapped register access (0x23 write, 0x24 read) was a
+            // one-way debug stop that froze the whole core (hardware, Umihara menu). It is a one-cycle pulse
+            // now: PlayStation_core latches `dbg` (the address) while it is high, then the core runs on.
+            halt_code_reg <= '0;
             if (io_set && a_mvl) main_volume_L <= io_Din;
             if (io_set && a_mvr) main_volume_R <= io_Din;
             if (io_set && a_ron0) rvb_on[15:0] <= io_Din;
