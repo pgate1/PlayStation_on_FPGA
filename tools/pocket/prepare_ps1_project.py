@@ -247,7 +247,8 @@ def prepare(destination: Path, reverb_in_spu_ram: bool, options: list, check: bo
                    'GraphicProcessingUnit.sflp': ((sfl / 'GraphicProcessingUnit.sflp').read_bytes(),
                                                   sfl / 'GraphicProcessingUnit.sflp'),
                    'drawRect.sflp': ((sfl / 'drawRect.sflp').read_bytes(), sfl / 'drawRect.sflp'),
-                   'drawPoly.sflp': ((sfl / 'drawPoly.sflp').read_bytes(), sfl / 'drawPoly.sflp')}
+                   'drawPoly.sflp': ((sfl / 'drawPoly.sflp').read_bytes(), sfl / 'drawPoly.sflp'),
+                   'Cache_IR.sflp': ((sfl / 'Cache_IR.sflp').read_bytes(), sfl / 'Cache_IR.sflp')}
         applied, inputs = [], {}
         for name, (raw, out) in targets.items():
             fixes = [f for f in chosen if f['file'] == name]

@@ -724,6 +724,126 @@
       "why": "dcache: 4 KB data cache for CPU RAM reads (sim model: 94 % hits in Bust-A-Move 2 play; CPU data reads were 30-43 % of the clocks). Write-through with update; DMA and other non-CPU RAM writes invalidate their word",
       "old": "\tinstruct mdec.wram_write WRAM_WRITE(mdec.wram_adrs, 0x00 || mdec.wram_din, 0b000 || mdec.wram_word);\n",
       "new": "\tinstruct mdec.wram_write par{\n\t\tWRAM_WRITE(mdec.wram_adrs, 0x00 || mdec.wram_din, 0b000 || mdec.wram_word);\n\t\tdcache.clear(mdec.wram_adrs);\n\t}\n"
+    },
+    {
+      "option": "icache-8k",
+      "id": "O-ICACHE-8K-1",
+      "file": "Cache_IR.sflp",
+      "upstream_sha256": "622e804198d47aea450903b645fcd6e1518212b9284caadff520070e287f5927",
+      "class": "D",
+      "why": "instruction cache 8k instead of 4 KB (sim BAM2 with the data cache: instruction fetch waits are 31 % of the clocks)",
+      "old": "\t// 2MByte adrs<21> t_tttt_tttt_iiii_iiii_oo--\n\tsel tag<9>, index<8>, offset<2>;\n\treg tag_reg<9>, offset_reg<2>;\n",
+      "new": "\t// Q-L1-16 icache-8k: 2MByte adrs<21> {tag, index, oo--}\n\tsel tag<8>, index<9>, offset<2>;\n\treg tag_reg<8>, offset_reg<2>;\n"
+    },
+    {
+      "option": "icache-8k",
+      "id": "O-ICACHE-8K-2",
+      "file": "Cache_IR.sflp",
+      "upstream_sha256": "622e804198d47aea450903b645fcd6e1518212b9284caadff520070e287f5927",
+      "class": "D",
+      "why": "instruction cache 8k instead of 4 KB (sim BAM2 with the data cache: instruction fetch waits are 31 % of the clocks)",
+      "old": "\tmem tag_ram[256]<9>;\n\tsel tag_adrs<8>, tag_din<9>;\n\treg tag_dout<9>;\n",
+      "new": "\tmem tag_ram[512]<8>;\n\tsel tag_adrs<9>, tag_din<8>;\n\treg tag_dout<8>;\n"
+    },
+    {
+      "option": "icache-8k",
+      "id": "O-ICACHE-8K-3",
+      "file": "Cache_IR.sflp",
+      "upstream_sha256": "622e804198d47aea450903b645fcd6e1518212b9284caadff520070e287f5927",
+      "class": "D",
+      "why": "instruction cache 8k instead of 4 KB (sim BAM2 with the data cache: instruction fetch waits are 31 % of the clocks)",
+      "old": "\tmem ram0[256]<1+32>, ram1[256]<1+32>, ram2[256]<1+32>, ram3[256]<1+32>;\n\tsel ram0_adrs<8>, ram1_adrs<8>, ram2_adrs<8>, ram3_adrs<8>;\n",
+      "new": "\tmem ram0[512]<1+32>, ram1[512]<1+32>, ram2[512]<1+32>, ram3[512]<1+32>;\n\tsel ram0_adrs<9>, ram1_adrs<9>, ram2_adrs<9>, ram3_adrs<9>;\n"
+    },
+    {
+      "option": "icache-8k",
+      "id": "O-ICACHE-8K-4",
+      "file": "Cache_IR.sflp",
+      "upstream_sha256": "622e804198d47aea450903b645fcd6e1518212b9284caadff520070e287f5927",
+      "class": "D",
+      "why": "instruction cache 8k instead of 4 KB (sim BAM2 with the data cache: instruction fetch waits are 31 % of the clocks)",
+      "old": "\ttag = adrs<20:12>;\n\tindex = adrs<11:4>;\n",
+      "new": "\ttag = adrs<20:13>;\n\tindex = adrs<12:4>;\n"
+    },
+    {
+      "option": "icache-8k",
+      "id": "O-ICACHE-8K-5",
+      "file": "Cache_IR.sflp",
+      "upstream_sha256": "622e804198d47aea450903b645fcd6e1518212b9284caadff520070e287f5927",
+      "class": "D",
+      "why": "instruction cache 8k instead of 4 KB (sim BAM2 with the data cache: instruction fetch waits are 31 % of the clocks)",
+      "old": "\t\ttag_write(index, 9#0b0);\n",
+      "new": "\t\ttag_write(index, 8#0b0);\n"
+    },
+    {
+      "option": "icache-8k",
+      "id": "O-ICACHE-8K-6",
+      "file": "Cache_IR.sflp",
+      "upstream_sha256": "622e804198d47aea450903b645fcd6e1518212b9284caadff520070e287f5927",
+      "class": "D",
+      "why": "instruction cache 8k instead of 4 KB (sim BAM2 with the data cache: instruction fetch waits are 31 % of the clocks)",
+      "old": "\t\t\treg_wr ca<8>;\n\t\t\ttag_write(ca, 9#0b0);\n",
+      "new": "\t\t\treg_wr ca<9>;\n\t\t\ttag_write(ca, 8#0b0);\n"
+    },
+    {
+      "option": "icache-16k",
+      "id": "O-ICACHE-16K-1",
+      "file": "Cache_IR.sflp",
+      "upstream_sha256": "622e804198d47aea450903b645fcd6e1518212b9284caadff520070e287f5927",
+      "class": "D",
+      "why": "instruction cache 16k instead of 4 KB (sim BAM2 with the data cache: instruction fetch waits are 31 % of the clocks)",
+      "old": "\t// 2MByte adrs<21> t_tttt_tttt_iiii_iiii_oo--\n\tsel tag<9>, index<8>, offset<2>;\n\treg tag_reg<9>, offset_reg<2>;\n",
+      "new": "\t// Q-L1-16 icache-16k: 2MByte adrs<21> {tag, index, oo--}\n\tsel tag<7>, index<10>, offset<2>;\n\treg tag_reg<7>, offset_reg<2>;\n"
+    },
+    {
+      "option": "icache-16k",
+      "id": "O-ICACHE-16K-2",
+      "file": "Cache_IR.sflp",
+      "upstream_sha256": "622e804198d47aea450903b645fcd6e1518212b9284caadff520070e287f5927",
+      "class": "D",
+      "why": "instruction cache 16k instead of 4 KB (sim BAM2 with the data cache: instruction fetch waits are 31 % of the clocks)",
+      "old": "\tmem tag_ram[256]<9>;\n\tsel tag_adrs<8>, tag_din<9>;\n\treg tag_dout<9>;\n",
+      "new": "\tmem tag_ram[1024]<7>;\n\tsel tag_adrs<10>, tag_din<7>;\n\treg tag_dout<7>;\n"
+    },
+    {
+      "option": "icache-16k",
+      "id": "O-ICACHE-16K-3",
+      "file": "Cache_IR.sflp",
+      "upstream_sha256": "622e804198d47aea450903b645fcd6e1518212b9284caadff520070e287f5927",
+      "class": "D",
+      "why": "instruction cache 16k instead of 4 KB (sim BAM2 with the data cache: instruction fetch waits are 31 % of the clocks)",
+      "old": "\tmem ram0[256]<1+32>, ram1[256]<1+32>, ram2[256]<1+32>, ram3[256]<1+32>;\n\tsel ram0_adrs<8>, ram1_adrs<8>, ram2_adrs<8>, ram3_adrs<8>;\n",
+      "new": "\tmem ram0[1024]<1+32>, ram1[1024]<1+32>, ram2[1024]<1+32>, ram3[1024]<1+32>;\n\tsel ram0_adrs<10>, ram1_adrs<10>, ram2_adrs<10>, ram3_adrs<10>;\n"
+    },
+    {
+      "option": "icache-16k",
+      "id": "O-ICACHE-16K-4",
+      "file": "Cache_IR.sflp",
+      "upstream_sha256": "622e804198d47aea450903b645fcd6e1518212b9284caadff520070e287f5927",
+      "class": "D",
+      "why": "instruction cache 16k instead of 4 KB (sim BAM2 with the data cache: instruction fetch waits are 31 % of the clocks)",
+      "old": "\ttag = adrs<20:12>;\n\tindex = adrs<11:4>;\n",
+      "new": "\ttag = adrs<20:14>;\n\tindex = adrs<13:4>;\n"
+    },
+    {
+      "option": "icache-16k",
+      "id": "O-ICACHE-16K-5",
+      "file": "Cache_IR.sflp",
+      "upstream_sha256": "622e804198d47aea450903b645fcd6e1518212b9284caadff520070e287f5927",
+      "class": "D",
+      "why": "instruction cache 16k instead of 4 KB (sim BAM2 with the data cache: instruction fetch waits are 31 % of the clocks)",
+      "old": "\t\ttag_write(index, 9#0b0);\n",
+      "new": "\t\ttag_write(index, 7#0b0);\n"
+    },
+    {
+      "option": "icache-16k",
+      "id": "O-ICACHE-16K-6",
+      "file": "Cache_IR.sflp",
+      "upstream_sha256": "622e804198d47aea450903b645fcd6e1518212b9284caadff520070e287f5927",
+      "class": "D",
+      "why": "instruction cache 16k instead of 4 KB (sim BAM2 with the data cache: instruction fetch waits are 31 % of the clocks)",
+      "old": "\t\t\treg_wr ca<8>;\n\t\t\ttag_write(ca, 9#0b0);\n",
+      "new": "\t\t\treg_wr ca<10>;\n\t\t\ttag_write(ca, 7#0b0);\n"
     }
   ],
   "generated_files": [
