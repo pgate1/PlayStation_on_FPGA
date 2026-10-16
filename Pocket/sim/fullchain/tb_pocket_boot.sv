@@ -557,6 +557,92 @@ module tb_pocket_boot;
                  dut.CU.spu_wait_ack, dut.CU.gpu_read_wait_ack, dut.CU.gpu_write_wait_ack, dut.CU.cpu_pend, dut.CU.sdram_ack,
                  dut.CU.psx.halt_code);
 
+    // CPU time breakdown (+stat=<cycles per line>): every core clock goes to one class, first match wins
+    integer stat_every = 0;
+    initial void'($value$plusargs("stat=%d", stat_every));
+    longint stc_n, st_halt, st_run, st_gpu, st_vram, st_dma, st_ifetch, st_drd, st_dwr, st_io, st_other;
+    always @(posedge clk_core) if (stat_every != 0) begin
+        stc_n++;
+        if (dut.CU.psx.halt_code != 0) st_halt++;
+        else if (!dut.CU.psx.peripheral_running) st_run++;
+        else if (dut.CU.psx.gpu_drawing) st_gpu++;
+        else if (dut.CU.psx.vraming) st_vram++;
+        else if (dut.CU.psx.dma_running) st_dma++;
+        else if (dut.CU.psx.__sfl_active_ir_cache_read || dut.CU.psx.__sfl_active_ir_cache_clear || dut.CU.psx.ir_cache.doing) st_ifetch++;
+        else if (dut.CU.psx.__sfl_active_read_wram_wait || dut.CU.psx.__sfl_active_read_bios_wait) st_drd++;
+        else if (dut.CU.psx.__sfl_active_write_wram_wait) st_dwr++;
+        else if (dut.CU.psx.__sfl_active_read_io_wait || dut.CU.psx.__sfl_active_read_gpu_wait || dut.CU.psx.__sfl_active_read_cdr_wait) st_io++;
+        else st_other++;
+        if (stc_n % stat_every == 0) begin
+            $display("STAT cyc=%0d run=%0d gpu=%0d vram=%0d dma=%0d ifetch=%0d dread=%0d dwrite=%0d io=%0d other=%0d halt=%0d pc=%h",
+                     cyc, st_run, st_gpu, st_vram, st_dma, st_ifetch, st_drd, st_dwr, st_io, st_other, st_halt, dut.CU.psx.pc_out);
+            st_run = 0; st_gpu = 0; st_vram = 0; st_dma = 0; st_ifetch = 0; st_drd = 0; st_dwr = 0; st_io = 0; st_other = 0; st_halt = 0;
+        end
+    end
+
+    // CPU data-read cache model (+dcm=<cycles per line>): hit rate of direct-mapped caches with 16-byte lines
+    // (4/8/16 KB) over the CPU's data reads (cpu_read stage); every RAM write invalidates its word, except a
+    // CPU word write, which updates a line that is present
+    integer dcm_every = 0;
+    initial void'($value$plusargs("dcm=%d", dcm_every));
+    logic [20:0] dcm_tag [0:2][0:1023];
+    logic [3:0]  dcm_val [0:2][0:1023];
+    longint dcm_rd, dcm_hit [0:2], dcm_wr, dcm_wr_cpu;
+    logic dcm_rd_q = 0, dcm_wr_q = 0; // strobes may last several clocks: count the first one only
+    initial begin for (int c = 0; c < 3; c++) begin dcm_hit[c] = 0; for (int i = 0; i < 1024; i++) dcm_val[c][i] = 0; end dcm_rd = 0; dcm_wr = 0; dcm_wr_cpu = 0; end
+    always @(posedge clk_core) if (dcm_every != 0) begin
+        automatic int lines [0:2] = '{256, 512, 1024};
+        automatic logic [20:0] a = dut.CU.psx.A;
+        dcm_rd_q <= dut.CU.psx.WRAM_READ && dut.CU.psx.__sfl_active_cpu_read;
+        dcm_wr_q <= dut.CU.psx.WRAM_WRITE;
+        if (dut.CU.psx.WRAM_READ && dut.CU.psx.__sfl_active_cpu_read && !dcm_rd_q) begin
+            dcm_rd++;
+            for (int c = 0; c < 3; c++) begin
+                automatic int idx = (a[19:4]) % lines[c];
+                automatic logic [20:0] tg = a[20:4] / lines[c];
+                if (dcm_tag[c][idx] == tg && dcm_val[c][idx][a[3:2]]) dcm_hit[c]++;
+                else begin
+                    if (dcm_tag[c][idx] != tg) dcm_val[c][idx] = 0;
+                    dcm_tag[c][idx] = tg; dcm_val[c][idx] = 4'hF;
+                end
+            end
+        end
+        if (dut.CU.psx.WRAM_WRITE && !dcm_wr_q) begin
+            dcm_wr++;
+            for (int c = 0; c < 3; c++) begin
+                automatic int idx = (a[19:4]) % lines[c];
+                automatic logic [20:0] tg = a[20:4] / lines[c];
+                if (dcm_tag[c][idx] == tg && !(dut.CU.psx.__sfl_active_cpu_write && dut.CU.psx.Word == 4)) dcm_val[c][idx][a[3:2]] = 0;
+            end
+            if (dut.CU.psx.__sfl_active_cpu_write) dcm_wr_cpu++;
+        end
+        if (cyc % dcm_every == 0 && cyc > 0)
+            $display("DCM cyc=%0d reads=%0d hit4k=%0d hit8k=%0d hit16k=%0d writes=%0d cpuwr=%0d",
+                     cyc, dcm_rd, dcm_hit[0], dcm_hit[1], dcm_hit[2], dcm_wr, dcm_wr_cpu);
+    end
+
+`ifdef SIM_DCACHE
+    // data cache coherency check (+dchk=<cycles per line>): every data cache hit must equal the scoreboard's RAM
+    integer dchk_every = 0;
+    initial void'($value$plusargs("dchk=%d", dchk_every));
+    longint dchk_hits = 0, dchk_mism = 0, dchk_miss = 0;
+    always @(posedge clk_core) if (dchk_every != 0) begin
+        if (dut.CU.psx.__sfl_active_dc_read) begin
+            automatic logic [24:0] ha = {5'b0, dut.CU.psx.cpu_A[20:2], 1'b0}; // WRAM halfword address of the word
+            if (dut.CU.psx.dcache.hit) begin
+                dchk_hits++;
+                if (dut.CU.psx.dcache.dout !== {ref_mem[ha + 1], ref_mem[ha]}) begin
+                    dchk_mism++;
+                    if (dchk_mism <= 10)
+                        $display("DCACHE MISMATCH #%0d cycle=%0d A=%h pc=%h cache=%h ram=%h%h", dchk_mism, cyc, dut.CU.psx.cpu_A,
+                                 dut.CU.psx.pc_out, dut.CU.psx.dcache.dout, ref_mem[ha + 1], ref_mem[ha]);
+                end
+            end else dchk_miss++;
+        end
+        if (cyc % dchk_every == 0 && cyc > 0) $display("DCHK cyc=%0d hits=%0d misses=%0d mism=%0d", cyc, dchk_hits, dchk_miss, dchk_mism);
+    end
+`endif
+
     // ---------------- audio capture (+audio=1): SPU mix at each 44.1 kHz sample strobe
     // (21-bit, as int32 L,R) and the 16-bit 48 kHz frames handed to the I2S serializer.
     // Files go to outdir (gitignored build tree): audio_in.raw, audio_out.raw.

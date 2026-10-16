@@ -47,6 +47,8 @@ def build(bdir, jobs):
     sim.mkdir(exist_ok=True)
     # a core.sflp with the CPU-command hold (candidate T12) exposes cpu_pend; the bench reports it
     defines = ['-DSIM_T12'] if b'cpu_pend' in (rtl / 'core.sv').read_bytes() else []
+    if b'dcache' in (rtl / 'core.sv').read_bytes():
+        defines.append('-DSIM_DCACHE')  # the bench checks data cache hits against the scoreboard (+dchk=N)
     r = sh(['verilator', '--binary', '--timing', '-O3', '--x-assign', 'fast', '--x-initial', '0',
             '-Wno-fatal', '-Wno-lint', '-Wno-style', '-Wno-WIDTH', '-Wno-MULTIDRIVEN', '-Wno-UNOPTFLAT',
             '-Wno-PINMISSING', '-Wno-TIMESCALEMOD', '-Wno-CASEINCOMPLETE', '-Wno-LATCH',

@@ -594,6 +594,136 @@
       "why": "hardware r38/r39: every textured 4/8-bit pixel whose palette index differs from the previous pixel reads its CLUT entry from SDRAM (about 10 clocks plus the handshake); a 256-entry CLUT cache makes it one probe per distinct index per command",
       "old": "\tstage texdraw {\n\t\treg clut_adrs_reg<19> = -1, clut_data<16>;\n\t\tinstrself clut_data_valid;\n\t\tif(tcache_ack){\n\t\t\treg_wr tex_st;\n\t\t\tif(tex_st==0b0){\n\t\t\t\tsel clut_adrs<19>;\n\t\t\t\tany{\n\t\t\t\t\ttpage_col==0 : par{\n\t\t\t\t\t\tsel tci<4>;\n\t\t\t\t\t\ttci = (tcache_dout >> (u<1:0> || 0b00))<3:0>;\n\t\t\t\t\t\tclut_adrs = clut_p + (15#0b0 || tci);\n\t\t\t\t\t}\n\t\t\t\t\ttpage_col==1 : par{\n\t\t\t\t\t\tsel tci<8>;\n\t\t\t\t\t\ttci = (tcache_dout >> (u<0> || 0b000))<7:0>;\n\t\t\t\t\t\tclut_adrs = clut_p + (11#0b0 || tci);\n\t\t\t\t\t}\n\t\t\t\t\ttpage_col<1>==0b0 : par{\n\t\t\t\t\t\tif(clut_adrs!=clut_adrs_reg){\n\t\t\t\t\t\t\tvram_read(clut_adrs);\n\t\t\t\t\t\t\tclut_adrs_reg := clut_adrs;\n\t\t\t\t\t\t\ttex_st := 0b1;\n\t\t\t\t\t\t}\n\t\t\t\t\t\telse clut_data_valid();\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\n\t\t\tif(tpage_col<1> | (tex_st & vram_ack) | clut_data_valid){\n\t\t\t\tsel tex_data<16>;\n\t\t\t\tif(tpage_col<1>) tex_data = tcache_dout;\n\t\t\t\telse{\n\t\t\t\t\tif(clut_data_valid) tex_data = clut_data;\n\t\t\t\t\telse{\n\t\t\t\t\t\ttex_data = vram_read_data;\n\t\t\t\t\t\tclut_data := vram_read_data;\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif((tex_data<14:0>!=0) | (tex_data==0x8000)){\n\t\t\t\t\tview_on(x<9:0>, y<8:0>);\n\t\t\t\t\ttr = tex_data< 4: 0> || 0b000;\n\t\t\t\t\ttg = tex_data< 9: 5> || 0b000;\n\t\t\t\t\ttb = tex_data<14:10> || 0b000;\n\t\t\t\t}\n\n\t\t\t\tdelta_add();\n\n\t\t\t\ttex_st := 0b0;\n\t\t\t\tfinish;\n\t\t\t}\n\t\t}\n\t}\n",
       "new": "\tstage texdraw {\n\t\tinstrself clut_data_valid;\n\t\treg clut_adrs_cur<19>, clut_idx_cur<8>;\n\t\tif(tcache_ack){\n\t\t\tif(tex_st==0b00){\n\t\t\t\tsel clut_adrs<19>, clut_idx<8>;\n\t\t\t\tany{\n\t\t\t\t\ttpage_col==0 : par{\n\t\t\t\t\t\tsel tci<4>;\n\t\t\t\t\t\ttci = (tcache_dout >> (u<1:0> || 0b00))<3:0>;\n\t\t\t\t\t\tclut_adrs = clut_p + (15#0b0 || tci);\n\t\t\t\t\t\tclut_idx = 4#0b0 || tci;\n\t\t\t\t\t}\n\t\t\t\t\ttpage_col==1 : par{\n\t\t\t\t\t\tsel tci<8>;\n\t\t\t\t\t\ttci = (tcache_dout >> (u<0> || 0b000))<7:0>;\n\t\t\t\t\t\tclut_adrs = clut_p + (11#0b0 || tci);\n\t\t\t\t\t\tclut_idx = tci;\n\t\t\t\t\t}\n\t\t\t\t\ttpage_col<1>==0b0 : par{\n\t\t\t\t\t\tif(clut_adrs==clut_adrs_reg) clut_data_valid();\n\t\t\t\t\t\telse{\n\t\t\t\t\t\t\t// Q-L1-16 clut-cache: probe the CLUT cache; only a miss reads SDRAM\n\t\t\t\t\t\t\tclutc.lookup(clut_idx);\n\t\t\t\t\t\t\tclut_adrs_cur := clut_adrs;\n\t\t\t\t\t\t\tclut_idx_cur := clut_idx;\n\t\t\t\t\t\t\ttex_st := 0b10;\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t}\n\t\t\tif((tex_st==0b10) & ^clutc.hit){\n\t\t\t\tvram_read(clut_adrs_cur);\n\t\t\t\tclut_adrs_reg := clut_adrs_cur;\n\t\t\t\ttex_st := 0b01;\n\t\t\t}\n\t\t\tif((tex_st==0b01) & vram_ack) clutc.fill(clut_idx_cur, vram_read_data);\n\n\t\t\tif(tpage_col<1> | ((tex_st==0b01) & vram_ack) | clut_data_valid | ((tex_st==0b10) & clutc.hit)){\n\t\t\t\tsel tex_data<16>;\n\t\t\t\talt{\n\t\t\t\t\ttpage_col<1> : tex_data = tcache_dout;\n\t\t\t\t\tclut_data_valid : tex_data = clut_data;\n\t\t\t\t\t(tex_st==0b10) : par{\n\t\t\t\t\t\ttex_data = clutc.dout;\n\t\t\t\t\t\tclut_data := clutc.dout;\n\t\t\t\t\t\tclut_adrs_reg := clut_adrs_cur;\n\t\t\t\t\t}\n\t\t\t\t\telse : par{\n\t\t\t\t\t\ttex_data = vram_read_data;\n\t\t\t\t\t\tclut_data := vram_read_data;\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tif((tex_data<14:0>!=0) | (tex_data==0x8000)){\n\t\t\t\t\tview_on(x<9:0>, y<8:0>);\n\t\t\t\t\ttr = tex_data< 4: 0> || 0b000;\n\t\t\t\t\ttg = tex_data< 9: 5> || 0b000;\n\t\t\t\t\ttb = tex_data<14:10> || 0b000;\n\t\t\t\t}\n\n\t\t\t\tdelta_add();\n\n\t\t\t\ttex_st := 0b00;\n\t\t\t\tfinish;\n\t\t\t}\n\t\t}\n\t}\n"
+    },
+    {
+      "option": "dcache",
+      "id": "O-DC1",
+      "file": "PlayStation_core.sflp",
+      "upstream_sha256": "10696eeaeb215c8e7e715e6b1ab78bb8db55cdb67ae0213acfe385330c19b8be",
+      "class": "D",
+      "why": "dcache: 4 KB data cache for CPU RAM reads (sim model: 94 % hits in Bust-A-Move 2 play; CPU data reads were 30-43 % of the clocks). Write-through with update; DMA and other non-CPU RAM writes invalidate their word",
+      "old": "%i \"Cache_IR.h\"\n",
+      "new": "%i \"Cache_IR.h\"\n%i \"Cache_D.h\"\n"
+    },
+    {
+      "option": "dcache",
+      "id": "O-DC2",
+      "file": "PlayStation_core.sflp",
+      "upstream_sha256": "10696eeaeb215c8e7e715e6b1ab78bb8db55cdb67ae0213acfe385330c19b8be",
+      "class": "D",
+      "why": "dcache: 4 KB data cache for CPU RAM reads (sim model: 94 % hits in Bust-A-Move 2 play; CPU data reads were 30-43 % of the clocks). Write-through with update; DMA and other non-CPU RAM writes invalidate their word",
+      "old": "\tCache_IR ir_cache;\n",
+      "new": "\tCache_IR ir_cache;\n\tCache_D dcache;\n"
+    },
+    {
+      "option": "dcache",
+      "id": "O-DC3",
+      "file": "PlayStation_core.sflp",
+      "upstream_sha256": "10696eeaeb215c8e7e715e6b1ab78bb8db55cdb67ae0213acfe385330c19b8be",
+      "class": "D",
+      "why": "dcache: 4 KB data cache for CPU RAM reads (sim model: 94 % hits in Bust-A-Move 2 play; CPU data reads were 30-43 % of the clocks). Write-through with update; DMA and other non-CPU RAM writes invalidate their word",
+      "old": "\tstage_name ir_cache_read { task do(cpu_A); }\n",
+      "new": "\tstage_name ir_cache_read { task do(cpu_A); }\n\tstage_name dc_read { task do(cpu_A); }\n"
+    },
+    {
+      "option": "dcache",
+      "id": "O-DC4",
+      "file": "PlayStation_core.sflp",
+      "upstream_sha256": "10696eeaeb215c8e7e715e6b1ab78bb8db55cdb67ae0213acfe385330c19b8be",
+      "class": "D",
+      "why": "dcache: 4 KB data cache for CPU RAM reads (sim model: 94 % hits in Bust-A-Move 2 play; CPU data reads were 30-43 % of the clocks). Write-through with update; DMA and other non-CPU RAM writes invalidate their word",
+      "old": "\tif(reset){\n\t\tir_cache.clear_all();\n\t\treset := 0b0;\n",
+      "new": "\tif(reset){\n\t\tir_cache.clear_all();\n\t\tdcache.clear_all();\n\t\treset := 0b0;\n"
+    },
+    {
+      "option": "dcache",
+      "id": "O-DC5",
+      "file": "PlayStation_core.sflp",
+      "upstream_sha256": "10696eeaeb215c8e7e715e6b1ab78bb8db55cdb67ae0213acfe385330c19b8be",
+      "class": "D",
+      "why": "dcache: 4 KB data cache for CPU RAM reads (sim model: 94 % hits in Bust-A-Move 2 play; CPU data reads were 30-43 % of the clocks). Write-through with update; DMA and other non-CPU RAM writes invalidate their word",
+      "old": "\t\tir_cache.doing | ir_cache_read.do /*| ir_cache_write.do*/ | ir_cache_clear.do | cpu_read.do | cpu_write.do |",
+      "new": "\t\tir_cache.doing | ir_cache_read.do /*| ir_cache_write.do*/ | ir_cache_clear.do | cpu_read.do | cpu_write.do |\n\t\tdcache.doing | dc_read.do |"
+    },
+    {
+      "option": "dcache",
+      "id": "O-DC6",
+      "file": "PlayStation_core.sflp",
+      "upstream_sha256": "10696eeaeb215c8e7e715e6b1ab78bb8db55cdb67ae0213acfe385330c19b8be",
+      "class": "D",
+      "why": "dcache: 4 KB data cache for CPU RAM reads (sim model: 94 % hits in Bust-A-Move 2 play; CPU data reads were 30-43 % of the clocks). Write-through with update; DMA and other non-CPU RAM writes invalidate their word",
+      "old": "\t\t\tir_cache_read.do & ir_cache.hit : mapped_Din = ir_cache.dout;\n",
+      "new": "\t\t\tir_cache_read.do & ir_cache.hit : mapped_Din = ir_cache.dout;\n\t\t\tdc_read.do & dcache.hit : mapped_Din = dcache.dout;\n"
+    },
+    {
+      "option": "dcache",
+      "id": "O-DC7",
+      "file": "PlayStation_core.sflp",
+      "upstream_sha256": "10696eeaeb215c8e7e715e6b1ab78bb8db55cdb67ae0213acfe385330c19b8be",
+      "class": "D",
+      "why": "dcache: 4 KB data cache for CPU RAM reads (sim model: 94 % hits in Bust-A-Move 2 play; CPU data reads were 30-43 % of the clocks). Write-through with update; DMA and other non-CPU RAM writes invalidate their word",
+      "old": "\tstage cpu_read {\n",
+      "new": "\t// Q-L1-16 dcache: CPU data read from RAM (KSEG0/KUSEG): the cache answers a hit; a miss fills the 16-byte line\n\t// (burst from the requested word on, as ir_cache_read) and answers from the same burst\n\tstage dc_read {\n\t\tfirst_state st_check;\n\t\tstate st_check par{\n\t\t\tif(dcache.hit){\n\t\t\t\tcpu.read_ack();\n\t\t\t\tfinish;\n\t\t\t}\n\t\t\telse{\n\t\t\t\tsel offset<2>;\n\t\t\t\toffset = cpu_A<3:2>;\n\t\t\t\tswitch(offset){\n\t\t\t\t\tcase 0: WRAM_READ(cpu_A<20:2> || 0b00, 16);\n\t\t\t\t\tcase 1: WRAM_READ(cpu_A<20:2> || 0b00, 12);\n\t\t\t\t\tcase 2: WRAM_READ(cpu_A<20:2> || 0b00, 8);\n\t\t\t\t\tcase 3: WRAM_READ(cpu_A<20:2> || 0b00, 4);\n\t\t\t\t}\n\t\t\t\tgenerate read_wram_wait.do();\n\t\t\t\tgoto st_write;\n\t\t\t}\n\t\t}\n\t\tstate st_write if(read_wram_wait.do & wram_ack){\n\t\t\tdcache.write_line(cpu_A<20:0>, Din);\n\t\t\tgoto st_check;\n\t\t\tfinish;\n\t\t}\n\t}\n\n\tstage cpu_read {\n"
+    },
+    {
+      "option": "dcache",
+      "id": "O-DC8",
+      "file": "PlayStation_core.sflp",
+      "upstream_sha256": "10696eeaeb215c8e7e715e6b1ab78bb8db55cdb67ae0213acfe385330c19b8be",
+      "class": "D",
+      "why": "dcache: 4 KB data cache for CPU RAM reads (sim model: 94 % hits in Bust-A-Move 2 play; CPU data reads were 30-43 % of the clocks). Write-through with update; DMA and other non-CPU RAM writes invalidate their word",
+      "old": "\t\telse{\n\t\t\tgenerate cpu_read.do(cpu.A, cpu.Word);\n\t\t}\n\n//if(cpu.ir_read) opcount++;",
+      "new": "\t\telse{\n\t\t\tif((^sw_cache_off) & ((cpu.A<31:24>==0x00) | (cpu.A<31:24>==0x80)) & ^cpu.is_c){\n\t\t\t\t// Q-L1-16 dcache: data read from RAM\n\t\t\t\tdcache.read(cpu.A<20:0>);\n\t\t\t\tgenerate dc_read.do(cpu.A);\n\t\t\t}\n\t\t\telse{\n\t\t\t\tgenerate cpu_read.do(cpu.A, cpu.Word);\n\t\t\t}\n\t\t}\n\n//if(cpu.ir_read) opcount++;"
+    },
+    {
+      "option": "dcache",
+      "id": "O-DC9",
+      "file": "PlayStation_core.sflp",
+      "upstream_sha256": "10696eeaeb215c8e7e715e6b1ab78bb8db55cdb67ae0213acfe385330c19b8be",
+      "class": "D",
+      "why": "dcache: 4 KB data cache for CPU RAM reads (sim model: 94 % hits in Bust-A-Move 2 play; CPU data reads were 30-43 % of the clocks). Write-through with update; DMA and other non-CPU RAM writes invalidate their word",
+      "old": "\t\t\t\t\t\tWRAM_WRITE(cpu_A<20:0>, cpu_Dout, 0b00 || cpu_Word);\n\t\t\t\t\t\tgenerate write_wram_wait.do();\n",
+      "new": "\t\t\t\t\t\tWRAM_WRITE(cpu_A<20:0>, cpu_Dout, 0b00 || cpu_Word);\n\t\t\t\t\t\tgenerate write_wram_wait.do();\n\t\t\t\t\t\tdcache.wr(cpu_A<20:0>, cpu_Dout, 0b00 || cpu_Word); // Q-L1-16 dcache: write-through update\n"
+    },
+    {
+      "option": "dcache",
+      "id": "O-DC10",
+      "file": "PlayStation_core.sflp",
+      "upstream_sha256": "10696eeaeb215c8e7e715e6b1ab78bb8db55cdb67ae0213acfe385330c19b8be",
+      "class": "D",
+      "why": "dcache: 4 KB data cache for CPU RAM reads (sim model: 94 % hits in Bust-A-Move 2 play; CPU data reads were 30-43 % of the clocks). Write-through with update; DMA and other non-CPU RAM writes invalidate their word",
+      "old": "\t\tWRAM_WRITE(dma_GPU.A, dma_GPU.Dout, 4);\n",
+      "new": "\t\tWRAM_WRITE(dma_GPU.A, dma_GPU.Dout, 4);\n\t\tdcache.clear(dma_GPU.A); // Q-L1-16 dcache: DMA writes invalidate\n"
+    },
+    {
+      "option": "dcache",
+      "id": "O-DC11",
+      "file": "PlayStation_core.sflp",
+      "upstream_sha256": "10696eeaeb215c8e7e715e6b1ab78bb8db55cdb67ae0213acfe385330c19b8be",
+      "class": "D",
+      "why": "dcache: 4 KB data cache for CPU RAM reads (sim model: 94 % hits in Bust-A-Move 2 play; CPU data reads were 30-43 % of the clocks). Write-through with update; DMA and other non-CPU RAM writes invalidate their word",
+      "old": "\t\tWRAM_WRITE(dma_CDR.A, dma_CDR.Dout, 4);\n",
+      "new": "\t\tWRAM_WRITE(dma_CDR.A, dma_CDR.Dout, 4);\n\t\tdcache.clear(dma_CDR.A);\n"
+    },
+    {
+      "option": "dcache",
+      "id": "O-DC12",
+      "file": "PlayStation_core.sflp",
+      "upstream_sha256": "10696eeaeb215c8e7e715e6b1ab78bb8db55cdb67ae0213acfe385330c19b8be",
+      "class": "D",
+      "why": "dcache: 4 KB data cache for CPU RAM reads (sim model: 94 % hits in Bust-A-Move 2 play; CPU data reads were 30-43 % of the clocks). Write-through with update; DMA and other non-CPU RAM writes invalidate their word",
+      "old": "\t\tWRAM_WRITE(dma_OTC.A, dma_OTC.D, 4);\n",
+      "new": "\t\tWRAM_WRITE(dma_OTC.A, dma_OTC.D, 4);\n\t\tdcache.clear(dma_OTC.A);\n"
+    },
+    {
+      "option": "dcache",
+      "id": "O-DC13",
+      "file": "PlayStation_core.sflp",
+      "upstream_sha256": "10696eeaeb215c8e7e715e6b1ab78bb8db55cdb67ae0213acfe385330c19b8be",
+      "class": "D",
+      "why": "dcache: 4 KB data cache for CPU RAM reads (sim model: 94 % hits in Bust-A-Move 2 play; CPU data reads were 30-43 % of the clocks). Write-through with update; DMA and other non-CPU RAM writes invalidate their word",
+      "old": "\tinstruct mdec.wram_write WRAM_WRITE(mdec.wram_adrs, 0x00 || mdec.wram_din, 0b000 || mdec.wram_word);\n",
+      "new": "\tinstruct mdec.wram_write par{\n\t\tWRAM_WRITE(mdec.wram_adrs, 0x00 || mdec.wram_din, 0b000 || mdec.wram_word);\n\t\tdcache.clear(mdec.wram_adrs);\n\t}\n"
     }
   ],
   "generated_files": [

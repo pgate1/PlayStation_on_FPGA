@@ -1,0 +1,173 @@
+/*
+	Data cache for CPU RAM reads (Pocket option dcache)
+
+	4 kByte, direct mapped, 16-byte lines, a valid bit per word. Same structure as Cache_IR, but
+	- write-through with update: wr() merges a CPU store into the cached word if its line is present
+	  (two clocks: tag/word read, then the merged write; it never allocates),
+	- clear() invalidates one word without touching the tag (DMA and other non-CPU RAM writes).
+	A word is returned whole for byte/halfword reads too (the CPU picks the lane from the address).
+*/
+
+circuit Cache_D
+{
+	input adrs<21>, din<128>, wdata<32>, wword<5>;
+	instrin read(adrs), write_line(adrs, din), clear(adrs), wr(adrs, wdata, wword);
+	output hit, dout<32>;
+	instrin clear_all;
+	output doing;
+
+	// 2MByte adrs<21> t_tttt_tttt_iiii_iiii_oo--
+	sel tag<9>, index<8>, offset<2>;
+	reg tag_reg<9>, offset_reg<2>, index_reg<8>, lane_reg<2>;
+	reg_wr w_pend;
+	reg wd_reg<32>, ww_reg<5>;
+
+	mem tag_ram[256]<9>;
+	sel tag_adrs<8>, tag_din<9>;
+	reg tag_dout<9>;
+	instrself tag_read(tag_adrs);
+	instrself tag_write(tag_adrs, tag_din);
+
+	// valid + data
+	mem ram0[256]<1+32>, ram1[256]<1+32>, ram2[256]<1+32>, ram3[256]<1+32>;
+	sel ram0_adrs<8>, ram1_adrs<8>, ram2_adrs<8>, ram3_adrs<8>;
+	sel ram0_din<33>, ram1_din<33>, ram2_din<33>, ram3_din<33>;
+	reg ram0_dout<33>, ram1_dout<33>, ram2_dout<33>, ram3_dout<33>;
+	instrself ram0_read(ram0_adrs), ram0_write(ram0_adrs, ram0_din);
+	instrself ram1_read(ram1_adrs), ram1_write(ram1_adrs, ram1_din);
+	instrself ram2_read(ram2_adrs), ram2_write(ram2_adrs, ram2_din);
+	instrself ram3_read(ram3_adrs), ram3_write(ram3_adrs, ram3_din);
+	sel ram_dout<33>;
+
+	stage_name clear_all_stg { task do(); }
+
+	instruct tag_read tag_dout := tag_ram[tag_adrs];
+	instruct tag_write tag_ram[tag_adrs] := tag_din;
+	instruct ram0_read ram0_dout := ram0[ram0_adrs];
+	instruct ram0_write ram0[ram0_adrs] := ram0_din;
+	instruct ram1_read ram1_dout := ram1[ram1_adrs];
+	instruct ram1_write ram1[ram1_adrs] := ram1_din;
+	instruct ram2_read ram2_dout := ram2[ram2_adrs];
+	instruct ram2_write ram2[ram2_adrs] := ram2_din;
+	instruct ram3_read ram3_dout := ram3[ram3_adrs];
+	instruct ram3_write ram3[ram3_adrs] := ram3_din;
+
+	tag = adrs<20:12>;
+	index = adrs<11:4>;
+	offset = adrs<3:2>;
+
+	instruct read par{
+		tag_reg := tag;
+		offset_reg := offset;
+		tag_read(index);
+		switch(offset){
+			case 0: ram0_read(index);
+			case 1: ram1_read(index);
+			case 2: ram2_read(index);
+			case 3: ram3_read(index);
+		}
+	}
+
+	switch(offset_reg){
+		case 0: ram_dout = ram0_dout;
+		case 1: ram_dout = ram1_dout;
+		case 2: ram_dout = ram2_dout;
+		case 3: ram_dout = ram3_dout;
+	}
+
+	hit = (tag_dout==tag_reg) & ram_dout<32>;
+	dout = ram_dout<31:0>;
+
+	// store update: first clock reads tag and word, the next one merges and writes
+	instruct wr par{
+		tag_reg := tag;
+		offset_reg := offset;
+		index_reg := index;
+		lane_reg := adrs<1:0>;
+		wd_reg := wdata;
+		ww_reg := wword;
+		w_pend := 0b1;
+		tag_read(index);
+		switch(offset){
+			case 0: ram0_read(index);
+			case 1: ram1_read(index);
+			case 2: ram2_read(index);
+			case 3: ram3_read(index);
+		}
+	}
+
+	sel old_w<32>, new_w<32>, full_w;
+	old_w = ram_dout<31:0>;
+	full_w = (ww_reg!=1) & (ww_reg!=2); // 4 byte (and anything else) replaces the word
+	any{
+		ww_reg==1 : any{ // byte
+			lane_reg==0 : new_w = old_w<31:8> || wd_reg<7:0>;
+			lane_reg==1 : new_w = old_w<31:16> || wd_reg<7:0> || old_w<7:0>;
+			lane_reg==2 : new_w = old_w<31:24> || wd_reg<7:0> || old_w<15:0>;
+			else : new_w = wd_reg<7:0> || old_w<23:0>;
+		}
+		ww_reg==2 : any{ // halfword
+			lane_reg<1>==0b0 : new_w = old_w<31:16> || wd_reg<15:0>;
+			else : new_w = wd_reg<15:0> || old_w<15:0>;
+		}
+		else : new_w = wd_reg;
+	}
+	if(w_pend){
+		w_pend := 0b0;
+		// only when the line is present; a partial store needs the old word
+		if((tag_dout==tag_reg) & (full_w | ram_dout<32>)){
+			switch(offset_reg){
+				case 0: ram0_write(index_reg, 0b1 || new_w);
+				case 1: ram1_write(index_reg, 0b1 || new_w);
+				case 2: ram2_write(index_reg, 0b1 || new_w);
+				case 3: ram3_write(index_reg, 0b1 || new_w);
+			}
+		}
+	}
+
+	instruct write_line par{
+		tag_write(index, tag);
+// offset
+//  0 R R R R
+//  1 C R R R
+//  2 C C R R
+//  3 C C C R
+		sel din_line<128>;
+		switch(offset){
+			case 0: din_line = din;
+			case 1: din_line = din << 32;
+			case 2: din_line = din << 64;
+			case 3: din_line = din << 96;
+		}
+		ram0_write(index, (offset==0) || din_line<31:0>);
+		ram1_write(index, ((offset==0)|(offset==1)) || din_line<63:32>);
+		ram2_write(index, ((offset==0)|(offset==1)|(offset==2)) || din_line<95:64>);
+		ram3_write(index, 0b1 || din_line<127:96>);
+	}
+
+	// invalidate one word, whatever line holds it (the tag stays)
+	instruct clear par{
+		switch(offset){
+			case 0: ram0_write(index, 33#0b0);
+			case 1: ram1_write(index, 33#0b0);
+			case 2: ram2_write(index, 33#0b0);
+			case 3: ram3_write(index, 33#0b0);
+		}
+	}
+
+	instruct clear_all generate clear_all_stg.do();
+	doing = clear_all_stg.do;
+
+	stage clear_all_stg {
+		par{
+			reg_wr ca<8>;
+			tag_write(ca, 9#0b0);
+			ram0_write(ca, 33#0x0);
+			ram1_write(ca, 33#0x0);
+			ram2_write(ca, 33#0x0);
+			ram3_write(ca, 33#0x0);
+			ca++;
+			if(/&ca) finish;
+		}
+	}
+}
