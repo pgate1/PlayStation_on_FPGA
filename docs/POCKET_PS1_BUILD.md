@@ -324,3 +324,24 @@ Pocket build with the SPU off). Still open: REPLAY freezes, sound distortion on
 hardware, 50 MHz timing, removing the overlay for a release build, reverb build
 (98% ALMs, seed dependent). Full-chain simulation with pad presses:
 `run_pocket_sim.py run ... +start_first=700000000 +start_every=80000000 +probe=40000000`.
+
+## Game speed (Q-L1-16, 2026-10-16)
+
+Hardware r39 (perf overlay row 3: fps, GPU drawing, SDRAM busy, CPU waiting) on Bust-A-Move 2: 14-20 fps, GPU
+drawing 35-63 %, SDRAM busy 43-51 %, CPU waiting on peripherals 86-93 % (the core runs CPU, GPU and memory
+waits one after the other: `peripheral_running`). The Next Tetris after the logo: 4 fps, GPU 0 %, CPU waiting 78 %
+(disc loading). SDRAM bandwidth is not the limit.
+
+Simulation breakdown (`tb_pocket_boot.sv` `+stat=N`, Bust-A-Move 2 play, one line per second of core time, every
+clock goes to the first matching class): CPU data reads 30-43 % of the clocks, instruction fetch 15-22 %, RAM
+writes 8-12 %, CPU running only 22-31 %. Options (all off by default, `--option`):
+
+| option | change | evidence |
+|---|---|---|
+| `clut-cache` | `Cache_CLUT.sflp`: 256-entry CLUT cache in `drawRect`/`drawPoly`, one SDRAM read per distinct palette index and draw command (was one per pixel whose index differed from the previous pixel); also fixes a stale one-entry CLUT register across commands | `Pocket/tb/tb_rect_clut.sv` (independent expected pixels, 0 errors; unpatched fails the CLUT-rewrite case), `tb_poly_clut.sv` (identical traces); 26-27 % fewer clocks in the mock |
+| `dcache` | `Cache_D.sflp`: 4 KB direct-mapped CPU data cache (16-byte lines), write-through with update, DMA/MDEC writes invalidate their word | model hit rate 94 % (`+dcm`); `+dchk` coherency check against the scoreboard: 20 M hits, 0 mismatches over 580 M cycles; data-read waits 13 M -> 0.3 M clocks/s |
+| `icache-8k`, `icache-16k` | larger `Cache_IR` | no effect (instruction-fetch clocks 12.4 M/s unchanged): the cost is the 1-clock hit path per instruction, not misses |
+
+40 MHz timing: r40 (clut-cache) seeds 2 and 4 close (+0.36, +0.27 ns); r42 (clut-cache + dcache) seeds 6 and 8
+close (+0.02, +0.07 ns), seeds 1, 2, 3, 4 do not. Remaining CPU cost: about 2.6 clocks per instruction plus the
+1-clock instruction fetch hit path (about 12 MIPS in play against about 30 on the real console).
