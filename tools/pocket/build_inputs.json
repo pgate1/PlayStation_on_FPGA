@@ -1,0 +1,766 @@
+{
+  "schema": 1,
+  "core_top_instances": [
+    "core_bridge_cmd",
+    "synch_3",
+    "core",
+    "sdram128_burstn_ctrl_100",
+    "main_pll_0002"
+  ],
+  "notes": [
+    "The sfl2vl evaluation build is limited to 500 input lines. Large modules (R3000A, GTE, GPU, CDROM, core) cannot be processed by it; do not work around this limit.",
+    "Repo files are MIT (root LICENSE, pgate1). APF files are Analogue SLA and are not redistributed.",
+    "The Overtone licence and APF distribution licence are open decisions; they are not resolved here.",
+    "Syntax/elaboration checks (iverilog) are not a complete Pocket project build. The end-to-end build remains blocked."
+  ],
+  "entries": [
+    {
+      "name": "apf:apf/apf.qip",
+      "consumer": "Pocket/core_top.v (APF shell)",
+      "status": "fetch-at-build",
+      "path": "Pocket/build/apf/apf/apf.qip",
+      "sha256": "94af53185dde4d51ef30e75bb1ec8df672126742af36399bd62f4efb3a84b26a",
+      "pin": "core-template da3a021b1eaf742604d86d8dc9b33a6666263e6a",
+      "license": "Analogue SLA (not MIT); not redistributed",
+      "next_action": "Run tools/apf/fetch_apf.sh (SHA-256 checked)."
+    },
+    {
+      "name": "apf:apf/apf_constraints.sdc",
+      "consumer": "Pocket/core_top.v (APF shell)",
+      "status": "fetch-at-build",
+      "path": "Pocket/build/apf/apf/apf_constraints.sdc",
+      "sha256": "18b72957181178b046c2f27711190cb426482edcd7b58fcda9cfea27e855dd2e",
+      "pin": "core-template da3a021b1eaf742604d86d8dc9b33a6666263e6a",
+      "license": "Analogue SLA (not MIT); not redistributed",
+      "next_action": "Run tools/apf/fetch_apf.sh (SHA-256 checked)."
+    },
+    {
+      "name": "apf:apf/apf_top.v",
+      "consumer": "Pocket/core_top.v (APF shell)",
+      "status": "fetch-at-build",
+      "path": "Pocket/build/apf/apf/apf_top.v",
+      "sha256": "6c24aa45a3dab52d8b86944cdd90330aa74cfdcd62e2d43e39d33d4791d173c7",
+      "pin": "core-template da3a021b1eaf742604d86d8dc9b33a6666263e6a",
+      "license": "Analogue SLA (not MIT); not redistributed",
+      "next_action": "Run tools/apf/fetch_apf.sh (SHA-256 checked)."
+    },
+    {
+      "name": "apf:apf/build_id.mif",
+      "consumer": "Pocket/core_top.v (APF shell)",
+      "status": "fetch-at-build",
+      "path": "Pocket/build/apf/apf/build_id.mif",
+      "sha256": "3ef497ff9c6bd44ad96c936a2ee3bcf8e624f8b74ef4b37bedd10e98f0e91ee3",
+      "pin": "core-template da3a021b1eaf742604d86d8dc9b33a6666263e6a",
+      "license": "Analogue SLA (not MIT); not redistributed",
+      "next_action": "Run tools/apf/fetch_apf.sh (SHA-256 checked)."
+    },
+    {
+      "name": "apf:apf/build_id_gen.tcl",
+      "consumer": "Pocket/core_top.v (APF shell)",
+      "status": "fetch-at-build",
+      "path": "Pocket/build/apf/apf/build_id_gen.tcl",
+      "sha256": "6279533fec80081e3c91884e1cc5df853b2a716df0b573636147f3420aace996",
+      "pin": "core-template da3a021b1eaf742604d86d8dc9b33a6666263e6a",
+      "license": "Analogue SLA (not MIT); not redistributed",
+      "next_action": "Run tools/apf/fetch_apf.sh (SHA-256 checked)."
+    },
+    {
+      "name": "apf:apf/common.v",
+      "consumer": "Pocket/core_top.v (APF shell)",
+      "status": "fetch-at-build",
+      "path": "Pocket/build/apf/apf/common.v",
+      "sha256": "c1615e2c6c12b111537f6ca11e826e5061eb91f405e349bdc649a17b48e24d4e",
+      "pin": "core-template da3a021b1eaf742604d86d8dc9b33a6666263e6a",
+      "license": "Analogue SLA (not MIT); not redistributed",
+      "next_action": "Run tools/apf/fetch_apf.sh (SHA-256 checked).",
+      "module": "synch_3"
+    },
+    {
+      "name": "apf:apf/io_bridge_peripheral.v",
+      "consumer": "Pocket/core_top.v (APF shell)",
+      "status": "fetch-at-build",
+      "path": "Pocket/build/apf/apf/io_bridge_peripheral.v",
+      "sha256": "fb9c13e0311ac6b01019898d0ca7786f370228380356fe618fc2b473f2add17d",
+      "pin": "core-template da3a021b1eaf742604d86d8dc9b33a6666263e6a",
+      "license": "Analogue SLA (not MIT); not redistributed",
+      "next_action": "Run tools/apf/fetch_apf.sh (SHA-256 checked)."
+    },
+    {
+      "name": "apf:apf/io_pad_controller.v",
+      "consumer": "Pocket/core_top.v (APF shell)",
+      "status": "fetch-at-build",
+      "path": "Pocket/build/apf/apf/io_pad_controller.v",
+      "sha256": "70cda74af63d3baa53f87473e1d9e2d524ea305b299a3f832d6c1292771a305e",
+      "pin": "core-template da3a021b1eaf742604d86d8dc9b33a6666263e6a",
+      "license": "Analogue SLA (not MIT); not redistributed",
+      "next_action": "Run tools/apf/fetch_apf.sh (SHA-256 checked)."
+    },
+    {
+      "name": "apf:apf/mf_datatable.qip",
+      "consumer": "Pocket/core_top.v (APF shell)",
+      "status": "fetch-at-build",
+      "path": "Pocket/build/apf/apf/mf_datatable.qip",
+      "sha256": "8d4fac9c708f86c426e5241055d8000063e16dbe9b5c414f320a8b24c44a0632",
+      "pin": "core-template da3a021b1eaf742604d86d8dc9b33a6666263e6a",
+      "license": "Analogue SLA (not MIT); not redistributed",
+      "next_action": "Run tools/apf/fetch_apf.sh (SHA-256 checked)."
+    },
+    {
+      "name": "apf:apf/mf_datatable.v",
+      "consumer": "Pocket/core_top.v (APF shell)",
+      "status": "fetch-at-build",
+      "path": "Pocket/build/apf/apf/mf_datatable.v",
+      "sha256": "e2cc2e33ccc22b9a8be3c426141848e0ea7800abb45ce55530eebe17dd23ffd7",
+      "pin": "core-template da3a021b1eaf742604d86d8dc9b33a6666263e6a",
+      "license": "Analogue SLA (not MIT); not redistributed",
+      "next_action": "Run tools/apf/fetch_apf.sh (SHA-256 checked)."
+    },
+    {
+      "name": "apf:apf/mf_ddio_bidir_12.qip",
+      "consumer": "Pocket/core_top.v (APF shell)",
+      "status": "fetch-at-build",
+      "path": "Pocket/build/apf/apf/mf_ddio_bidir_12.qip",
+      "sha256": "f0ed4e73a07d734115bbde6501b43fe5878a7409f9b3b68bb4c7e0424b31b42e",
+      "pin": "core-template da3a021b1eaf742604d86d8dc9b33a6666263e6a",
+      "license": "Analogue SLA (not MIT); not redistributed",
+      "next_action": "Run tools/apf/fetch_apf.sh (SHA-256 checked)."
+    },
+    {
+      "name": "apf:apf/mf_ddio_bidir_12.v",
+      "consumer": "Pocket/core_top.v (APF shell)",
+      "status": "fetch-at-build",
+      "path": "Pocket/build/apf/apf/mf_ddio_bidir_12.v",
+      "sha256": "31c8b62114d7bc916104a6199d919d9e2235a164aba518360b339867a08426aa",
+      "pin": "core-template da3a021b1eaf742604d86d8dc9b33a6666263e6a",
+      "license": "Analogue SLA (not MIT); not redistributed",
+      "next_action": "Run tools/apf/fetch_apf.sh (SHA-256 checked)."
+    },
+    {
+      "name": "apf:core/core_bridge_cmd.v",
+      "consumer": "Pocket/core_top.v (APF shell)",
+      "status": "fetch-at-build",
+      "path": "Pocket/build/apf/core/core_bridge_cmd.v",
+      "sha256": "e6e0185218b3a63799db0f80085b0f4570c003c5f2197e8c9b8a1b1350f733fe",
+      "pin": "core-template da3a021b1eaf742604d86d8dc9b33a6666263e6a",
+      "license": "Analogue SLA (not MIT); not redistributed",
+      "next_action": "Run tools/apf/fetch_apf.sh (SHA-256 checked).",
+      "module": "core_bridge_cmd"
+    },
+    {
+      "name": "core:sdram128_burstn_ctrl_100",
+      "consumer": "Pocket/core_top.v",
+      "status": "missing",
+      "path": "",
+      "pin": "n/a",
+      "license": "unknown (not in repo)",
+      "module": "sdram128_burstn_ctrl_100",
+      "next_action": "Replaced by MIRLO64 P04 controller; not adapted. Needs integration work, not a file copy."
+    },
+    {
+      "name": "decision:apf-distribution-licence",
+      "consumer": "APF shell redistribution",
+      "status": "decision-needed",
+      "path": "",
+      "pin": "n/a",
+      "license": "Analogue SLA (not MIT)",
+      "next_action": "User decides whether the APF files may be redistributed. Until then fetch at build time only."
+    },
+    {
+      "name": "decision:overtone-licence",
+      "consumer": "Route 2 build (sfl2vl/NSL Core)",
+      "status": "decision-needed",
+      "path": "",
+      "pin": "n/a",
+      "license": "Overtone NSL Core (non-profit licence, not requested)",
+      "next_action": "User decides whether to request the licence. Not requested by this tooling."
+    },
+    {
+      "name": "gen:DDS_50to33868800.h",
+      "consumer": "Pocket/core.sflp",
+      "status": "generated",
+      "path": "DDS_50to33868800.h",
+      "pin": "n/a",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "include_string": "../DDS_50to33868800.h",
+      "next_action": "Generated from DDS_50to33868800.sflp by the sflp toolchain; no .h in repo."
+    },
+    {
+      "name": "gen:PlayStation_core.h",
+      "consumer": "Pocket/core.sflp",
+      "status": "generated",
+      "path": "PlayStation_core.h",
+      "pin": "n/a",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "include_string": "../PlayStation_core.h",
+      "next_action": "Generated from PlayStation_core.sflp by the sflp toolchain; no .h in repo."
+    },
+    {
+      "name": "gen:VGA_ctrl.h",
+      "consumer": "Pocket/core.sflp",
+      "status": "generated",
+      "path": "VGA_ctrl.h",
+      "pin": "n/a",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "include_string": "../VGA_ctrl.h",
+      "next_action": "Generated from VGA_ctrl.sflp by the sflp toolchain; no .h in repo."
+    },
+    {
+      "name": "gen:view_ram_ctrl.h",
+      "consumer": "Pocket/core.sflp",
+      "status": "generated",
+      "path": "view_ram_ctrl.h",
+      "pin": "n/a",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "include_string": "../view_ram_ctrl.h",
+      "next_action": "Generated from view_ram_ctrl.sflp by the sflp toolchain; no .h in repo."
+    },
+    {
+      "name": "hdl:LICENSE_USB-Blaster_UART",
+      "consumer": "hdl/USB-JTAG/DE0-CV",
+      "status": "present",
+      "path": "hdl/USB-JTAG/DE0-CV/LICENSE_USB-Blaster_UART",
+      "sha256": "a0cda8b72e3cfd1e4866e7e7e0d2734aded8c5d42dc4f9a93d7b195fe361c913",
+      "pin": "pgate1/USB-Blaster_UART",
+      "license": "MIT (pgate1)",
+      "next_action": "Keep with the copied sources."
+    },
+    {
+      "name": "hdl:VirtualJTAG.v",
+      "consumer": "vjtag_uart.h",
+      "status": "present",
+      "path": "hdl/USB-JTAG/DE0-CV/VirtualJTAG.v",
+      "sha256": "e26ecf548267882ac02cb6c62d92123c95f7292f98a0ac864bd1604711e70de8",
+      "pin": "pgate1/USB-Blaster_UART",
+      "license": "MIT (pgate1)",
+      "next_action": "None."
+    },
+    {
+      "name": "hdl:vjtag_uart.v",
+      "consumer": "vjtag_uart.h",
+      "status": "present",
+      "path": "hdl/USB-JTAG/DE0-CV/vjtag_uart.v",
+      "sha256": "aca8cb0644d79123d993bb8460fe997bca0b3784c44e285935ecc66e1c4d6ae5",
+      "pin": "pgate1/USB-Blaster_UART",
+      "license": "MIT (pgate1)",
+      "next_action": "Compile in Quartus with sld_virtual_jtag.",
+      "module": "vjtag_uart"
+    },
+    {
+      "name": "inc:sram_ctrl.h",
+      "consumer": "Pocket/core.sflp",
+      "status": "decision-needed",
+      "path": "Pocket/sram_ctrl.h",
+      "pin": "n/a",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "include_string": "../../../Pocket/sram_ctrl.h",
+      "next_action": "Replacement is Pocket/rtl/sram_ctrl.sv; choose whether core.sflp uses it via a stub .h or a direct Verilog instance."
+    },
+    {
+      "name": "inc:vjtag_uart.h",
+      "consumer": "Pocket/core.sflp",
+      "status": "present",
+      "path": "hdl/USB-JTAG/DE0-CV/vjtag_uart.h",
+      "sha256": "e2ccf5e6d27e7d61f5098ee55c2dc4ae12ac8ee5ced0b87c290e1b5df6901a71",
+      "pin": "pgate1/USB-Blaster_UART (MIT)",
+      "license": "MIT (pgate1)",
+      "include_string": "../hdl/USB-JTAG/DE0-CV/vjtag_uart.h",
+      "next_action": "None; syntax checked with a sld_virtual_jtag stub."
+    },
+    {
+      "name": "ip:main_pll_0002",
+      "consumer": "Pocket/core_top.v",
+      "status": "generated",
+      "path": "",
+      "pin": "Quartus IP",
+      "license": "Intel Quartus IP (regenerable)",
+      "module": "main_pll_0002",
+      "next_action": "Regenerate in Quartus from the PLL IP settings."
+    },
+    {
+      "name": "make:ADSR.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "ADSR.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:CDROM_controller.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "CDROM_controller.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:Cache_IR.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "Cache_IR.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:Cache_Texture.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "Cache_Texture.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:DDS_50to33868800.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "DDS_50to33868800.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:DMA_CDR.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "DMA_CDR.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:DMA_GPU.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "DMA_GPU.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:DMA_OTC.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "DMA_OTC.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:DMA_SPU.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "DMA_SPU.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:DigitalSignalProcessor.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "DigitalSignalProcessor.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:GeometryTransformationEngine.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "GeometryTransformationEngine.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:GraphicProcessingUnit.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "GraphicProcessingUnit.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:MDEC.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "MDEC.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:PAD.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "PAD.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:PAD_controller.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "PAD_controller.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:PlayStation_core.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "PlayStation_core.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:R3000A.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "R3000A.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:Scratchpad.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "Scratchpad.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:SoundProcessingUnit.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "SoundProcessingUnit.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:Timer.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "Timer.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:VGA_ctrl.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "VGA_ctrl.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:bsr_s16.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "bsr_s16.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:bsr_s24.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "bsr_s24.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:bsr_s32.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "bsr_s32.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:div_u32.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "div_u32.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:drawFillRect.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "drawFillRect.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:drawPoly.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "drawPoly.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:drawRect.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "drawRect.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:dsdac10.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "dsdac10.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:dsp_ch.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "dsp_ch.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:gte_DIVIDE.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "gte_DIVIDE.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:gte_LIMIT.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "gte_LIMIT.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:inv_table.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "inv_table.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:pseudo_cdrom_data.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "decision-needed",
+      "path": "pseudo_cdrom_data.sflp",
+      "pin": "n/a",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Not referenced by any .sflp; P00 doc says drop. Remove from Makefile SFLP list or document the reason."
+    },
+    {
+      "name": "make:ram_16x32k.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "ram_16x32k.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:ram_320x240x15_dp.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "missing",
+      "path": "ram_320x240x15_dp.sflp",
+      "pin": "n/a",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Replaced by Pocket/rtl/ram_320x240x15_dp.sv; pgate1-private .h is absent. Decide whether the Makefile target is kept."
+    },
+    {
+      "name": "make:ram_8x2352.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "ram_8x2352.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:reverb.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "reverb.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:view_ram_ctrl.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "present",
+      "path": "view_ram_ctrl.sflp",
+      "pin": "working tree (no upstream pin)",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Compile with sflp once the toolchain exists (P00 blocker); no repo action."
+    },
+    {
+      "name": "make:view_ram_ctrl_one.sflp",
+      "consumer": "Makefile SFLP",
+      "status": "decision-needed",
+      "path": "view_ram_ctrl_one.sflp",
+      "pin": "n/a",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Not referenced by any .sflp; P00 doc says drop. Remove from Makefile SFLP list or document the reason."
+    },
+    {
+      "name": "mirlo:LICENSE-APACHE-2.0",
+      "consumer": "hdl/SDRAM/MIRLO64",
+      "status": "present",
+      "path": "hdl/SDRAM/MIRLO64/LICENSE-APACHE-2.0",
+      "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2",
+      "pin": "upstream",
+      "license": "Apache-2.0",
+      "next_action": "Keep with sdr_ctrl.sv."
+    },
+    {
+      "name": "mirlo:LICENSE-LITEX-BSD-2-CLAUSE",
+      "consumer": "hdl/SDRAM/MIRLO64",
+      "status": "present",
+      "path": "hdl/SDRAM/MIRLO64/LICENSE-LITEX-BSD-2-CLAUSE",
+      "sha256": "8371c1e1e72db0c21eba5acfec4f4f8597dc8555bd282b2a35ccbbde992675c5",
+      "pin": "upstream LiteX LICENSE",
+      "license": "BSD-2-Clause",
+      "next_action": "Keep with sdr_phy.sv."
+    },
+    {
+      "name": "mirlo:sdr_ctrl.sv",
+      "consumer": "Pocket/core_top.v (P04 SDRAM controller)",
+      "status": "present",
+      "path": "hdl/SDRAM/MIRLO64/sdr_ctrl.sv",
+      "sha256": "cc1d5b18639d52fd6e35cd18380ebd6e2341b2ebbb89d1a861a36d45b51de46b",
+      "pin": "MIRLO64 HEAD 23d8dea926ece5877262abb414497bc6ddf06e7d",
+      "license": "Apache-2.0",
+      "next_action": "Not adapted to 16-bit address or 128-bit returns; not retimed.",
+      "module": "sdr_ctrl"
+    },
+    {
+      "name": "mirlo:sdr_phy.sv",
+      "consumer": "Pocket/core_top.v (P04 SDRAM PHY)",
+      "status": "present",
+      "path": "hdl/SDRAM/MIRLO64/sdr_phy.sv",
+      "sha256": "84a2a16106dd570cd74b0b2b8d051f98f236d6157df81cab6971327408457ee9",
+      "pin": "MIRLO64 HEAD 23d8dea926ece5877262abb414497bc6ddf06e7d (LiteX BSD-2)",
+      "license": "BSD-2-Clause (LiteX)",
+      "next_action": "Uses Quartus-only ALTDDIO_OUT; fails iverilog as expected.",
+      "module": "sdr_phy"
+    },
+    {
+      "name": "quartus:ap_core.qpf",
+      "consumer": "Pocket/core_top.v build",
+      "status": "missing",
+      "path": "",
+      "pin": "core-template (not in fetch list)",
+      "license": "Analogue SLA (not MIT)",
+      "next_action": "Add to tools/apf/fetch_apf.sh or obtain from core-template at the pinned revision."
+    },
+    {
+      "name": "quartus:ap_core.qsf",
+      "consumer": "Pocket/core_top.v build",
+      "status": "missing",
+      "path": "",
+      "pin": "core-template (not in fetch list)",
+      "license": "Analogue SLA (not MIT)",
+      "next_action": "As for ap_core.qpf."
+    },
+    {
+      "name": "quartus:sld_virtual_jtag",
+      "consumer": "hdl/USB-JTAG/DE0-CV/vjtag_uart.v",
+      "status": "missing",
+      "path": "",
+      "pin": "Quartus primitive",
+      "license": "Intel Quartus licence (not redistributed)",
+      "next_action": "No repo action; provided by Quartus in the real build."
+    },
+    {
+      "name": "report:ap_core.fit.summary",
+      "consumer": "P00 evidence",
+      "status": "present",
+      "path": "Pocket/ap_core.fit.summary",
+      "pin": "none",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Stale (dated 6 Oct, not from current source); regenerate after a real Quartus build."
+    },
+    {
+      "name": "rtl:ram_320x240x15_dp.sv",
+      "consumer": "Makefile SFLP ram_320x240x15_dp replacement",
+      "status": "present",
+      "path": "Pocket/rtl/ram_320x240x15_dp.sv",
+      "sha256": "b0e0eec964f677c89d9142311da5b42eab7986a0e2b353d5f97d7809b8031069",
+      "pin": "working tree",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Port names assumed; check against the consumer once sflc output exists."
+    },
+    {
+      "name": "rtl:sram_ctrl.sv",
+      "consumer": "Pocket/core.sflp (sram_ctrl replacement)",
+      "status": "present",
+      "path": "Pocket/rtl/sram_ctrl.sv",
+      "sha256": "c3604cc6fc9b2281214f60a56c0a2073b1fa5e233687a8064c04b7a46d79fbdb",
+      "pin": "working tree",
+      "license": "MIT (repo LICENSE, pgate1)",
+      "next_action": "Interface and timing assumed; not checked against SRAM datasheet.",
+      "module": "sram_ctrl"
+    },
+    {
+      "name": "tool:quartus_sh",
+      "consumer": "P00 toolchain (Quartus build)",
+      "status": "missing",
+      "path": "",
+      "pin": "n/a",
+      "license": "Intel Quartus (proprietary)",
+      "next_action": "Install Quartus Prime Lite for 5CEBA4F23C8 by hand; required for the full build."
+    },
+    {
+      "name": "tool:sfl2vl",
+      "consumer": "P00 toolchain (SFL to Verilog)",
+      "status": "fetch-at-build",
+      "path": "",
+      "pin": "sfl2vlbin-i386-linux-20100412.tar.gz SHA-256 b67fd721...724c1",
+      "license": "No licence file; evaluation mode, 500 input lines",
+      "next_action": "tools/sflc/ci_sfl2vl.sh downloads at runtime. Never commit the binary. Do not work around the 500-line limit."
+    },
+    {
+      "name": "tool:sflp",
+      "consumer": "P00 toolchain (SFL to Verilog front end)",
+      "status": "missing",
+      "path": "",
+      "pin": "n/a",
+      "license": "Overtone (not freely downloadable)",
+      "next_action": "Obtain through the licence route only; not pursued here."
+    }
+  ]
+}

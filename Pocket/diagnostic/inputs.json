@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "device": "5CEBA4F23C8",
+  "apf": {
+    "source": "https://github.com/open-fpga/core-template",
+    "revision": "da3a021b1eaf742604d86d8dc9b33a6666263e6a",
+    "cache_dir": "Pocket/build/apf",
+    "fetch_script": "tools/apf/fetch_apf.sh",
+    "files": [
+      {"path": "apf/apf_constraints.sdc", "sha256": "18b72957181178b046c2f27711190cb426482edcd7b58fcda9cfea27e855dd2e"},
+      {"path": "apf/apf_top.v", "sha256": "6c24aa45a3dab52d8b86944cdd90330aa74cfdcd62e2d43e39d33d4791d173c7"},
+      {"path": "apf/apf.qip", "sha256": "94af53185dde4d51ef30e75bb1ec8df672126742af36399bd62f4efb3a84b26a"},
+      {"path": "apf/build_id_gen.tcl", "sha256": "6279533fec80081e3c91884e1cc5df853b2a716df0b573636147f3420aace996"},
+      {"path": "apf/build_id.mif", "sha256": "3ef497ff9c6bd44ad96c936a2ee3bcf8e624f8b74ef4b37bedd10e98f0e91ee3"},
+      {"path": "apf/common.v", "sha256": "c1615e2c6c12b111537f6ca11e826e5061eb91f405e349bdc649a17b48e24d4e"},
+      {"path": "apf/io_bridge_peripheral.v", "sha256": "fb9c13e0311ac6b01019898d0ca7786f370228380356fe618fc2b473f2add17d"},
+      {"path": "apf/io_pad_controller.v", "sha256": "70cda74af63d3baa53f87473e1d9e2d524ea305b299a3f832d6c1292771a305e"},
+      {"path": "apf/mf_datatable.qip", "sha256": "8d4fac9c708f86c426e5241055d8000063e16dbe9b5c414f320a8b24c44a0632"},
+      {"path": "apf/mf_datatable.v", "sha256": "e2cc2e33ccc22b9a8be3c426141848e0ea7800abb45ce55530eebe17dd23ffd7"},
+      {"path": "apf/mf_ddio_bidir_12.qip", "sha256": "f0ed4e73a07d734115bbde6501b43fe5878a7409f9b3b68bb4c7e0424b31b42e"},
+      {"path": "apf/mf_ddio_bidir_12.v", "sha256": "31c8b62114d7bc916104a6199d919d9e2235a164aba518360b339867a08426aa"},
+      {"path": "core/core_bridge_cmd.v", "sha256": "e6e0185218b3a63799db0f80085b0f4570c003c5f2197e8c9b8a1b1350f733fe"}
+    ]
+  },
+  "project": {
+    "qpf": "Pocket/build/reference/core-template-da3a021b1eaf742604d86d8dc9b33a6666263e6a/src/fpga/ap_core.qpf",
+    "qsf": "Pocket/build/reference/core-template-da3a021b1eaf742604d86d8dc9b33a6666263e6a/src/fpga/ap_core.qsf",
+    "note": "Matching APF reference project at the pinned revision (docs/POCKET_DIAGNOSTIC_INPUTS.md). Not a fitted PS1 project; preserve intact."
+  },
+  "quartus": {
+    "executable": "quartus_sh",
+    "version": null,
+    "note": "Set version from `quartus_sh --version` once installed."
+  },
+  "timing_reference": {
+    "path": "Pocket/build/reference/core-template-da3a021b1eaf742604d86d8dc9b33a6666263e6a/src/fpga/core/core_top.v",
+    "pixel_clock_hz": 12287999,
+    "h_total": 400,
+    "v_total": 512,
+    "source": "open-fpga/core-template da3a021b1eaf742604d86d8dc9b33a6666263e6a: core_top.v:519-524 (totals), mf_pllbase_0002.v:34,37 (pixel clock). Read from files, not from SDC.",
+    "note": "From the pinned APF example video generator. Do not derive from the 13.468 ns SDC clocks or the 74.25 MHz comments."
+  },
+  "core_ip": {
+    "diagnostic_requires": [],
+    "ps1_references": ["main_pll_0002", "sdram128_burstn_ctrl_100"],
+    "search_dirs": ["Pocket", "hdl"]
+  }
+}

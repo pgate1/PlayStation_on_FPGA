@@ -10,7 +10,7 @@
 %i "../view_ram_ctrl.h"
 %i "../../../Pocket/sram_ctrl.h"
 
-%i "../../../hdl/USB-JTAG/DE0-CV/vjtag_uart.h"
+%i "../hdl/USB-JTAG/DE0-CV/vjtag_uart.h"
 
 circuit core
 {
