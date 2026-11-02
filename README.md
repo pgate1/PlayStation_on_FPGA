@@ -102,6 +102,7 @@ User reports.
 - Bloody Roar
 - Minna no Golf 2
 - LSD
+- PuyoPuyo Box
 
 ## Future implementation plans.  
 
