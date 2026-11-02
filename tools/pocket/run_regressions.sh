@@ -68,6 +68,14 @@ out="$WORK/tb_sram.vvp"
 run_test sram_ctrl sh -c \
     "iverilog -g2012 -s tb_sram_ctrl -o '$out' Pocket/rtl/sram_ctrl.sv Pocket/tb/tb_sram_ctrl.sv && vvp -n '$out' +seed=3 +ops=4000"
 
+out="$WORK/tb_bcd_itob.vvp"
+run_test bcd_itob sh -c \
+    "iverilog -g2012 -s tb_bcd_itob -o '$out' bcd_itob.v tools/pocket/tests/tb_bcd_itob.sv && vvp -n '$out'"
+
+out="$WORK/tb_bcd_btoi.vvp"
+run_test bcd_btoi sh -c \
+    "iverilog -g2012 -s tb_bcd_btoi -o '$out' bcd_btoi.v tools/pocket/tests/tb_bcd_btoi.sv && vvp -n '$out'"
+
 echo
 echo "Logs: $LOG_DIR"
 if [ "$failures" -ne 0 ]; then
