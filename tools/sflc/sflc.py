@@ -312,6 +312,7 @@ class Gen:
         self.write_indices = {}  # matching static index or None for each write
         self.write_widths = {}   # address expression width of each write
         self._ports = {}         # bank -> shared dynamic write ports (memoised)
+        self._guard_cache = {}   # guard list -> emitted conjunction (memoised)
         self.temps = []
         self.temp_index = {}
         self.interfaces = dict(interfaces or {})
@@ -693,9 +694,19 @@ class Gen:
         for item in body: self.action(item, [])
         return self.emit()
 
-    @staticmethod
-    def guard(guards):
-        return ' && '.join('(%s)' % x for x in guards) or "1'b1"
+    def guard(self, guards):
+        """Emit a guard conjunction.
+
+        The result depends only on the guard list, but conflict_checks and
+        bank_ports re-emit the same list once per writer pair (O(n^2)), so
+        memoise each distinct list to avoid redundant string joins.
+        """
+        key = tuple(guards)
+        cached = self._guard_cache.get(key)
+        if cached is None:
+            cached = self._guard_cache.setdefault(key,
+                ' && '.join('(%s)' % x for x in guards) or "1'b1")
+        return cached
 
     def merge_terms(self, terms):
         """Combine writers of the same value: (g1 ? v : 0) | (g2 ? v : 0) is
